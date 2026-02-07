@@ -1,0 +1,431 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrgRole {
+  ADMIN
+  EMPLOYEE
+}
+
+enum OrgPermission {
+  // Receipts
+  RECEIPT_CREATE
+  RECEIPT_EDIT
+  RECEIPT_VIEW
+  RECEIPT_DELETE
+
+  // Expenses
+  EXPENSE_CREATE
+  EXPENSE_EDIT
+  EXPENSE_VIEW
+  EXPENSE_DELETE
+
+  // Statements & matching
+  STATEMENT_UPLOAD
+  STATEMENT_VIEW
+  STATEMENT_DELETE
+  MATCH_RUN
+  MATCH_REVIEW
+
+  // Members / permissions
+  MEMBER_INVITE
+  MEMBER_EDIT
+  MEMBER_REMOVE
+
+  // Billing
+  BILLING_MANAGE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum MatchStatus {
+  MATCHED
+  NEEDS_REVIEW
+  REJECTED
+}
+
+enum SalesReportSource {
+  POS_UPLOAD
+  MANUAL_ENTRY
+  API_IMPORT
+}
+
+enum SalesReportStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+enum RecurrenceFrequency {
+  MONTHLY
+}
+
+enum RecurringChargeStatus {
+  ACTIVE
+  PAUSED
+  CANCELED
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  preferredLocale String   @default("en-US")
+  // timezone      String?  // recommended later
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  memberships OrgUser[]
+  ownedOrganizations Organization[]
+  uploadedStatements CardStatement[] @relation("StatementsUploadedBy")
+  uploadedSalesReports DailySalesReport[]
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Optional: if you want only ONE user to be "billing owner" for this restaurant
+  billingOwnerId String?
+  billingOwner   User?    @relation(fields: [billingOwnerId], references: [id])
+
+  members      OrgUser[]
+  subscription OrganizationSubscription?
+
+  // Categories enabled for this org (from the preset list)
+  orgCategories OrgCategory[]
+
+  receipts    Receipt[]
+  expenses    Expense[]
+  statements  CardStatement[]
+  salesReports DailySalesReport[]
+  matches     ReceiptMatch[]
+  recurringCharges RecurringCharge[]
+  recurringChargeInstances RecurringChargeInstance[]
+
+  @@index([billingOwnerId])
+}
+
+model OrgUser {
+  id          String         @id @default(cuid())
+  orgId       String
+  userId      String
+  role        OrgRole        @default(EMPLOYEE)
+  permissions OrgPermission[] // optional fine-grain overrides
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@index([orgId])
+}
+
+model OrganizationSubscription {
+  id                   String             @id @default(cuid())
+  orgId                String             @unique
+  status               SubscriptionStatus @default(INCOMPLETE)
+  plan                 String             // "basic" | "pro" etc.
+
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  org                  Organization @relation(fields: [orgId], references: [id])
+
+  @@index([status])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+}
+
+//
+// ✅ Global preset list (system-owned)
+//
+model PresetCategory {
+  id        String   @id @default(cuid())
+  key       String   @unique  // "food", "supplies", "labor"
+  name      String           // "Food", "Supplies"
+  color     String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orgLinks  OrgCategory[]
+}
+
+//
+// ✅ Which preset categories are enabled for a given org
+// One row = one enabled preset category (or disabled w/ isEnabled=false)
+//
+model OrgCategory {
+  id               String @id @default(cuid())
+  orgId            String
+  presetCategoryId String
+
+  isEnabled        Boolean @default(true)
+  customName       String?
+  sortOrder        Int     @default(0)
+
+  // ✅ visibility control
+  visibleToEmployees Boolean @default(true)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  org              Organization   @relation(fields: [orgId], references: [id])
+  preset           PresetCategory @relation(fields: [presetCategoryId], references: [id])
+
+  expenses         Expense[]
+  recurringCharges RecurringCharge[]
+
+  @@unique([orgId, presetCategoryId])
+  @@index([orgId, isEnabled])
+  @@index([orgId, visibleToEmployees])
+}
+
+model Receipt {
+  id          String   @id @default(cuid())
+  orgId       String
+
+  imageUrl    String?
+  imageHash   String?
+  ocrText     String?
+
+  merchant    String?
+  totalCents  Int?
+  currency    String   @default("USD")
+  receiptDate DateTime?
+  confidence  Float?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id])
+  expense     Expense?
+
+  @@index([orgId, createdAt])
+  @@index([orgId, merchant])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  orgId       String
+  receiptId   String?  @unique
+
+  merchant    String?
+  amountCents Int
+  currency    String   @default("USD")
+
+  orgCategoryId String?
+  orgCategory   OrgCategory? @relation(fields: [orgCategoryId], references: [id])
+
+  categoryNameSnapshot String?
+
+  expenseDate DateTime
+  notes       String?
+
+  // 🔴 SOFT DELETE
+  deletedAt   DateTime?
+
+  // Recurring linkage
+  recurringInstanceId String?  @unique
+  recurringInstance   RecurringChargeInstance?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id])
+  receipt     Receipt?     @relation(fields: [receiptId], references: [id])
+
+  matches     ReceiptMatch[]
+
+  @@index([orgId, expenseDate])
+  @@index([orgId, deletedAt])
+  @@index([orgId, orgCategoryId])
+}
+
+model CardStatement {
+  id             String   @id @default(cuid())
+  orgId          String
+
+  provider       String?
+  statementMonth String?  // "2026-01"
+  sourceType     String   @default("csv") // "csv" | "pdf"
+
+  uploadedById   String?
+  uploadedBy     User?    @relation("StatementsUploadedBy", fields: [uploadedById], references: [id])
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org            Organization @relation(fields: [orgId], references: [id])
+  transactions   CardTransaction[]
+
+  @@index([orgId, createdAt])
+  @@index([uploadedById])
+}
+
+model CardTransaction {
+  id           String   @id @default(cuid())
+  statementId  String
+
+  postedDate   DateTime
+  txnDate      DateTime?
+  merchantRaw  String
+  merchantNorm String?
+  amountCents  Int
+  currency     String    @default("USD")
+  last4        String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  statement    CardStatement @relation(fields: [statementId], references: [id])
+  matches      ReceiptMatch[]
+
+  @@index([statementId, postedDate])
+  @@index([statementId, amountCents])
+  @@index([statementId, merchantNorm])
+}
+
+model ReceiptMatch {
+  id          String      @id @default(cuid())
+  orgId       String
+  expenseId   String
+  cardTxnId   String
+
+  status      MatchStatus @default(NEEDS_REVIEW)
+  score       Float?
+  reason      String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization    @relation(fields: [orgId], references: [id])
+  expense     Expense         @relation(fields: [expenseId], references: [id])
+  cardTxn     CardTransaction @relation(fields: [cardTxnId], references: [id])
+
+  @@unique([expenseId, cardTxnId])
+}
+
+model DailySalesReport {
+  id            String            @id @default(cuid())
+  orgId         String
+  businessDate  DateTime          // the sales day (normalize to midnight in org timezone)
+
+  source        SalesReportSource @default(POS_UPLOAD)
+  status        SalesReportStatus @default(PENDING)
+
+  // Original upload (optional but recommended)
+  fileUrl       String?
+  fileType      String?           // "csv" | "pdf" | "xlsx" etc.
+  fileHash      String?           // for duplicate detection
+
+  uploadedById  String?
+  uploadedBy    User?             @relation(fields: [uploadedById], references: [id])
+
+  // Core metrics (store in cents to avoid float issues)
+  grossSalesCents Int?
+  netSalesCents   Int?
+  cashCents       Int?
+  tipsCents       Int?            // optional but commonly in daily sales reports
+  taxCents        Int?            // optional
+  discountsCents  Int?            // optional
+  refundsCents    Int?            // optional
+
+  currency      String            @default("USD")
+  notes         String?
+
+  // Optional: store parsed JSON for debugging (careful with PII)
+  parsedPayload Json?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  org           Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([orgId, businessDate])          // one report per day per restaurant
+  @@index([orgId, businessDate])
+}
+
+model RecurringCharge {
+  id            String @id @default(cuid())
+  orgId         String
+
+  name          String
+  merchant      String?
+  amountCents   Int
+  currency      String @default("USD")
+
+  orgCategoryId String?
+  orgCategory   OrgCategory? @relation(fields: [orgCategoryId], references: [id])
+
+  status        RecurringChargeStatus @default(ACTIVE)
+
+  dayOfMonth    Int
+  useLastDay    Boolean @default(false)
+  startDate     DateTime
+  endDate       DateTime?
+
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+
+  // ✅ soft delete / archive
+  deletedAt     DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  org           Organization @relation(fields: [orgId], references: [id])
+  instances     RecurringChargeInstance[]
+
+  @@index([orgId, status])
+  @@index([orgId, deletedAt])
+  @@index([orgId, nextRunAt])
+}
+
+model RecurringChargeInstance {
+  id                String   @id @default(cuid())
+  orgId              String
+  recurringChargeId  String
+  expenseId          String?  @unique
+
+  // The business date this instance is for (e.g., 2026-02-01)
+  runDate            DateTime
+
+  createdAt          DateTime @default(now())
+
+  org                Organization    @relation(fields: [orgId], references: [id])
+  recurringCharge    RecurringCharge @relation(fields: [recurringChargeId], references: [id])
+  expense            Expense?        @relation(fields: [expenseId], references: [id], map: "expense_recurring_fk")
+
+  // Prevent double-creation for same charge + month/date
+  @@unique([recurringChargeId, runDate])
+  @@index([orgId, runDate])
+}
