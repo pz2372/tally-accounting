@@ -1,0 +1,209 @@
+import React, { useState, useContext } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing, borderRadius } from '../../styles/theme';
+import { LanguageContext } from '../../contexts/LanguageContext';
+
+interface ContactSupportScreenProps {
+  onBack: () => void;
+}
+
+export default function ContactSupportScreen({ onBack }: ContactSupportScreenProps) {
+  const { t } = useContext(LanguageContext);
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+
+  const handleSubmit = () => {
+    if (!subject || !message) {
+      Alert.alert(t('contactSupport.missingInfo'), t('contactSupport.fillAllFields'));
+      return;
+    }
+    Alert.alert(t('contactSupport.messageSent'), t('contactSupport.responseTime'), [
+      { text: 'OK', onPress: onBack },
+    ]);
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>{t('contactSupport.title')}</Text>
+          </View>
+          <View style={styles.placeholder} />
+        </View>
+
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Quick Contact Options */}
+          <View style={styles.quickContact}>
+            <TouchableOpacity style={styles.quickContactItem}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="mail" size={24} color={colors.primary} />
+              </View>
+              <Text style={styles.quickContactLabel}>{t('contactSupport.email')}</Text>
+              <Text style={styles.quickContactValue}>support@acme.com</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.quickContactItem}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="chatbubble" size={24} color="#10B981" />
+              </View>
+              <Text style={styles.quickContactLabel}>{t('contactSupport.liveChat')}</Text>
+              <Text style={styles.quickContactValue}>{t('contactSupport.available')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Contact Form */}
+          <View style={styles.form}>
+            <Text style={styles.formTitle}>{t('contactSupport.sendMessage')}</Text>
+            
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>{t('contactSupport.subject')}</Text>
+              <TextInput
+                style={styles.input}
+                value={subject}
+                onChangeText={setSubject}
+                placeholder={t('contactSupport.subjectPlaceholder')}
+                placeholderTextColor={colors.textTertiary}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>{t('contactSupport.message')}</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={message}
+                onChangeText={setMessage}
+                placeholder={t('contactSupport.messagePlaceholder')}
+                multiline
+                numberOfLines={6}
+                placeholderTextColor={colors.textTertiary}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+              <Text style={styles.submitButtonText}>{t('contactSupport.submit')}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+  },
+  backButton: {
+    padding: spacing.xs,
+    marginTop: 2,
+  },
+  headerContent: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  placeholder: {
+    width: 32,
+  },
+  content: {
+    flex: 1,
+  },
+  quickContact: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginHorizontal: spacing.xxl,
+    marginTop: spacing.lg,
+  },
+  quickContactItem: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iconContainer: {
+    marginBottom: spacing.sm,
+  },
+  quickContactLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  quickContactValue: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  form: {
+    marginHorizontal: spacing.xxl,
+    marginTop: spacing.xxxl,
+  },
+  formTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+    marginBottom: spacing.lg,
+  },
+  fieldGroup: {
+    marginBottom: spacing.xl,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+  },
+  input: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  textArea: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  submitButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  submitButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.surface,
+  },
+});
