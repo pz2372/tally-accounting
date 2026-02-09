@@ -11,15 +11,23 @@ import BusinessDetailsScreen from './settings/BusinessDetailsScreen';
 import LanguageScreen from './settings/LanguageScreen';
 import ContactSupportScreen from './settings/ContactSupportScreen';
 import RateAppScreen from './settings/RateAppScreen';
+import CategoriesScreen from './settings/CategoriesScreen';
 import { Image } from 'react-native';
 import { logout } from '../services/authService';
 
 interface SettingsScreenProps {
   onBack: () => void;
   onLogout?: () => void;
+  hasOrganization: boolean;
+  currentUser?: {
+    name?: string;
+    email?: string;
+    phoneNumber?: string;
+    organizations?: Array<{ id: string; name: string }>;
+  } | null;
 }
 
-export default function SettingsScreen({ onBack, onLogout }: SettingsScreenProps) {
+export default function SettingsScreen({ onBack, onLogout, hasOrganization, currentUser }: SettingsScreenProps) {
   const { t } = useContext(LanguageContext);
   const [activeSubScreen, setActiveSubScreen] = useState<string | null>(null);
   const subScreenSlideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
@@ -42,7 +50,7 @@ export default function SettingsScreen({ onBack, onLogout }: SettingsScreenProps
       subScreenSlideAnim.setValue(SCREEN_WIDTH);
     }
   }, [activeSubScreen]);
-  
+
   const handleSubScreenBack = () => {
     Animated.timing(subScreenSlideAnim, {
       toValue: SCREEN_WIDTH,
@@ -59,13 +67,16 @@ export default function SettingsScreen({ onBack, onLogout }: SettingsScreenProps
     let SubScreenComponent;
     switch (activeSubScreen) {
       case 'account':
-        SubScreenComponent = <AccountInfoScreen onBack={handleSubScreenBack} />;
+        SubScreenComponent = <AccountInfoScreen onBack={handleSubScreenBack} currentUser={currentUser} />;
         break;
       case 'business':
-        SubScreenComponent = <BusinessDetailsScreen onBack={handleSubScreenBack} />;
+        SubScreenComponent = <BusinessDetailsScreen onBack={handleSubScreenBack} currentUser={currentUser} />;
         break;
       case 'language':
         SubScreenComponent = <LanguageScreen onBack={handleSubScreenBack} />;
+        break;
+      case 'categories':
+        SubScreenComponent = <CategoriesScreen onBack={handleSubScreenBack} />;
         break;
       case 'contact':
         SubScreenComponent = <ContactSupportScreen onBack={handleSubScreenBack} />;
@@ -114,15 +125,17 @@ export default function SettingsScreen({ onBack, onLogout }: SettingsScreenProps
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('business')}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.primaryLight }]}>
-                  <Ionicons name="business-outline" size={22} color={colors.primary} />
+            {hasOrganization && (
+              <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('business')}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: colors.primaryLight }]}>
+                    <Ionicons name="business-outline" size={22} color={colors.primary} />
+                  </View>
+                  <Text style={styles.settingLabel}>{t('settings.businessDetails')}</Text>
                 </View>
-                <Text style={styles.settingLabel}>{t('settings.businessDetails')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Utility Section */}
@@ -139,25 +152,29 @@ export default function SettingsScreen({ onBack, onLogout }: SettingsScreenProps
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('categories')}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
-                  <Ionicons name="pricetags-outline" size={22} color="#9333EA" />
+            {hasOrganization && (
+              <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('categories')}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
+                    <Ionicons name="pricetags-outline" size={22} color="#9333EA" />
+                  </View>
+                  <Text style={styles.settingLabel}>{t('settings.categories')}</Text>
                 </View>
-                <Text style={styles.settingLabel}>{t('settings.categories')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: '#DBEAFE' }]}>
-                  <Ionicons name="download-outline" size={22} color={colors.primary} />
+            {hasOrganization && (
+              <TouchableOpacity style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: '#DBEAFE' }]}>
+                    <Ionicons name="download-outline" size={22} color={colors.primary} />
+                  </View>
+                  <Text style={styles.settingLabel}>{t('settings.exportData')}</Text>
                 </View>
-                <Text style={styles.settingLabel}>{t('settings.exportData')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Support Section */}

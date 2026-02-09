@@ -1,9 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const authController = require('../controllers/authController');
-const userController = require('../controllers/userController');
-const { verifyToken } = require('../middleware/auth');
-const { requireAdmin } = require('../middleware/roleAuth');
+import { Router } from 'express';
+import * as authController from '../controllers/authController';
+import * as userController from '../controllers/userController';
+import { verifyToken } from '../middleware/auth';
+import { requireAdmin } from '../middleware/roleAuth';
+
+const router = Router();
 
 // Public routes (no auth required)
 // POST /api/auth/firebase-login - Login with Firebase token
@@ -34,4 +35,4 @@ router.get('/users', requireAdmin, userController.getAllUsers);
 router.post('/users/role', requireAdmin, userController.setUserRole);
 router.post('/users/employee', requireAdmin, userController.createEmployee);
 
-module.exports = router;
+export default router;

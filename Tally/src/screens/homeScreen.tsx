@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Dimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
@@ -10,21 +11,54 @@ import NeedsAttentionScreen from './needsAttentionScreen';
 import StatementsScreen from './statementsScreen';
 import RecurringScreen from './recurringScreen';
 import SalesReportScreen from './salesReportScreen';
+import RolesScreen from './rolesScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+const HOME_METRICS_KEY = '@home_metrics';
+
+interface HomeMetrics {
+  totalSpent: number;
+  totalSales: number;
+  capturedReceipts: number;
+  totalTransactions: number;
+  unmatchedItems: number;
+}
+
+const defaultMetrics: HomeMetrics = {
+  totalSpent: 0,
+  totalSales: 0,
+  capturedReceipts: 0,
+  totalTransactions: 0,
+  unmatchedItems: 0
+};
 
 interface HomeScreenProps {
   onSettingsPress: () => void;
   onOverlayChange?: (hasOverlay: boolean) => void;
+  hasOrganization: boolean;
+  onCreateOrganization?: () => void;
+  currentUser?: {
+    name?: string;
+    email?: string;
+    organizations?: Array<{ id: string; name: string }>;
+  } | null;
 }
 
-export default function HomeScreen({ onSettingsPress, onOverlayChange }: HomeScreenProps) {
+export default function HomeScreen({
+  onSettingsPress,
+  onOverlayChange,
+  hasOrganization,
+  onCreateOrganization,
+  currentUser
+}: HomeScreenProps) {
   const { t } = useContext(LanguageContext);
   const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
-  const [selectedBusiness, setSelectedBusiness] = useState("Acme Corporation");
-  const [activeScreen, setActiveScreen] = useState<'home' | 'newExpense' | 'uploadStatement' | 'needsAttention' | 'statements' | 'recurring' | 'salesReport'>('home');
+  const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
+  const [activeScreen, setActiveScreen] = useState<'home' | 'newExpense' | 'uploadStatement' | 'needsAttention' | 'statements' | 'recurring' | 'salesReport' | 'roles'>('home');
+  const [metrics, setMetrics] = useState<HomeMetrics>(defaultMetrics);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
-  
+
   useEffect(() => {
     if (activeScreen !== 'home') {
       // Notify parent that overlay is active
@@ -42,7 +76,7 @@ export default function HomeScreen({ onSettingsPress, onOverlayChange }: HomeScr
       slideAnim.setValue(SCREEN_WIDTH);
     }
   }, [activeScreen]);
-  
+
   const handleBack = () => {
     // Slide out to right
     Animated.timing(slideAnim, {
@@ -53,23 +87,113 @@ export default function HomeScreen({ onSettingsPress, onOverlayChange }: HomeScr
       setActiveScreen('home');
     });
   };
-  
-  const businesses = [
-    { id: 1, name: "Acme Corporation" },
-    { id: 2, name: "Tech Innovations LLC" },
-    { id: 3, name: "Digital Solutions Inc" },
-  ];
-  
-  const businessName = selectedBusiness;
-  const totalSpent = 34103.81;
-  const totalSales = 122450.00;
+
+  const businesses = currentUser?.organizations || [];
+  const hasMultipleBusinesses = businesses.length > 1;
+
+  useEffect(() => {
+    if (!selectedBusinessId && businesses.length > 0) {
+      setSelectedBusinessId(businesses[0].id);
+    }
+  }, [businesses, selectedBusinessId]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadMetrics = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(HOME_METRICS_KEY);
+        if (!raw) return;
+
+        const parsed = JSON.parse(raw);
+        let nextMetrics = defaultMetrics;
+
+        if (selectedBusinessId && parsed?.byOrg?.[selectedBusinessId]) {
+          nextMetrics = {
+            ...defaultMetrics,
+            ...parsed.byOrg[selectedBusinessId]
+          };
+        } else if (parsed && typeof parsed === 'object') {
+          nextMetrics = {
+            ...defaultMetrics,
+            ...parsed
+          };
+        }
+
+        if (isActive) {
+          setMetrics(nextMetrics);
+        }
+      } catch (error) {
+        console.warn('Failed to load home metrics cache:', error);
+      }
+    };
+
+    loadMetrics();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedBusinessId]);
+
+  const selectedBusiness = businesses.find((business) => business.id === selectedBusinessId);
+  const businessName = selectedBusiness?.name || 'Organization';
+  const totalSpent = metrics.totalSpent;
+  const totalSales = metrics.totalSales;
   const netProfit = totalSales - totalSpent;
   const profitMargin = ((netProfit / totalSales) * 100).toFixed(1);
   const thisMonthExpenses = totalSpent;
-  const capturedReceipts = 83;
-  const totalTransactions = 92;
-  const unmatchedItems = 7;
-  const userInitials = "AC";
+  const capturedReceipts = metrics.capturedReceipts;
+  const totalTransactions = metrics.totalTransactions;
+  const unmatchedItems = metrics.unmatchedItems;
+  
+  // Get locale from language context
+  const getLocale = () => {
+    switch (t('nav.home')) {
+      case 'Inicio': return 'es'; // Spanish
+      case '\u4e3b\u9875': return 'zh'; // Chinese
+      default: return 'en'; // English
+    }
+  };
+  const locale = getLocale();
+  const currentMonthLabel = new Date().toLocaleString(locale, { month: 'long', year: 'numeric' });
+  const capitalize = (value: string) => (value ? value[0].toUpperCase() + value.slice(1) : value);
+  const getInitials = (value?: string) => {
+    if (!value) return 'U';
+    const parts = value.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return 'U';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  };
+
+  const userInitials = getInitials(currentUser?.name || currentUser?.email);
+
+  if (!hasOrganization) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <View style={styles.headerLeft} />
+            <TouchableOpacity style={styles.avatarButton} onPress={onSettingsPress}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{userInitials}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Create an organization</Text>
+            <Text style={styles.emptySubtitle}>Add your first organization to unlock expenses, capture, and categories.</Text>
+            <TouchableOpacity
+              style={styles.emptyActionButton}
+              onPress={onCreateOrganization}
+              disabled={!onCreateOrganization}
+            >
+              <Text style={styles.emptyActionText}>Get Started</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // Action alerts - only show when there are issues
   const alerts = [
@@ -80,7 +204,7 @@ export default function HomeScreen({ onSettingsPress, onOverlayChange }: HomeScr
   // Render overlay screen
   const renderOverlayScreen = () => {
     if (activeScreen === 'home') return null;
-    
+
     let ScreenComponent;
     switch (activeScreen) {
       case 'newExpense':
@@ -101,10 +225,13 @@ export default function HomeScreen({ onSettingsPress, onOverlayChange }: HomeScr
       case 'salesReport':
         ScreenComponent = <SalesReportScreen onBack={handleBack} />;
         break;
+      case 'roles':
+        ScreenComponent = <RolesScreen onBack={handleBack} />;
+        break;
       default:
         return null;
     }
-    
+
     return (
       <Animated.View style={[styles.overlayScreen, { transform: [{ translateX: slideAnim }] }]}>
         {ScreenComponent}
@@ -114,159 +241,150 @@ export default function HomeScreen({ onSettingsPress, onOverlayChange }: HomeScr
 
   return (
     <>
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>{t('home.welcomeBack')}</Text>
-            <TouchableOpacity 
-              style={styles.businessNameButton}
-              onPress={() => setShowBusinessDropdown(!showBusinessDropdown)}
-            >
-              <Text style={styles.businessName}>{businessName}</Text>
-              <Ionicons 
-                name={showBusinessDropdown ? "chevron-up" : "chevron-down"} 
-                size={20} 
-                color={colors.textPrimary} 
-              />
-            </TouchableOpacity>
-            
-            {/* Business Dropdown Menu */}
-            {showBusinessDropdown && (
-              <View style={styles.businessDropdown}>
-                {businesses.map((business, index) => (
-                  <TouchableOpacity
-                    key={business.id}
-                    style={[
-                      styles.businessDropdownItem,
-                      selectedBusiness === business.name && styles.businessDropdownItemActive
-                    ]}
-                    onPress={() => {
-                      setSelectedBusiness(business.name);
-                      setShowBusinessDropdown(false);
-                    }}
-                  >
-                    <View style={styles.businessDropdownItemContent}>
-                      <Text style={[
-                        styles.businessDropdownText,
-                        selectedBusiness === business.name && styles.businessDropdownTextActive
-                      ]}>
-                        {business.name}
-                      </Text>
-                    </View>
-                    {selectedBusiness === business.name && (
-                      <View style={styles.checkmarkCircle}>
-                        <Ionicons name="checkmark" size={16} color="#0f172a" />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.greeting}>{t('home.welcomeBack')}</Text>
+              <TouchableOpacity
+                style={styles.businessNameButton}
+                onPress={() => hasMultipleBusinesses && setShowBusinessDropdown(!showBusinessDropdown)}
+                disabled={!hasMultipleBusinesses}
+              >
+                <Text style={styles.businessName}>{businessName}</Text>
+                {hasMultipleBusinesses && (
+                  <Ionicons
+                    name={showBusinessDropdown ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color={colors.textPrimary}
+                  />
+                )}
+              </TouchableOpacity>
+
+              {/* Business Dropdown Menu */}
+              {showBusinessDropdown && hasMultipleBusinesses && (
+                <View style={styles.businessDropdown}>
+                  {businesses.map((business) => (
+                    <TouchableOpacity
+                      key={business.id}
+                      style={[
+                        styles.businessDropdownItem,
+                        selectedBusinessId === business.id && styles.businessDropdownItemActive
+                      ]}
+                      onPress={() => {
+                        setSelectedBusinessId(business.id);
+                        setShowBusinessDropdown(false);
+                      }}
+                    >
+                      <View style={styles.businessDropdownItemContent}>
+                        <Text style={[
+                          styles.businessDropdownText,
+                          selectedBusinessId === business.id && styles.businessDropdownTextActive
+                        ]}>
+                          {business.name}
+                        </Text>
                       </View>
-                    )}
-                  </TouchableOpacity>
-                ))}
+                      {selectedBusinessId === business.id && (
+                        <View style={styles.checkmarkCircle}>
+                          <Ionicons name="checkmark" size={16} color="#0f172a" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+            <TouchableOpacity style={styles.avatarButton} onPress={onSettingsPress}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{userInitials}</Text>
               </View>
-            )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.avatarButton} onPress={onSettingsPress}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{userInitials}</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
 
-        {/* Financial Overview Card */}
-        <View style={styles.overviewCard}>
-          <View style={styles.overviewHeader}>
-            <Text style={styles.overviewLabel}>{t('home.netSales')}</Text>
-          </View>
-          <Text style={styles.overviewValue}>${netProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-          <Text style={styles.overviewPeriod}>January 2026</Text>
-          
-          <View style={styles.overviewStatsGrid}>
-            <View style={styles.overviewStatLeft}>
-              <Text style={styles.overviewStatLabel}>{t('home.netProfit')}</Text>
-              <Text style={styles.overviewStatValueLarge}>${netProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
+          {/* Financial Overview Card */}
+          <View style={styles.overviewCard}>
+            <View style={styles.overviewHeader}>
+              <Text style={styles.overviewLabel}>{t('home.netSales')}</Text>
             </View>
-            <View style={styles.overviewDivider} />
-            <View style={styles.overviewStatRight}>
-              <View style={styles.overviewStatRightItem}>
-                <Text style={styles.overviewStatLabel}>{t('home.grossSales')}</Text>
-                <Text style={styles.overviewStatValue}>${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
+            <Text style={styles.overviewValue}>${netProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+            <Text style={styles.overviewPeriod}>{currentMonthLabel}</Text>
+
+            <View style={styles.overviewStatsGrid}>
+              <View style={styles.overviewStatLeft}>
+                <Text style={styles.overviewStatLabel}>{t('home.netProfit')}</Text>
+                <Text style={styles.overviewStatValueLarge}>${netProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
               </View>
-              <View style={styles.overviewStatRightItem}>
-                <Text style={styles.overviewStatLabel}>{t('home.expenses')}</Text>
-                <Text style={styles.overviewStatValue}>${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* New Expense Button */}
-        <TouchableOpacity style={styles.newExpenseButton} onPress={() => setActiveScreen('newExpense')}>
-          <Ionicons name="add-circle" size={26} color={colors.primary} />
-          <Text style={styles.newExpenseText}>{t('home.newExpense')}</Text>
-        </TouchableOpacity>
-
-        {/* Upload Statement Button */}
-        <TouchableOpacity style={styles.uploadStatementButton} onPress={() => setActiveScreen('uploadStatement')}>
-          <Ionicons name="cloud-upload-outline" size={24} color={colors.primary} />
-          <Text style={styles.uploadStatementText}>{t('home.newStatement')}</Text>
-        </TouchableOpacity>
-
-        {/* Receipt Tracking Card */}
-        <View style={styles.trackingCard}>
-          <View style={styles.trackingHeader}>
-            <Ionicons name="document-text" size={22} color={colors.textSecondary} />
-            <Text style={styles.trackingTitle}>{t('home.receiptTracking')}</Text>
-          </View>
-          
-          <View style={styles.trackingRow}>
-            <View style={styles.trackingStat}>
-              <Text style={styles.trackingValue}>{capturedReceipts}/{totalTransactions}</Text>
-              <Text style={styles.trackingLabel}>{t('home.matched')}</Text>
-            </View>
-            <View style={styles.trackingDivider} />
-            <View style={styles.trackingStat}>
-              <Text style={[styles.trackingValue, unmatchedItems > 0 && styles.trackingValueWarning]}>{unmatchedItems}</Text>
-              <Text style={styles.trackingLabel}>{t('home.unmatchedLabel')}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Needs Attention - Only show when there are issues */}
-        {alerts.length > 0 && (
-          <TouchableOpacity style={styles.needsAttentionBox} onPress={() => setActiveScreen('needsAttention')}>
-            <View style={styles.needsAttentionLeft}>
-              <View style={styles.needsAttentionIcon}>
-                <Ionicons name="alert-circle" size={24} color={colors.red} />
-              </View>
-              <View style={styles.needsAttentionContent}>
-                <Text style={styles.needsAttentionTitle}>{t('home.needsAttention')}</Text>
-                <Text style={styles.needsAttentionSubtitle}>{alerts.length} items require action</Text>
+              <View style={styles.overviewDivider} />
+              <View style={styles.overviewStatRight}>
+                <View style={styles.overviewStatRightItem}>
+                  <Text style={styles.overviewStatLabel}>{t('home.grossSales')}</Text>
+                  <Text style={styles.overviewStatValue}>${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
+                </View>
+                <View style={styles.overviewStatRightItem}>
+                  <Text style={styles.overviewStatLabel}>{capitalize(t('home.expenses'))}</Text>
+                  <Text style={styles.overviewStatValue}>${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
+                </View>
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        )}
+          </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('statements')}>
-            <Ionicons name="document-text-outline" size={24} color={colors.textSecondary} />
-            <Text style={styles.actionLabel}>{t('home.statements')}</Text>
+          {/* Receipt Tracking Card */}
+          <View style={styles.trackingCard}>
+            <View style={styles.trackingHeader}>
+              <Ionicons name="document-text" size={22} color={colors.textSecondary} />
+              <Text style={styles.trackingTitle}>{t('home.receiptTracking')}</Text>
+            </View>
+
+            <View style={styles.trackingRow}>
+              <View style={styles.trackingStat}>
+                <Text style={styles.trackingValue}>{capturedReceipts}/{totalTransactions}</Text>
+                <Text style={styles.trackingLabel}>{t('home.matched')}</Text>
+              </View>
+              <View style={styles.trackingDivider} />
+              <View style={styles.trackingStat}>
+                <Text style={[styles.trackingValue, unmatchedItems > 0 && styles.trackingValueWarning]}>{unmatchedItems}</Text>
+                <Text style={styles.trackingLabel}>{t('home.unmatchedLabel')}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* New Expense Button */}
+          <TouchableOpacity style={styles.newExpenseButton} onPress={() => setActiveScreen('newExpense')}>
+            <Ionicons name="add-circle" size={26} color={colors.primary} />
+            <Text style={styles.newExpenseText}>{t('home.newExpense')}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('recurring')}>
-            <Ionicons name="repeat-outline" size={24} color={colors.textSecondary} />
-            <Text style={styles.actionLabel}>{t('home.recurring')}</Text>
+          {/* Upload Statement Button */}
+          <TouchableOpacity style={styles.uploadStatementButton} onPress={() => setActiveScreen('uploadStatement')}>
+            <Ionicons name="cloud-upload-outline" size={24} color={colors.primary} />
+            <Text style={styles.uploadStatementText}>{t('home.newStatement')}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('salesReport')}>
-            <Ionicons name="stats-chart-outline" size={24} color={colors.textSecondary} />
-            <Text style={styles.actionLabel}>{t('salesReport.title')}</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-    {renderOverlayScreen()}
+
+
+          {/* Needs Attention hidden until later version */}
+
+          {/* Quick Actions */}
+          <View style={styles.quickActions}>
+            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('statements')}>
+              <Ionicons name="document-text-outline" size={24} color={colors.textSecondary} />
+              <Text style={styles.actionLabel}>{t('home.statements')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('recurring')}>
+              <Ionicons name="repeat-outline" size={24} color={colors.textSecondary} />
+              <Text style={styles.actionLabel}>{t('home.recurring')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('roles')}>
+              <Ionicons name="people-outline" size={24} color={colors.textSecondary} />
+              <Text style={styles.actionLabel}>{t('home.roles')}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+      {renderOverlayScreen()}
     </>
   );
 }
@@ -290,6 +408,38 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     flex: 1,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xxl,
+    gap: spacing.sm,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyActionButton: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xxl,
+    borderRadius: borderRadius.lg,
+  },
+  emptyActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.surface,
+    letterSpacing: 0.2,
   },
   greeting: {
     fontSize: 13,
@@ -317,7 +467,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: borderRadius.xl,
     borderWidth: 0,
-   
+
     paddingVertical: spacing.xs,
     elevation: 8,
     shadowColor: '#000',

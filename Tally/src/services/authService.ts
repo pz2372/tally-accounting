@@ -7,6 +7,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 const ACCESS_TOKEN_KEY = '@access_token';
 const REFRESH_TOKEN_KEY = '@refresh_token';
+const USER_KEY = '@current_user';
 
 // Store tokens securely
 export const storeTokens = async (accessToken: string, refreshToken?: string) => {
@@ -17,6 +18,14 @@ export const storeTokens = async (accessToken: string, refreshToken?: string) =>
     }
   } catch (error) {
     console.error('Error storing tokens:', error);
+  }
+};
+
+export const storeUser = async (user: unknown) => {
+  try {
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch (error) {
+    console.error('Error storing user:', error);
   }
 };
 
@@ -43,9 +52,19 @@ export const getRefreshToken = async (): Promise<string | null> => {
 // Clear all tokens
 export const clearTokens = async () => {
   try {
-    await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]);
+    await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
   } catch (error) {
     console.error('Error clearing tokens:', error);
+  }
+};
+
+export const getStoredUser = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.error('Error reading user:', error);
+    return null;
   }
 };
 
@@ -110,6 +129,7 @@ export const login = async (email: string, password: string) => {
 
     // Step 4: Store tokens
     await storeTokens(accessToken, refreshToken);
+    await storeUser(user);
 
     return {
       success: true,

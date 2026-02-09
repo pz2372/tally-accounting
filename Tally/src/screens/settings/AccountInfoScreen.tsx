@@ -1,19 +1,107 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import React, { useState, useContext, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
 
+const USER_PROFILE_KEY = '@user_profile';
+
 interface AccountInfoScreenProps {
   onBack: () => void;
+  currentUser?: {
+    name?: string;
+    email?: string;
+    phoneNumber?: string;
+  } | null;
 }
 
-export default function AccountInfoScreen({ onBack }: AccountInfoScreenProps) {
+export default function AccountInfoScreen({ onBack, currentUser }: AccountInfoScreenProps) {
   const { t } = useContext(LanguageContext);
-  const [name, setName] = useState('Peter Zhang');
-  const [email, setEmail] = useState('peter@acmecorp.com');
-  const [phone, setPhone] = useState('+1 (555) 123-4567');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadUserProfile = async () => {
+      try {
+        // First try to load from cache
+        const cachedData = await AsyncStorage.getItem(USER_PROFILE_KEY);
+        if (cachedData && isActive) {
+          const parsed = JSON.parse(cachedData);
+          setName(parsed.name || '');
+          setEmail(parsed.email || '');
+          setPhone(parsed.phone || '');
+        } else if (currentUser && isActive) {
+          // Fall back to currentUser prop if no cache
+          setName(currentUser.name || '');
+          setEmail(currentUser.email || '');
+          setPhone(currentUser.phoneNumber || '');
+        }
+      } catch (error) {
+        console.warn('Failed to load user profile:', error);
+        // Fall back to currentUser prop on error
+        if (currentUser && isActive) {
+          setName(currentUser.name || '');
+          setEmail(currentUser.email || '');
+          setPhone(currentUser.phoneNumber || '');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadUserProfile();
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentUser]);
+
+  const handleSaveChanges = async () => {
+    try {
+      const profileData = {
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+      };
+      
+      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profileData));
+      
+      Alert.alert(
+        t('common.done'),
+        'Profile updated successfully',
+        [{ text: 'OK', onPress: onBack }]
+      );
+    } catch (error) {
+      console.warn('Failed to save user profile:', error);
+      Alert.alert(
+        'Error',
+        'Failed to save changes. Please try again.'
+      );
+    }
+  };
+
+  const getInitials = (nameValue?: string, emailValue?: string) => {
+    if (nameValue && nameValue.trim()) {
+      const parts = nameValue.trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) return 'U';
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    if (emailValue && emailValue.trim()) {
+      return emailValue.slice(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const userInitials = getInitials(name, email);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -30,15 +118,6 @@ export default function AccountInfoScreen({ onBack }: AccountInfoScreenProps) {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Profile Photo */}
-          <View style={styles.photoSection}>
-            <View style={styles.photoCircle}>
-              <Text style={styles.photoInitials}>PZ</Text>
-            </View>
-            <TouchableOpacity style={styles.changePhotoButton}>
-              <Text style={styles.changePhotoText}>{t('accountInfo.changePhoto')}</Text>
-            </TouchableOpacity>
-          </View>
 
           {/* Form Fields */}
           <View style={styles.form}>
@@ -81,7 +160,11 @@ export default function AccountInfoScreen({ onBack }: AccountInfoScreenProps) {
 
           {/* Save Button */}
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.saveButton}>
+            <TouchableOpacity 
+              style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} 
+              onPress={handleSaveChanges}
+              disabled={isLoading}
+            >
               <Text style={styles.saveButtonText}>{t('accountInfo.saveChanges')}</Text>
             </TouchableOpacity>
           </View>
@@ -105,7 +188,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   backButton: {
     padding: spacing.xs,
@@ -126,33 +209,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  photoSection: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxxl,
-  },
-  photoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  photoInitials: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: colors.surface,
-  },
-  changePhotoButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  changePhotoText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.primary,
   },
   form: {
     paddingHorizontal: spacing.xxl,
@@ -186,6 +242,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
   },
   saveButtonText: {
     fontSize: 15,

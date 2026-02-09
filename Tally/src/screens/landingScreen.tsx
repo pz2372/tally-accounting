@@ -3,30 +3,19 @@ import {
   View,
   Image,
   StyleSheet,
-  Dimensions,
   StatusBar,
   Animated,
 } from 'react-native';
-import LottieView from 'lottie-react-native';
-import { colors } from '../styles/theme';
-
-const { width, height } = Dimensions.get('window');
 
 interface LandingScreenProps {
   onFinish: () => void;
 }
 
 export default function LandingScreen({ onFinish }: LandingScreenProps) {
-  const animationRef = useRef<LottieView>(null);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     console.log('LandingScreen mounted');
-    // Auto-play animation on mount
-    setTimeout(() => {
-      animationRef.current?.play();
-    }, 100);
-
     // Start fade out after 3 seconds
     setTimeout(() => {
       Animated.timing(fadeAnim, {
@@ -43,12 +32,6 @@ export default function LandingScreen({ onFinish }: LandingScreenProps) {
     return () => {};
   }, []);
 
-  const handleAnimationFinish = () => {
-    // Navigate to next screen after animation completes
-    console.log('Animation finished');
-    onFinish();
-  };
-
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
       <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
@@ -59,15 +42,6 @@ export default function LandingScreen({ onFinish }: LandingScreenProps) {
           resizeMode="contain"
         />
       </View>
-      <LottieView
-        ref={animationRef}
-        source={require('../../assets/landing.lottie.json')}
-        style={styles.animation}
-        autoPlay={false}
-        loop={false}
-        onAnimationFinish={handleAnimationFinish}
-        resizeMode="contain"
-      />
     </Animated.View>
   );
 }
@@ -93,9 +67,5 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     alignSelf: 'center',
-  },
-  animation: {
-    width: width * 0.8,
-    height: height * 0.6,
   },
 });

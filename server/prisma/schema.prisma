@@ -83,6 +83,7 @@ enum RecurringChargeStatus {
 
 model User {
   id              String   @id @default(cuid())
+  firebaseUid     String?  @unique
   email           String   @unique
   name            String?
   preferredLocale String   @default("en-US")

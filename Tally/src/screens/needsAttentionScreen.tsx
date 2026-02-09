@@ -8,6 +8,8 @@ import AlertDetailScreen from './alertDetailScreen';
 
 interface NeedsAttentionScreenProps {
   onBack: () => void;
+  alerts?: Alert[];
+  onAlertsChange?: (alerts: Alert[]) => void;
 }
 
 interface Alert {
@@ -27,7 +29,8 @@ const SwipeableAlertCard = React.forwardRef<{ close: () => void }, {
   icon: any; 
   onPress: () => void; 
   onDismiss: () => void;
-}>(({ alert, icon, onPress, onDismiss }, ref) => {
+  dismissLabel: string;
+}>(({ alert, icon, onPress, onDismiss, dismissLabel }, ref) => {
   const translateX = React.useRef(new Animated.Value(0)).current;
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -89,7 +92,7 @@ const SwipeableAlertCard = React.forwardRef<{ close: () => void }, {
           }}
         >
           <Ionicons name="close-circle" size={24} color={colors.surface} />
-          <Text style={styles.dismissButtonText}>Dismiss</Text>
+          <Text style={styles.dismissButtonText}>{dismissLabel}</Text>
         </TouchableOpacity>
       </View>
 
@@ -113,7 +116,7 @@ const SwipeableAlertCard = React.forwardRef<{ close: () => void }, {
           activeOpacity={0.7}
         >
           <View style={styles.alertContainer}>
-            <Text style={[styles.alertTitle, { color: icon.color }]}>{icon.title}</Text>
+            <Text style={[styles.alertTitle, { color: icon.color }]}>{alert.title || icon.title}</Text>
             
             <View style={styles.alertBody}>
               <View style={styles.alertDate}>
@@ -122,15 +125,17 @@ const SwipeableAlertCard = React.forwardRef<{ close: () => void }, {
               </View>
               
               <View style={styles.alertContent}>
-                {alert.vendor && (
+                {alert.vendor ? (
                   <View style={styles.alertDetails}>
                     <Text style={styles.alertVendor}>{alert.vendor}</Text>
-                    {alert.amount && (
+                    {alert.amount !== undefined && (
                       <Text style={styles.alertAmount}>
                         ${alert.amount.toFixed(2)}
                       </Text>
                     )}
                   </View>
+                ) : (
+                  <Text style={styles.alertDescription}>{alert.description}</Text>
                 )}
               </View>
               
@@ -145,11 +150,17 @@ const SwipeableAlertCard = React.forwardRef<{ close: () => void }, {
   );
 });
 
-export default function NeedsAttentionScreen({ onBack }: NeedsAttentionScreenProps) {
+export default function NeedsAttentionScreen({ onBack, alerts: incomingAlerts, onAlertsChange }: NeedsAttentionScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedAlert, setSelectedAlert] = React.useState<Alert | null>(null);
   const swipeRefs = React.useRef<{ [key: number]: { close: () => void } | null }>({});
-  const scrollTimeout = React.useRef<NodeJS.Timeout | null>(null);
+  const [alerts, setAlerts] = React.useState<Alert[]>([]);
+
+  React.useEffect(() => {
+    if (incomingAlerts !== undefined) {
+      setAlerts(incomingAlerts);
+    }
+  }, [incomingAlerts]);
 
   const getAlertTitle = (type: Alert['type']) => {
     switch (type) {
@@ -166,92 +177,16 @@ export default function NeedsAttentionScreen({ onBack }: NeedsAttentionScreenPro
     }
   };
 
-  const [alerts, setAlerts] = React.useState<Alert[]>([
-    {
-      id: 1,
-      type: 'missing-receipt',
-      title: 'Missing Receipt',
-      description: 'Statement charge needs a receipt',
-      date: 'JAN',
-      day: 28,
-      amount: 45.99,
-      vendor: 'Amazon Web Services',
+  const updateAlerts = React.useCallback(
+    (updater: (current: Alert[]) => Alert[]) => {
+      setAlerts((current) => {
+        const next = updater(current);
+        onAlertsChange?.(next);
+        return next;
+      });
     },
-    {
-      id: 2,
-      type: 'missing-receipt',
-      title: 'Missing Receipt',
-      description: 'Statement charge needs a receipt',
-      date: 'JAN',
-      day: 27,
-      amount: 125.00,
-      vendor: 'Office Depot',
-    },
-    {
-      id: 3,
-      type: 'unmatched-receipt',
-      title: 'Unmatched Receipt',
-      description: 'Receipt not linked to a statement charge',
-      date: 'JAN',
-      day: 26,
-      amount: 18.50,
-      vendor: 'Starbucks',
-    },
-    {
-      id: 4,
-      type: 'missing-receipt',
-      title: 'Missing Receipt',
-      description: 'Statement charge needs a receipt',
-      date: 'JAN',
-      day: 25,
-      amount: 89.99,
-      vendor: 'Adobe Creative Cloud',
-    },
-    {
-      id: 5,
-      type: 'duplicate',
-      title: 'Possible Duplicate',
-      description: 'Similar expense detected',
-      date: 'JAN',
-      day: 24,
-      amount: 299.00,
-      vendor: 'Microsoft Office 365',
-    },
-    {
-      id: 6,
-      type: 'unmatched-receipt',
-      title: 'Unmatched Receipt',
-      description: 'Receipt not linked to a statement charge',
-      date: 'JAN',
-      day: 23,
-      amount: 67.45,
-      vendor: 'FedEx',
-    },
-    {
-      id: 7,
-      type: 'missing-receipt',
-      title: 'Statement Missing Receipt',
-      description: 'Statement charge needs a receipt',
-      date: 'JAN',
-      day: 22,
-      amount: 15.99,
-      vendor: 'Zoom Pro',
-    },
-  ]);
-
-  // Show detail screen if an alert is selected
-  if (selectedAlert) {
-    return (
-      <AlertDetailScreen
-        alert={selectedAlert}
-        onBack={() => setSelectedAlert(null)}
-        onResolve={() => {
-          // Handle resolve action
-          setSelectedAlert(null);
-        }}
-      />
-    );
-  }
+    [onAlertsChange]
+  );
 
   const getAlertIcon = (type: Alert['type']) => {
     switch (type) {
@@ -268,24 +203,27 @@ export default function NeedsAttentionScreen({ onBack }: NeedsAttentionScreenPro
     }
   };
 
-  const getAlertBackground = (type: Alert['type']) => {
-    switch (type) {
-      case 'missing-receipt':
-        return '#FEF2F2';
-      case 'unmatched-receipt':
-        return '#FFF7ED';
-      case 'duplicate':
-        return '#FAF5FF';
-      case 'review':
-        return '#EFF6FF';
-      default:
-        return '#F9FAFB';
-    }
+  const handleDismiss = (alertId: number) => {
+    updateAlerts((current) => current.filter((alert) => alert.id !== alertId));
   };
 
-  const handleDismiss = (alertId: number) => {
-    setAlerts(alerts.filter(a => a.id !== alertId));
+  const handleResolve = (alertId: number) => {
+    updateAlerts((current) => current.filter((alert) => alert.id !== alertId));
   };
+
+  // Show detail screen if an alert is selected
+  if (selectedAlert) {
+    return (
+      <AlertDetailScreen
+        alert={selectedAlert}
+        onBack={() => setSelectedAlert(null)}
+        onResolve={() => {
+          handleResolve(selectedAlert.id);
+          setSelectedAlert(null);
+        }}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -327,10 +265,6 @@ export default function NeedsAttentionScreen({ onBack }: NeedsAttentionScreenPro
           style={styles.content} 
           showsVerticalScrollIndicator={false}
           onScrollBeginDrag={() => {
-            // Clear any existing timeout
-            if (scrollTimeout.current) {
-              clearTimeout(scrollTimeout.current);
-            }
             // Close all swipes immediately when scroll begins
             Object.values(swipeRefs.current).forEach(ref => ref?.close());
           }}
@@ -339,7 +273,6 @@ export default function NeedsAttentionScreen({ onBack }: NeedsAttentionScreenPro
           <View style={styles.alertsList}>
             {alerts.map((alert) => {
               const icon = getAlertIcon(alert.type);
-              const background = getAlertBackground(alert.type);
               
               return (
                 <SwipeableAlertCard
@@ -351,6 +284,7 @@ export default function NeedsAttentionScreen({ onBack }: NeedsAttentionScreenPro
                   icon={icon}
                   onPress={() => setSelectedAlert(alert)}
                   onDismiss={() => handleDismiss(alert.id)}
+                  dismissLabel={t('needsAttention.dismiss')}
                 />
               );
             })}
@@ -518,6 +452,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  alertDescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
   },
   alertAmount: {
     fontSize: 14,

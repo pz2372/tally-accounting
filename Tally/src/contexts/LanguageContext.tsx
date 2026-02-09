@@ -21,7 +21,7 @@ const translations: Record<string, Record<string, string>> = {
     // Navigation
     'nav.home': 'Home',
     'nav.expenses': 'Expenses',
-    'nav.capture': 'Capture',
+    'nav.scan': 'Scan',
     'nav.category': 'Category',
     
     // Common
@@ -55,6 +55,7 @@ const translations: Record<string, Record<string, string>> = {
     'home.recurringSubtitle': 'Manage recurring expenses',
     'home.salesReport': 'Sales Report',
     'home.salesReportSubtitle': 'View sales analytics',
+    'home.roles': 'Roles',
     'home.recentActivity': 'Recent Activity',
     'home.viewAll': 'View All',
     'home.receiptTracking': 'Receipt Tracking',
@@ -289,12 +290,31 @@ const translations: Record<string, Record<string, string>> = {
     'rateApp.contactSupport': 'Contact Support',
     'rateApp.success': 'Success',
     'rateApp.thanksSupport': 'Thanks for your support!',
+    
+    // Roles Screen
+    'roles.title': 'Roles',
+    'roles.noMembersYet': 'No members yet',
+    'roles.emptySubtitle': 'Add admins or employees to manage access for this organization.',
+    'roles.admin': 'Admin',
+    'roles.employee': 'Employee',
+    'roles.created': 'Created',
+    'roles.addMember': 'Add Member',
+    'roles.editEmployee': 'Edit employee',
+    'roles.deleteMember': 'Delete Member?',
+    'roles.deleteConfirm': 'Are you sure you want to delete this member? This action cannot be undone.',
+    'roles.name': 'Name',
+    'roles.email': 'Email',
+    'roles.role': 'Role',
+    'roles.employeeNamePlaceholder': 'Employee name',
+    'roles.emailPlaceholder': 'employee@company.com',
+    'roles.addMemberButton': 'Add member',
+    'roles.save': 'Save',
   },
   es: {
     // Navigation
     'nav.home': 'Inicio',
     'nav.expenses': 'Gastos',
-    'nav.capture': 'Capturar',
+    'nav.scan': 'Escanear',
     'nav.category': 'Categoría',
     
     // Common
@@ -328,6 +348,7 @@ const translations: Record<string, Record<string, string>> = {
     'home.recurringSubtitle': 'Gestionar gastos recurrentes',
     'home.salesReport': 'Informe de Ventas',
     'home.salesReportSubtitle': 'Ver análisis de ventas',
+    'home.roles': 'Roles',
     'home.recentActivity': 'Actividad Reciente',
     'home.viewAll': 'Ver Todo',
     'home.receiptTracking': 'Seguimiento de Recibos',
@@ -487,12 +508,31 @@ const translations: Record<string, Record<string, string>> = {
     'scan.capture': 'Capturar',
     'scan.retake': 'Volver a Tomar',
     'scan.save': 'Guardar',
+    
+    // Roles Screen
+    'roles.title': 'Roles',
+    'roles.noMembersYet': 'Sin miembros todavía',
+    'roles.emptySubtitle': 'Añade administradores o empleados para gestionar el acceso a esta organización.',
+    'roles.admin': 'Administrador',
+    'roles.employee': 'Empleado',
+    'roles.created': 'Creado',
+    'roles.addMember': 'Añadir Miembro',
+    'roles.editEmployee': 'Editar empleado',
+    'roles.deleteMember': '¿Eliminar Miembro?',
+    'roles.deleteConfirm': '¿Estás seguro de que quieres eliminar este miembro? Esta acción no se puede deshacer.',
+    'roles.name': 'Nombre',
+    'roles.email': 'Correo electrónico',
+    'roles.role': 'Rol',
+    'roles.employeeNamePlaceholder': 'Nombre del empleado',
+    'roles.emailPlaceholder': 'empleado@empresa.com',
+    'roles.addMemberButton': 'Añadir miembro',
+    'roles.save': 'Guardar',
   },
   zh: {
     // Navigation
     'nav.home': '主页',
     'nav.expenses': '支出',
-    'nav.capture': '扫描',
+    'nav.scan': '扫描',
     'nav.category': '类别',
     
     // Common
@@ -526,6 +566,7 @@ const translations: Record<string, Record<string, string>> = {
     'home.recurringSubtitle': '管理定期支出',
     'home.salesReport': '销售报告',
     'home.salesReportSubtitle': '查看销售分析',
+    'home.roles': '角色',
     'home.recentActivity': '最近活动',
     'home.viewAll': '查看全部',
     'home.receiptTracking': '收据跟踪',
@@ -756,6 +797,25 @@ const translations: Record<string, Record<string, string>> = {
     'rateApp.contactSupport': '联系支持',
     'rateApp.success': '成功',
     'rateApp.thanksSupport': '感谢您的支持！',
+    
+    // Roles Screen
+    'roles.title': '角色',
+    'roles.noMembersYet': '还没有成员',
+    'roles.emptySubtitle': '添加管理员或员工以管理此组织的访问权限。',
+    'roles.admin': '管理员',
+    'roles.employee': '员工',
+    'roles.created': '创建于',
+    'roles.addMember': '添加成员',
+    'roles.editEmployee': '编辑员工',
+    'roles.deleteMember': '删除成员？',
+    'roles.deleteConfirm': '您确定要删除此成员吗？此操作无法撤消。',
+    'roles.name': '姓名',
+    'roles.email': '电子邮件',
+    'roles.role': '角色',
+    'roles.employeeNamePlaceholder': '员工姓名',
+    'roles.emailPlaceholder': '员工@公司.com',
+    'roles.addMemberButton': '添加成员',
+    'roles.save': '保存',
   },
 };
 

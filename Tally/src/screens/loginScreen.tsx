@@ -19,7 +19,7 @@ import { Image } from 'react-native';
 import { login } from '../services/authService';
 
 interface LoginScreenProps {
-  onLogin: () => void;
+  onLogin: (user: any) => void;
 }
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
@@ -45,7 +45,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       if (error) {
         Alert.alert('Authentication Failed', error);
       } else if (success) {
-        onLogin();
+        onLogin(user);
       }
     } catch (error) {
       Alert.alert('Authentication Failed', 'An unexpected error occurred');

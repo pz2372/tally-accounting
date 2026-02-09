@@ -14,7 +14,7 @@ import LoginScreen from './src/screens/loginScreen';
 import LandingScreen from './src/screens/landingScreen';
 import BottomNavigation from './src/components/BottomNavigation';
 import { LanguageProvider } from './src/contexts/LanguageContext';
-import { checkAuth } from './src/services/authService';
+import { checkAuth, getStoredUser } from './src/services/authService';
 
 interface Expense {
   id: string;
@@ -29,22 +29,22 @@ interface Expense {
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'expenses' | 'capture' | 'category'>('home');
   const [previousTab, setPreviousTab] = useState<'home' | 'expenses' | 'category'>('home');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [homeHasOverlay, setHomeHasOverlay] = useState(false);
   const settingsSlideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
-
-  console.log('App render - showLanding:', showLanding, 'isAuthenticated:', isAuthenticated);
-
+  
   const handleLandingFinish = () => {
     console.log('Landing finished, moving to login');
     setShowLanding(false);
   };
 
-  const handleLogin = () => {
+  const handleLogin = (user: any) => {
     setIsAuthenticated(true);
+    setCurrentUser(user || null);
   };
 
   const handleLogout = () => {
@@ -52,7 +52,10 @@ export default function App() {
     setActiveTab('home');
     setSelectedExpense(null);
     setShowSettings(false);
+    setCurrentUser(null);
   };
+
+  const hasOrganization = !!currentUser?.organizations?.length;
 
   // Check for existing auth session on app start
   useEffect(() => {
@@ -60,6 +63,8 @@ export default function App() {
       const isAuth = await checkAuth();
       if (isAuth) {
         setIsAuthenticated(true);
+        const storedUser = await getStoredUser();
+        setCurrentUser(storedUser);
       }
     };
 
@@ -77,6 +82,13 @@ export default function App() {
       settingsSlideAnim.setValue(SCREEN_WIDTH);
     }
   }, [showSettings]);
+
+  useEffect(() => {
+    if (!hasOrganization) {
+      setActiveTab('home');
+      setPreviousTab('home');
+    }
+  }, [hasOrganization]);
   
   const handleSettingsBack = () => {
     Animated.timing(settingsSlideAnim, {
@@ -89,6 +101,9 @@ export default function App() {
   };
 
   const handleTabPress = (tab: 'home' | 'expenses' | 'capture' | 'category') => {
+    if (!hasOrganization && tab !== 'home') {
+      return;
+    }
     if (tab !== 'capture' && activeTab !== 'capture') {
       setPreviousTab(tab as 'home' | 'expenses' | 'category');
     }
@@ -116,7 +131,12 @@ export default function App() {
         ) : (
           <>
             <View style={{ flex: 1, display: activeTab === 'home' ? 'flex' : 'none' }}>
-              <HomeScreen onSettingsPress={() => setShowSettings(true)} onOverlayChange={setHomeHasOverlay} />
+              <HomeScreen
+                onSettingsPress={() => setShowSettings(true)}
+                onOverlayChange={setHomeHasOverlay}
+                hasOrganization={hasOrganization}
+                currentUser={currentUser}
+              />
             </View>
             <View style={{ flex: 1, display: activeTab === 'expenses' ? 'flex' : 'none' }}>
               <ExpensesScreen onExpensePress={setSelectedExpense} />
@@ -129,7 +149,13 @@ export default function App() {
             <View style={{ flex: 1, display: activeTab === 'category' ? 'flex' : 'none' }}>
               <CategoryScreen onExpensePress={setSelectedExpense} />
             </View>
-            {!homeHasOverlay && <BottomNavigation activeTab={activeTab} onTabPress={handleTabPress} />}
+            {!homeHasOverlay && (
+              <BottomNavigation
+                activeTab={activeTab}
+                onTabPress={handleTabPress}
+                hasOrganization={hasOrganization}
+              />
+            )}
             {showSettings && (
               <Animated.View style={[{
                 position: 'absolute',
@@ -138,7 +164,12 @@ export default function App() {
                 right: 0,
                 bottom: 0,
               }, { transform: [{ translateX: settingsSlideAnim }] }]}>
-                <SettingsScreen onBack={handleSettingsBack} onLogout={handleLogout} />
+                <SettingsScreen
+                  onBack={handleSettingsBack}
+                  onLogout={handleLogout}
+                  hasOrganization={hasOrganization}
+                  currentUser={currentUser}
+                />
               </Animated.View>
             )}
           </>
