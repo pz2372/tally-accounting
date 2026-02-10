@@ -20,16 +20,18 @@ interface ExpenseDetailsScreenProps {
 
 const getCategoryColor = (category: string): string => {
     switch (category) {
-        case 'Software & SaaS':
-            return colors.purple;
-        case 'Travel':
-            return colors.blue;
-        case 'Office Supplies':
-            return colors.gray;
-        case 'Meals & Drinks':
-            return colors.red;
         case 'Miscellaneous':
-            return colors.orange;
+            return '#6B7280';
+        case 'Labor':
+            return '#9333EA';
+        case 'Inventory':
+            return '#10B981';
+        case 'Operations':
+            return '#F59E0B';
+        case 'Tax':
+            return '#EF4444';
+        case 'Transportation':
+            return '#3B82F6';
         default:
             return colors.gray;
     }

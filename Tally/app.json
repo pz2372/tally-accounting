@@ -15,7 +15,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pz2372.Tally",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -30,7 +32,12 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "@react-native-firebase/app"
-    ]
+      ["react-native-document-scanner-plugin", { "cameraPermission": "We need camera access to scan documents" }]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "223c9d27-0e08-44fe-8d64-e6bfb772356c"
+      }
+    }
   }
 }

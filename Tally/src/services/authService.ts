@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { signInWithEmail as firebaseSignIn, signOut as firebaseSignOut, getIdToken } from '../config/firebase';
+import { cacheLoginData, clearCache } from './cacheService';
 
 // Update this with your server URL
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -79,6 +80,10 @@ const exchangeFirebaseToken = async (firebaseToken: string) => {
       accessToken: response.data.accessToken,
       refreshToken: response.data.refreshToken,
       user: response.data.user,
+      presetCategories: response.data.presetCategories,
+      firstOrgData: response.data.firstOrgData,
+      syncedAt: response.data.syncedAt,
+      syncPeriod: response.data.syncPeriod,
       error: null,
     };
   } catch (error: any) {
@@ -86,6 +91,10 @@ const exchangeFirebaseToken = async (firebaseToken: string) => {
       accessToken: null,
       refreshToken: null,
       user: null,
+      presetCategories: null,
+      firstOrgData: null,
+      syncedAt: null,
+      syncPeriod: null,
       error: error.response?.data?.message || 'Failed to authenticate with server',
     };
   }
@@ -116,8 +125,8 @@ export const login = async (email: string, password: string) => {
       };
     }
 
-    // Step 3: Exchange Firebase token for server access token
-    const { accessToken, refreshToken, user, error: serverError } = await exchangeFirebaseToken(firebaseToken);
+    // Step 3: Exchange Firebase token for server access token and get comprehensive data
+    const { accessToken, refreshToken, user, presetCategories, firstOrgData, syncedAt, syncPeriod, error: serverError } = await exchangeFirebaseToken(firebaseToken);
     
     if (serverError || !accessToken) {
       return {
@@ -127,9 +136,18 @@ export const login = async (email: string, password: string) => {
       };
     }
 
-    // Step 4: Store tokens
+    // Step 4: Store tokens and cache comprehensive data
     await storeTokens(accessToken, refreshToken);
     await storeUser(user);
+    
+    // Cache all organization data (only first org has detailed data)
+    await cacheLoginData({
+      user,
+      presetCategories,
+      firstOrgData,
+      syncedAt,
+      syncPeriod,
+    });
 
     return {
       success: true,
@@ -146,11 +164,12 @@ export const login = async (email: string, password: string) => {
   }
 };
 
-// Logout: clear Firebase session and tokens
+// Logout: clear Firebase session, tokens, and cached data
 export const logout = async () => {
   try {
     await firebaseSignOut();
     await clearTokens();
+    await clearCache();
     return { success: true, error: null };
   } catch (error: any) {
     console.error('Logout error:', error);

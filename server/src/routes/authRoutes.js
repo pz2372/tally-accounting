@@ -24,10 +24,10 @@ router.post('/token', authController.createCustomToken);
 router.put('/profile', userController.updateProfile);
 
 // POST /api/auth/verify-email - Verify email
-router.post('/verify-email', authController.verifyEmail);
+router.post('/verify-email', userController.verifyEmail);
 
-// DELETE /api/auth/user - Delete user account
-router.delete('/user', authController.deleteUser);
+// DELETE /api/auth/user - Delete user account (not implemented yet)
+// router.delete('/user', authController.deleteUser);
 
 // Admin only routes
 router.get('/users', requireAdmin, userController.getAllUsers);

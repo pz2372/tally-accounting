@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,15 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { getCachedData, getOrgCachedData } from '../services/cacheService';
+import { CATEGORIES, CATEGORY_CONFIG } from '../components/categories';
 
 interface ExpenseItem {
   date: string;
@@ -34,11 +38,25 @@ interface CategoryScreenProps {
   onExpensePress?: (expense: any) => void;
 }
 
+// Transform CATEGORY_CONFIG to preset format for fallback
+const getDefaultPresetCategories = () => {
+  return Object.entries(CATEGORY_CONFIG).map(([name, config], index) => ({
+    id: `preset_${config.key}`,
+    key: config.key,
+    name: config.name,
+    color: config.color,
+    sortOrder: index + 1,
+    isActive: true,
+  }));
+};
+
 export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
-  const [transactionCount] = useState(8);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CategoryData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [totalSpent, setTotalSpent] = useState(0);
   
   const isCurrentOrFutureMonth = () => {
     const now = new Date();
@@ -46,62 +64,116 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
            (selectedMonth.getFullYear() === now.getFullYear() && 
             selectedMonth.getMonth() >= now.getMonth());
   };
+
+  useEffect(() => {
+    loadCategoryData();
+  }, []);
+
+  const loadCategoryData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get user to find first org ID
+      const userStr = await AsyncStorage.getItem('@current_user');
+      if (!userStr) {
+        console.log('No user found in cache');
+        return;
+      }
+      
+      const user = JSON.parse(userStr);
+      const firstOrgId = user.organizations?.[0]?.id;
+      if (!firstOrgId) {
+        console.log('No organization found for user');
+        return;
+      }
+
+      // Load preset categories and org data from cache
+      const [cachedPresets, orgData] = await Promise.all([
+        getCachedData('@preset_categories'),
+        getOrgCachedData(firstOrgId)
+      ]);
+
+      // Use cached presets or fallback to defaults
+      const presetCategories = cachedPresets && cachedPresets.length > 0 
+        ? cachedPresets 
+        : getDefaultPresetCategories();
+
+      const { categories: orgCategories, expenses } = orgData || {};
+
+      // Build category data structure
+      const categoryMap = new Map<string, CategoryData>();
+
+      // Initialize categories from presets and org settings
+      presetCategories
+        .filter((preset: any) => preset.isActive !== false)
+        .forEach((preset: any) => {
+          const orgCat = orgCategories?.find((oc: any) => oc.presetCategoryId === preset.id);
+          
+          // Include if: 1) no org setting exists (default enabled), OR 2) org setting exists and isEnabled=true
+          const shouldInclude = !orgCat || orgCat.isEnabled !== false;
+          
+          if (shouldInclude) {
+            categoryMap.set(preset.id, {
+              name: orgCat?.customName || preset.name,
+              color: preset.color || '#6B7280',
+              amount: 0,
+              expenseCount: 0,
+              expenses: []
+            });
+          }
+        });
+
+      // Organize expenses by category
+      if (expenses && Array.isArray(expenses)) {
+        expenses.forEach((expense: any) => {
+          if (!expense.orgCategoryId || expense.deletedAt) return;
+
+          // Find the preset ID for this org category
+          const orgCat = orgCategories?.find((oc: any) => oc.id === expense.orgCategoryId);
+          if (!orgCat) return;
+
+          const categoryData = categoryMap.get(orgCat.presetCategoryId);
+          if (!categoryData) return;
+
+          const expenseDate = new Date(expense.expenseDate);
+          const amountDollars = expense.amountCents / 100;
+
+          categoryData.expenses.push({
+            date: expenseDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
+            day: expenseDate.getDate(),
+            vendor: expense.merchant || 'Unknown',
+            description: expense.notes || expense.categoryNameSnapshot || '',
+            amount: amountDollars
+          });
+
+          categoryData.amount += amountDollars;
+          categoryData.expenseCount++;
+        });
+      }
+
+      // Convert map to array and sort by amount (descending)
+      const categoriesArray = Array.from(categoryMap.values())
+        .sort((a, b) => b.amount - a.amount);
+
+      // Sort expenses within each category by date (most recent first)
+      categoriesArray.forEach(cat => {
+        cat.expenses.sort((a, b) => {
+          const dateA = new Date(`${a.date} ${a.day}`);
+          const dateB = new Date(`${b.date} ${b.day}`);
+          return dateB.getTime() - dateA.getTime();
+        });
+      });
+
+      setCategories(categoriesArray);
+      setTotalSpent(categoriesArray.reduce((sum, cat) => sum + cat.amount, 0));
+    } catch (error) {
+      console.error('Error loading category data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
-  const totalSpent = 3103.81;
-  const avgPerTransaction = 387.98;
-  
-  const categories: CategoryData[] = [
-    { 
-      name: 'Software & SaaS', 
-      color: colors.purple, 
-      amount: 997.13, 
-      expenseCount: 2,
-      expenses: [
-        { date: 'JAN', day: 15, vendor: 'Adobe Creative Cloud', description: 'Monthly Subscription', amount: 599.88 },
-        { date: 'JAN', day: 10, vendor: 'GitHub Enterprise', description: 'Team License', amount: 397.25 },
-      ]
-    },
-    { 
-      name: 'Travel', 
-      color: colors.blue, 
-      amount: 812.40, 
-      expenseCount: 2,
-      expenses: [
-        { date: 'JAN', day: 23, vendor: 'Delta Airlines', description: 'Client Meeting - NYC', amount: 523.40 },
-        { date: 'JAN', day: 21, vendor: 'Hilton Hotels', description: 'Client Meeting - NYC', amount: 289.00 },
-      ]
-    },
-    { 
-      name: 'Office Supplies', 
-      color: colors.gray, 
-      amount: 606.78, 
-      expenseCount: 2,
-      expenses: [
-        { date: 'JAN', day: 18, vendor: 'Staples', description: 'Office Equipment', amount: 356.50 },
-        { date: 'JAN', day: 12, vendor: 'Amazon Business', description: 'Supplies & Materials', amount: 250.28 },
-      ]
-    },
-    { 
-      name: 'Marketing', 
-      color: colors.red, 
-      amount: 500.00, 
-      expenseCount: 1,
-      expenses: [
-        { date: 'JAN', day: 8, vendor: 'Google Ads', description: 'Q1 Campaign', amount: 500.00 },
-      ]
-    },
-    { 
-      name: 'Meals', 
-      color: colors.orange, 
-      amount: 187.50, 
-      expenseCount: 1,
-      expenses: [
-        { date: 'JAN', day: 20, vendor: 'Restaurant', description: 'Client Dinner', amount: 187.50 },
-      ]
-    },
-  ];
-  
-  const maxAmount = Math.max(...categories.map(c => c.amount));
+  const maxAmount = categories.length > 0 ? Math.max(...categories.map(c => c.amount)) : 1;
 
   // Enable LayoutAnimation on Android
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -174,67 +246,87 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
         <View style={styles.categorySection}>
           <Text style={styles.categoryTitle}>By Category</Text>
           
-          {categories.map((category, index) => {
-            const isExpanded = expandedCategory === category.name;
-            return (
-              <View key={index} style={[
-                styles.categoryItem,
-                isExpanded && styles.categoryItemExpanded
-              ]}>
-                <TouchableOpacity 
-                  onPress={() => toggleCategory(category.name)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.categoryHeader}>
-                    <View style={styles.categoryLeft}>
-                      <View style={[styles.categoryDot, { backgroundColor: category.color }]} />
-                      <Text style={styles.categoryName}>{category.name}</Text>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading expenses...</Text>
+            </View>
+          ) : (
+            categories.map((category, index) => {
+              const isExpanded = expandedCategory === category.name;
+              return (
+                <View key={index} style={[
+                  styles.categoryItem,
+                  isExpanded && styles.categoryItemExpanded
+                ]}>
+                  <TouchableOpacity 
+                    onPress={() => toggleCategory(category.name)}
+                    activeOpacity={0.7}
+                    disabled={category.expenseCount === 0}
+                  >
+                    <View style={styles.categoryHeader}>
+                      <View style={styles.categoryLeft}>
+                        <View style={[styles.categoryDot, { backgroundColor: category.color }]} />
+                        <Text style={[
+                          styles.categoryName,
+                          category.expenseCount === 0 && styles.categoryNameEmpty
+                        ]}>
+                          {category.name}
+                        </Text>
+                      </View>
+                      <View style={styles.categoryRight}>
+                        <Text style={[
+                          styles.categoryAmount,
+                          category.expenseCount === 0 && styles.categoryAmountEmpty
+                        ]}>
+                          ${category.amount.toFixed(2)}
+                        </Text>
+                        {category.expenseCount > 0 && (
+                          <Ionicons 
+                            name="chevron-down" 
+                            size={16} 
+                            color={colors.textSecondary}
+                            style={[styles.chevron, isExpanded && styles.chevronExpanded]}
+                          />
+                        )}
+                      </View>
                     </View>
-                    <View style={styles.categoryRight}>
-                      <Text style={styles.categoryAmount}>${category.amount.toFixed(2)}</Text>
-                      <Ionicons 
-                        name="chevron-down" 
-                        size={16} 
-                        color={colors.textSecondary}
-                        style={[styles.chevron, isExpanded && styles.chevronExpanded]}
-                      />
+                  </TouchableOpacity>
+                  
+                  {/* Expanded Expense Items */}
+                  {isExpanded && category.expenseCount > 0 && (
+                    <View style={styles.expenseList}>
+                      {category.expenses.map((expense, expIndex) => (
+                        <TouchableOpacity 
+                          key={expIndex} 
+                          style={styles.expenseItem}
+                          activeOpacity={0.7}
+                          onPress={() => onExpensePress && onExpensePress({
+                            id: `${category.name}-${expIndex}`,
+                            date: expense.date,
+                            day: expense.day,
+                            vendor: expense.vendor,
+                            category: category.name,
+                            status: 'Approved' as const,
+                            amount: expense.amount,
+                          })}
+                        >
+                          <View style={styles.expenseDate}>
+                            <Text style={styles.expenseMonth}>{expense.date}</Text>
+                            <Text style={styles.expenseDay}>{expense.day}</Text>
+                          </View>
+                          <View style={styles.expenseDetails}>
+                            <Text style={styles.expenseVendor}>{expense.vendor}</Text>
+                          </View>
+                          <Text style={styles.expenseAmount}>${expense.amount.toFixed(2)}</Text>
+                        </TouchableOpacity>
+                      ))}
                     </View>
-                  </View>
-                </TouchableOpacity>
-                
-                {/* Expanded Expense Items */}
-                {isExpanded && (
-                  <View style={styles.expenseList}>
-                    {category.expenses.map((expense, expIndex) => (
-                      <TouchableOpacity 
-                        key={expIndex} 
-                        style={styles.expenseItem}
-                        activeOpacity={0.7}
-                        onPress={() => onExpensePress && onExpensePress({
-                          id: `${category.name}-${expIndex}`,
-                          date: expense.date,
-                          day: expense.day,
-                          vendor: expense.vendor,
-                          category: category.name,
-                          status: 'Approved' as const,
-                          amount: expense.amount,
-                        })}
-                      >
-                        <View style={styles.expenseDate}>
-                          <Text style={styles.expenseMonth}>{expense.date}</Text>
-                          <Text style={styles.expenseDay}>{expense.day}</Text>
-                        </View>
-                        <View style={styles.expenseDetails}>
-                          <Text style={styles.expenseVendor}>{expense.vendor}</Text>
-                        </View>
-                        <Text style={styles.expenseAmount}>${expense.amount.toFixed(2)}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })}
+                  )}
+                </View>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -350,6 +442,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: spacing.xl,
+    paddingBottom: spacing.md,
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
@@ -379,6 +472,9 @@ const styles = StyleSheet.create({
     ...typography.body,
     marginRight: spacing.sm,
   },
+  categoryNameEmpty: {
+    color: colors.textTertiary,
+  },
   categoryRight: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -386,6 +482,9 @@ const styles = StyleSheet.create({
   categoryAmount: {
     ...typography.heading,
     marginRight: spacing.sm,
+  },
+  categoryAmountEmpty: {
+    color: colors.textTertiary,
   },
   chevron: {
     marginLeft: spacing.xs,
@@ -438,5 +537,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  loadingContainer: {
+    padding: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  emptyContainer: {
+    padding: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: colors.textTertiary,
+    textAlign: 'center',
   },
 });

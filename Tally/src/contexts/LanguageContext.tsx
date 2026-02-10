@@ -26,6 +26,7 @@ const translations: Record<string, Record<string, string>> = {
     
     // Common
     'common.save': 'Save',
+    'common.saveChanges': 'Save Changes',
     'common.cancel': 'Cancel',
     'common.delete': 'Delete',
     'common.back': 'Back',
@@ -319,6 +320,7 @@ const translations: Record<string, Record<string, string>> = {
     
     // Common
     'common.save': 'Guardar',
+    'common.saveChanges': 'Guardar Cambios',
     'common.cancel': 'Cancelar',
     'common.delete': 'Eliminar',
     'common.back': 'Atrás',
@@ -537,6 +539,7 @@ const translations: Record<string, Record<string, string>> = {
     
     // Common
     'common.save': '保存',
+    'common.saveChanges': '保存更改',
     'common.cancel': '取消',
     'common.delete': '删除',
     'common.back': '返回',

@@ -17,6 +17,9 @@ router.use(requireOrg);
 // Get organization's enabled categories
 router.get('/', categoryController.getOrgCategories);
 
+// Batch update categories (enable/disable multiple)
+router.put('/batch', categoryController.batchUpdateCategories);
+
 // Enable a preset category for organization
 router.post('/', categoryController.enableCategory);
 

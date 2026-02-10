@@ -28,15 +28,15 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [newVendor, setNewVendor] = useState('');
   const [newAmount, setNewAmount] = useState('');
-  const [newCategory, setNewCategory] = useState('Software & SaaS');
+  const [newCategory, setNewCategory] = useState('Operations');
   const [newFrequency, setNewFrequency] = useState<'monthly' | 'yearly' | 'weekly' | 'quarterly'>('monthly');
   const [recurringDate, setRecurringDate] = useState('');
   
   const [charges, setCharges] = useState<RecurringCharge[]>([
     {
       id: 1,
-      vendor: 'Adobe Creative Cloud',
-      category: 'Software & SaaS',
+      vendor: 'Staff Payroll',
+      category: 'Labor',
       amount: 54.99,
       frequency: 'monthly',
       nextBillingDate: 'Feb 15, 2026',
@@ -45,8 +45,8 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
     },
     {
       id: 2,
-      vendor: 'Microsoft Office 365',
-      category: 'Software & SaaS',
+      vendor: 'Equipment Maintenance',
+      category: 'Operations',
       amount: 99.99,
       frequency: 'yearly',
       nextBillingDate: 'Aug 1, 2026',
@@ -55,8 +55,8 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
     },
     {
       id: 3,
-      vendor: 'Zoom Pro',
-      category: 'Software & SaaS',
+      vendor: 'Quarterly Tax Payment',
+      category: 'Tax',
       amount: 14.99,
       frequency: 'monthly',
       nextBillingDate: 'Feb 22, 2026',
@@ -65,8 +65,8 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
     },
     {
       id: 4,
-      vendor: 'Amazon Web Services',
-      category: 'Software & SaaS',
+      vendor: 'Fleet Lease',
+      category: 'Transportation',
       amount: 125.00,
       frequency: 'monthly',
       nextBillingDate: 'Feb 28, 2026',
@@ -75,8 +75,8 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
     },
     {
       id: 5,
-      vendor: 'Dropbox Business',
-      category: 'Software & SaaS',
+      vendor: 'Supplies Subscription',
+      category: 'Inventory',
       amount: 20.00,
       frequency: 'monthly',
       nextBillingDate: 'Feb 10, 2026',
@@ -108,12 +108,18 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
-      case 'Software & SaaS':
-        return 'cloud';
-      case 'Utilities':
-        return 'flash';
-      case 'Subscriptions':
-        return 'newspaper';
+      case 'Miscellaneous':
+        return 'apps-outline';
+      case 'Labor':
+        return 'people-outline';
+      case 'Inventory':
+        return 'cube-outline';
+      case 'Operations':
+        return 'settings-outline';
+      case 'Tax':
+        return 'calculator-outline';
+      case 'Transportation':
+        return 'car-outline';
       default:
         return 'repeat';
     }
@@ -279,7 +285,7 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
 
                 {showCategoryPicker && (
                   <View style={styles.pickerDropdown}>
-                    {['Software & SaaS', 'Utilities', 'Subscriptions', 'Other'].map((cat) => (
+                    {['Miscellaneous', 'Labor', 'Inventory', 'Operations', 'Tax', 'Transportation'].map((cat) => (
                       <TouchableOpacity
                         key={cat}
                         style={styles.pickerItem}

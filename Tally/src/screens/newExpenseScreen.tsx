@@ -7,6 +7,7 @@ import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import DatePickerModal from '../components/DatePickerModal';
 import ScanScreen from './scanScreen';
+import { CATEGORIES } from '../components/categories';
 
 interface NewExpenseScreenProps {
   onBack: () => void;
@@ -24,17 +25,6 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
   const [showScanScreen, setShowScanScreen] = useState(false);
-
-  const categories = [
-    'Software & SaaS',
-    'Travel',
-    'Office Supplies',
-    'Meals & Drinks',
-    'Equipment',
-    'Marketing',
-    'Utilities',
-    'Miscellaneous',
-  ];
 
   const handleTakePhoto = () => {
     setShowReceiptModal(false);
@@ -69,7 +59,6 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
 
   const handleSave = () => {
     // TODO: Implement save logic
-    console.log('Saving expense:', { vendor, amount, selectedCategory, selectedDate, notes, receipt: selectedReceipt });
     onBack();
   };
 
@@ -139,7 +128,7 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
 
             {showCategoryPicker && (
               <View style={styles.pickerDropdown}>
-                {categories.map((category) => (
+                {CATEGORIES.map((category) => (
                   <TouchableOpacity
                     key={category}
                     style={styles.pickerItem}

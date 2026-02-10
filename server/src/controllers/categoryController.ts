@@ -223,18 +223,12 @@ export const disableCategory: Handler = async (req, res) => {
 export const seedPresetCategories: Handler = async (req, res) => {
   try {
     const defaultPresets = [
-      { key: 'miscellaneous', name: 'Miscellaneous', color: '#6B7280', sortOrder: 0 },
-      { key: 'labor', name: 'Labor', color: '#9333EA', sortOrder: 1 },
-      { key: 'inventory', name: 'Inventory', color: '#10B981', sortOrder: 2 },
-      { key: 'operations', name: 'Operations', color: '#F59E0B', sortOrder: 3 },
-      { key: 'tax', name: 'Tax', color: '#EF4444', sortOrder: 4 },
-      { key: 'transportation', name: 'Transportation', color: '#3B82F6', sortOrder: 5 },
-      { key: 'food_supplies', name: 'Food & Supplies', color: '#10B981', sortOrder: 6 },
-      { key: 'utilities', name: 'Utilities', color: '#F59E0B', sortOrder: 7 },
-      { key: 'marketing', name: 'Marketing', color: '#EC4899', sortOrder: 8 },
-      { key: 'equipment', name: 'Equipment', color: '#8B5CF6', sortOrder: 9 },
-      { key: 'maintenance', name: 'Maintenance', color: '#F97316', sortOrder: 10 },
-      { key: 'insurance', name: 'Insurance', color: '#06B6D4', sortOrder: 11 }
+      { key: 'miscellaneous', name: 'Miscellaneous', color: '#6B7280', sortOrder: 1 },
+      { key: 'labor', name: 'Labor', color: '#9333EA', sortOrder: 2 },
+      { key: 'inventory', name: 'Inventory', color: '#10B981', sortOrder: 3 },
+      { key: 'operations', name: 'Operations', color: '#F59E0B', sortOrder: 4 },
+      { key: 'tax', name: 'Tax', color: '#EF4444', sortOrder: 5 },
+      { key: 'transportation', name: 'Transportation', color: '#3B82F6', sortOrder: 6 }
     ];
     
     const created = [];
@@ -254,6 +248,82 @@ export const seedPresetCategories: Handler = async (req, res) => {
       success: true,
       message: `Seeded ${created.length} preset categories`,
       categories: created
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+};
+
+// Batch update organization categories (enable/disable multiple at once)
+export const batchUpdateCategories: Handler = async (req, res) => {
+  try {
+    const { orgId, role } = req.user;
+    const { categories } = req.body; // Array of { presetCategoryId, isEnabled, visibleToEmployees }
+    
+    if (role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+    
+    if (!Array.isArray(categories)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Categories array is required'
+      });
+    }
+    
+    // Update each category
+    const updatePromises = categories.map(async (cat) => {
+      const { presetCategoryId, isEnabled, visibleToEmployees } = cat;
+      
+      return await prisma.orgCategory.upsert({
+        where: {
+          orgId_presetCategoryId: {
+            orgId,
+            presetCategoryId
+          }
+        },
+        update: {
+          isEnabled,
+          ...(visibleToEmployees !== undefined && { visibleToEmployees })
+        },
+        create: {
+          orgId,
+          presetCategoryId,
+          isEnabled,
+          visibleToEmployees: visibleToEmployees ?? true
+        }
+      });
+    });
+    
+    await Promise.all(updatePromises);
+    
+    // Fetch updated categories
+    const updatedCategories = await prisma.orgCategory.findMany({
+      where: { orgId },
+      include: {
+        preset: true
+      },
+      orderBy: { sortOrder: 'asc' }
+    });
+    
+    res.json({ 
+      success: true,
+      message: 'Categories updated successfully',
+      categories: updatedCategories.map(oc => ({
+        id: oc.id,
+        key: oc.preset.key,
+        name: oc.customName || oc.preset.name,
+        color: oc.preset.color,
+        sortOrder: oc.sortOrder,
+        presetId: oc.presetCategoryId,
+        isEnabled: oc.isEnabled
+      }))
     });
   } catch (error) {
     res.status(500).json({ 

@@ -1,10 +1,13 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import React, { useState, useContext, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import DatePickerModal from '../components/DatePickerModal';
+import { getCategoryColor } from '../components/categories';
+import { getOrgCachedData } from '../services/cacheService';
 
 interface Expense {
   id: string;
@@ -21,28 +24,102 @@ interface ExpenseGroup {
   expenses: Expense[];
 }
 
-const getCategoryColor = (category: string): string => {
-  switch (category) {
-    case 'Software & SaaS':
-      return colors.purple;
-    case 'Travel':
-      return colors.blue;
-    case 'Office Supplies':
-      return colors.gray;
-    case 'Meals & Drinks':
-      return colors.red;
-    case 'Miscellaneous':
-      return colors.orange;
-    default:
-      return colors.gray;
-  }
-};
-
 export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (expense: Expense) => void }) {
   const { t } = useContext(LanguageContext);
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [expenseGroups, setExpenseGroups] = useState<ExpenseGroup[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadExpenses();
+  }, []);
+
+  const loadExpenses = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get user to find first org ID
+      const userStr = await AsyncStorage.getItem('@current_user');
+      if (!userStr) {
+        console.log('No user found in cache');
+        setIsLoading(false);
+        return;
+      }
+      
+      const user = JSON.parse(userStr);
+      const firstOrgId = user.organizations?.[0]?.id;
+      if (!firstOrgId) {
+        console.log('No organization found for user');
+        setIsLoading(false);
+        return;
+      }
+
+      // Load org data from cache
+      const orgData = await getOrgCachedData(firstOrgId);
+      const { expenses, categories } = orgData || {};
+
+      if (!expenses || !Array.isArray(expenses)) {
+        setExpenseGroups([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Filter out deleted expenses and map to UI format
+      const validExpenses = expenses
+        .filter((exp: any) => !exp.deletedAt)
+        .map((exp: any) => {
+          const expenseDate = new Date(exp.expenseDate);
+          const orgCat = categories?.find((c: any) => c.id === exp.orgCategoryId);
+          const categoryName = exp.categoryNameSnapshot || orgCat?.preset?.name || 'Miscellaneous';
+          
+          return {
+            id: exp.id,
+            date: expenseDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
+            day: expenseDate.getDate(),
+            vendor: exp.merchant || 'Unknown',
+            category: categoryName,
+            status: 'Approved' as const,
+            amount: exp.amountCents / 100,
+            fullDate: expenseDate,
+          };
+        })
+        .sort((a: any, b: any) => b.fullDate.getTime() - a.fullDate.getTime());
+
+      // Group by date
+      const grouped = validExpenses.reduce((acc: { [key: string]: Expense[] }, expense: any) => {
+        const dateKey = expense.fullDate.toDateString();
+        if (!acc[dateKey]) {
+          acc[dateKey] = [];
+        }
+        acc[dateKey].push(expense);
+        return acc;
+      }, {});
+
+      // Convert to ExpenseGroup array with formatted date labels
+      const groups: ExpenseGroup[] = Object.entries(grouped).map(([dateKey, expenses]: [string, any]) => {
+        const date = new Date(dateKey);
+        const dateLabel = date.toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          month: 'short', 
+          day: 'numeric' 
+        }).toUpperCase();
+        
+        return {
+          dateLabel,
+          expenses,
+        };
+      });
+
+      setExpenseGroups(groups);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+      setExpenseGroups([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const onDateChange = (event: any, date?: Date) => {
     if (Platform.OS === 'android') {
@@ -52,39 +129,6 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
       setSelectedDate(date);
     }
   };
-  
-  const expenseGroups: ExpenseGroup[] = [
-    {
-      dateLabel: 'THU, JAN 29',
-      expenses: [
-        { id: '1', date: 'JAN', day: 29, vendor: 'AWS Web Services', category: 'Software & SaaS', status: 'Approved', amount: 847.23 }
-      ]
-    },
-    {
-      dateLabel: 'WED, JAN 28',
-      expenses: [
-        { id: '2', date: 'JAN', day: 28, vendor: 'Zoom Video Comms', category: 'Software & SaaS', status: 'Pending', amount: 149.90 }
-      ]
-    },
-    {
-      dateLabel: 'MON, JAN 26',
-      expenses: [
-        { id: '3', date: 'JAN', day: 26, vendor: 'WeWork', category: 'Office Supplies', status: 'Approved', amount: 450.00 }
-      ]
-    },
-    {
-      dateLabel: 'FRI, JAN 23',
-      expenses: [
-        { id: '4', date: 'JAN', day: 23, vendor: 'Delta Airlines', category: 'Travel', status: 'Pending', amount: 523.40 }
-      ]
-    },
-    {
-      dateLabel: 'WED, JAN 21',
-      expenses: [
-        { id: '5', date: 'JAN', day: 21, vendor: 'Hilton Hotels', category: 'Travel', status: 'Pending', amount: 289.00 }
-      ]
-    },
-  ];
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -129,7 +173,17 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
 
         {/* Expense List */}
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {expenseGroups.map((group, groupIndex) => (
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : expenseGroups.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="receipt-outline" size={64} color={colors.textTertiary} />
+              <Text style={styles.emptyText}>No expenses yet</Text>
+            </View>
+          ) : (
+            expenseGroups.map((group, groupIndex) => (
             <View key={groupIndex}>
               <View style={styles.dateHeaderContainer}>
                 <Text style={styles.dateHeader}>{group.dateLabel}</Text>
@@ -163,7 +217,8 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
                 </TouchableOpacity>
               ))}
             </View>
-          ))}
+          ))
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -237,6 +292,23 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     paddingHorizontal: spacing.xxl,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: spacing.xxxl * 2,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: spacing.xxxl * 2,
+    gap: spacing.lg,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: colors.textTertiary,
   },
   dateHeaderContainer: {
     flexDirection: 'row',

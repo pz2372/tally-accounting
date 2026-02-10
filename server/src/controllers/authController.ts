@@ -144,7 +144,12 @@ export const firebaseLogin: Handler = async (req, res) => {
     
     const { uid, email, email_verified, name, picture } = decodedToken;
     
-    // Find or create user in database
+    // Calculate current month date range
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    // Find or create user in database with basic organization list
     let user = await prisma.user.findUnique({
       where: { firebaseUid: uid },
       include: {
@@ -182,6 +187,64 @@ export const firebaseLogin: Handler = async (req, res) => {
       });
     }
     
+    // Load detailed data only for the first organization
+    let firstOrgData = null;
+    if (user.memberships.length > 0) {
+      const firstOrgId = user.memberships[0].orgId;
+      
+      firstOrgData = await prisma.organization.findUnique({
+        where: { id: firstOrgId },
+        include: {
+          orgCategories: {
+            include: {
+              preset: true
+            }
+          },
+          receipts: {
+            where: {
+              receiptDate: {
+                gte: startOfMonth,
+                lte: endOfMonth
+              }
+            }
+          },
+          expenses: {
+            where: {
+              expenseDate: {
+                gte: startOfMonth,
+                lte: endOfMonth
+              }
+            },
+            include: {
+              orgCategory: {
+                include: {
+                  preset: true
+                }
+              }
+            }
+          },
+          matches: {
+            where: {
+              createdAt: {
+                gte: startOfMonth,
+                lte: endOfMonth
+              }
+            },
+            include: {
+              expense: true,
+              cardTxn: true
+            }
+          }
+        }
+      });
+    }
+    
+    // Fetch all preset categories
+    const presetCategories = await prisma.presetCategory.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' }
+    });
+    
     // Generate access token
     const accessToken = jwt.sign(
       {
@@ -210,60 +273,23 @@ export const firebaseLogin: Handler = async (req, res) => {
           permissions: m.permissions,
           subscription: m.org.subscription
         }))
+      },
+      presetCategories,
+      firstOrgData: firstOrgData ? {
+        orgId: firstOrgData.id,
+        categories: firstOrgData.orgCategories,
+        receipts: firstOrgData.receipts,
+        expenses: firstOrgData.expenses,
+        matches: firstOrgData.matches
+      } : null,
+      syncedAt: new Date().toISOString(),
+      syncPeriod: {
+        start: startOfMonth.toISOString(),
+        end: endOfMonth.toISOString()
       }
     });
   } catch (error) {
     console.error('Firebase login error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-};
-
-// Get current user profile with organizations
-export const getCurrentUser: Handler = async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      include: {
-        memberships: {
-          include: {
-            org: {
-              include: {
-                subscription: true
-              }
-            }
-          }
-        }
-      }
-    });
-    
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-    
-    res.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        emailVerified: req.user.emailVerified,
-        createdAt: user.createdAt,
-        organizations: user.memberships.map(m => ({
-          id: m.orgId,
-          name: m.org.name,
-          role: m.role,
-          permissions: m.permissions,
-          subscription: m.org.subscription
-        }))
-      }
-    });
-  } catch (error) {
     res.status(500).json({
       success: false,
       error: error.message
@@ -296,74 +322,3 @@ export const createCustomToken: Handler = async (req, res) => {
   }
 };
 
-// Verify email (stub - email verification handled by Firebase Auth)
-export const verifyEmail: Handler = async (req, res) => {
-  try {
-    const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email is required'
-      });
-    }
-    
-    // In production, you would send verification email via Firebase
-    res.json({
-      success: true,
-      message: 'Verification email sent'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-};
-
-// Update user profile
-export const updateProfile: Handler = async (req, res) => {
-  try {
-    const { name } = req.body;
-    
-    const user = await prisma.user.update({
-      where: { id: req.user.id },
-      data: { name }
-    });
-    
-    res.json({
-      success: true,
-      message: 'Profile updated successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-};
-
-// Delete user (removes from database, Firebase deletion handled separately)
-export const deleteUser: Handler = async (req, res) => {
-  try {
-    // Delete user from database (cascades to memberships)
-    await prisma.user.delete({
-      where: { id: req.user.id }
-    });
-    
-    res.json({
-      success: true,
-      message: 'User deleted successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-};

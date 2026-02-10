@@ -1,16 +1,40 @@
 // Firebase configuration for Tally mobile app
-// Firebase will automatically use GoogleService-Info.plist on iOS
-// and google-services.json on Android
+// Using Firebase JS SDK (web) for Expo Go compatibility
 
-import auth from '@react-native-firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { 
+  getReactNativePersistence,
+  initializeAuth,
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged as firebaseOnAuthStateChanged,
+  User
+} from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Initialize Firebase Auth
-export const firebaseAuth = auth();
+// Firebase config from GoogleService-Info.plist
+const firebaseConfig = {
+  apiKey: "AIzaSyDUAfgY-vHfcjvxeJo2DHVfE8pMbQhe1pk",
+  authDomain: "tally-81bd5.firebaseapp.com",
+  projectId: "tally-81bd5",
+  storageBucket: "tally-81bd5.firebasestorage.app",
+  messagingSenderId: "720402260367",
+  appId: "1:720402260367:ios:b11a5d19dc6efd55952bfa"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// Initialize Auth with AsyncStorage persistence
+export const firebaseAuth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 
 // Auth helper functions
 export const signInWithEmail = async (email: string, password: string) => {
   try {
-    const userCredential = await firebaseAuth.signInWithEmailAndPassword(email, password);
+    const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };
@@ -19,7 +43,7 @@ export const signInWithEmail = async (email: string, password: string) => {
 
 export const signUpWithEmail = async (email: string, password: string) => {
   try {
-    const userCredential = await firebaseAuth.createUserWithEmailAndPassword(email, password);
+    const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
     return { user: userCredential.user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };
@@ -28,7 +52,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
 
 export const signOut = async () => {
   try {
-    await firebaseAuth.signOut();
+    await firebaseSignOut(firebaseAuth);
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
@@ -40,8 +64,8 @@ export const getCurrentUser = () => {
 };
 
 // Listen to auth state changes
-export const onAuthStateChanged = (callback: (user: any) => void) => {
-  return firebaseAuth.onAuthStateChanged(callback);
+export const onAuthStateChanged = (callback: (user: User | null) => void) => {
+  return firebaseOnAuthStateChanged(firebaseAuth, callback);
 };
 
 // Get ID token for API calls
