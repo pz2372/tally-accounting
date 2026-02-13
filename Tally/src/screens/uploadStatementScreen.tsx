@@ -1,10 +1,13 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useState, useContext, useRef } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import DatePickerModal from '../components/DatePickerModal';
+import ScanScreen from './scanScreen';
+import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface UploadStatementScreenProps {
   onBack: () => void;
@@ -13,10 +16,21 @@ interface UploadStatementScreenProps {
 export default function UploadStatementScreen({ onBack }: UploadStatementScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [statementName, setStatementName] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [showScanScreen, setShowScanScreen] = useState(false);
+  const isPickingFileRef = useRef(false);
 
   const handleFilePick = async () => {
+    if (isPickingFileRef.current) {
+      return;
+    }
+    
+    isPickingFileRef.current = true;
+
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
@@ -27,13 +41,59 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
         setSelectedFile(result.assets[0]);
       }
     } catch (err) {
-      Alert.alert('Error', 'Failed to pick file');
+      console.error('Error picking file:', err);
+      Alert.alert(t('uploadStatement.error'), t('uploadStatement.errorMessage'));
+    } finally {
+      isPickingFileRef.current = false;
     }
   };
 
-  const handleUpload = () => {
+  const handleScanStatement = () => {
+    setShowScanScreen(true);
+  };
+
+  const handleStatementPress = () => {
+    Alert.alert(
+      t('uploadStatement.selectStatement'),
+      t('uploadStatement.chooseOption'),
+      [
+        {
+          text: t('uploadStatement.scanStatement'),
+          onPress: handleScanStatement,
+        },
+        {
+          text: t('uploadStatement.uploadFromFiles'),
+          onPress: handleFilePick,
+        },
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleSaveScannedStatement = (uri: string) => {
+    // Create a DocumentPickerAsset-like object from the scanned image
+    const fileName = `scanned_statement_${Date.now()}.jpg`;
+    setSelectedFile({
+      uri,
+      name: fileName,
+      size: 0, // Size unknown for scanned images
+      mimeType: 'image/jpeg',
+    } as DocumentPicker.DocumentPickerAsset);
+    setShowScanScreen(false);
+  };
+
+  const handleSave = () => {
     if (!selectedFile) {
-      Alert.alert('No File Selected', 'Please select a statement file first');
+      Alert.alert(t('uploadStatement.noFileSelected'), t('uploadStatement.pleaseSelectFile'));
+      return;
+    }
+
+    if (!statementName.trim()) {
+      Alert.alert(t('common.validationError'), t('uploadStatement.pleaseEnterName'));
       return;
     }
 
@@ -46,16 +106,22 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
       if (progress >= 100) {
         clearInterval(interval);
         setIsUploading(false);
-        Alert.alert('Success', 'Statement uploaded successfully', [
-          { text: 'OK', onPress: onBack }
+        Alert.alert(t('common.success'), t('uploadStatement.uploadSuccess'), [
+          { text: t('common.ok'), onPress: onBack }
         ]);
       }
     }, 200);
   };
 
+  const handleCancel = () => {
+    onBack();
+  };
+
+  const swipeHandlers = useSwipeBack(onBack);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -66,38 +132,37 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Info Card */}
-          <View style={styles.infoCard}>
-            <Ionicons name="information-circle" size={24} color={colors.primary} />
-            <Text style={styles.infoText}>
-              {t('uploadStatement.infoText')}
-            </Text>
+          {/* Name Field */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>{t('uploadStatement.statementName')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('uploadStatement.enterStatementName')}
+              placeholderTextColor={colors.textSecondary}
+              value={statementName}
+              onChangeText={setStatementName}
+            />
           </View>
 
-          {/* Supported Formats */}
+          {/* Date Field */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>{t('common.date')}</Text>
+            <TouchableOpacity
+              style={styles.dateButton}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={styles.dateButtonText}>
+                {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Select Statement File */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('uploadStatement.supportedFormats')}</Text>
-            <View style={styles.formatsList}>
-              <View style={styles.formatItem}>
-                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
-                <Text style={styles.formatText}>{t('uploadStatement.pdfStatements')}</Text>
-              </View>
-              <View style={styles.formatItem}>
-                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
-                <Text style={styles.formatText}>{t('uploadStatement.csvExcel')}</Text>
-              </View>
-              <View style={styles.formatItem}>
-                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
-                <Text style={styles.formatText}>{t('uploadStatement.qfxOfx')}</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Upload Area */}
-          <View style={styles.uploadSection}>
+            <Text style={styles.sectionTitle}>{t('uploadStatement.selectStatementFile')}</Text>
             <TouchableOpacity
               style={styles.uploadArea}
-              onPress={handleFilePick}
+              onPress={handleStatementPress}
               disabled={isUploading}
             >
               <View style={styles.uploadIcon}>
@@ -120,7 +185,7 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
                 <View style={styles.fileInfo}>
                   <Text style={styles.fileName}>{selectedFile.name}</Text>
                   <Text style={styles.fileSize}>
-                    {selectedFile.size ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` : 'Unknown size'}
+                    {selectedFile.size ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` : t('uploadStatement.unknownSize')}
                   </Text>
                 </View>
                 {!isUploading && (
@@ -130,28 +195,68 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
                 )}
               </View>
             )}
-
-            {/* Upload Progress */}
-            {isUploading && (
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
-                </View>
-                <Text style={styles.progressText}>{uploadProgress}% uploaded</Text>
-              </View>
-            )}
           </View>
+
+          {/* Supported Formats */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('uploadStatement.supportedFormats')}</Text>
+            <View style={styles.formatsList}>
+              <View style={styles.formatItem}>
+                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
+                <Text style={styles.formatText}>{t('uploadStatement.pdfStatements')}</Text>
+              </View>
+              <View style={styles.formatItem}>
+                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
+                <Text style={styles.formatText}>{t('uploadStatement.csvExcel')}</Text>
+              </View>
+              <View style={styles.formatItem}>
+                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
+                <Text style={styles.formatText}>{t('uploadStatement.qfxOfx')}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Upload Progress */}
+          {isUploading && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+              </View>
+              <Text style={styles.progressText}>{uploadProgress}% {t('uploadStatement.uploaded')}</Text>
+            </View>
+          )}
         </ScrollView>
 
-        {/* Upload Button */}
-        {selectedFile && !isUploading && (
+        {/* Footer Buttons */}
+        {!isUploading && (
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.uploadButton} onPress={handleUpload}>
-              <Text style={styles.uploadButtonText}>{t('uploadStatement.upload')}</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                <Text style={styles.saveButtonText}>{t('uploadStatement.save')}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
+
+      {/* Date Picker Modal */}
+      <DatePickerModal
+        visible={showDatePicker}
+        selectedDate={selectedDate}
+        onDateChange={(date) => setSelectedDate(date)}
+        onClose={() => setShowDatePicker(false)}
+      />
+
+      {/* Scan Screen */}
+      {showScanScreen && (
+        <ScanScreen
+          onCancel={() => setShowScanScreen(false)}
+          onSave={handleSaveScannedStatement}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -311,13 +416,67 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  uploadButton: {
+  inputGroup: {
+    marginBottom: spacing.xl,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  input: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  saveButton: {
+    flex: 1,
     backgroundColor: colors.primary,
     borderRadius: borderRadius.lg,
     paddingVertical: spacing.lg,
     alignItems: 'center',
   },
-  uploadButtonText: {
+  saveButtonText: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.surface,

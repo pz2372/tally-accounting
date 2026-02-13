@@ -39,7 +39,7 @@ export const uploadSalesReport: Handler = async (req, res) => {
     }
     
     // Check if report already exists for this date
-    const existing = await prisma.dailySalesReport.findUnique({
+    const existing = await prisma.salesReport.findUnique({
       where: {
         orgId_businessDate: {
           orgId,
@@ -60,7 +60,7 @@ export const uploadSalesReport: Handler = async (req, res) => {
       value === 'POS_UPLOAD' || value === 'MANUAL_ENTRY' || value === 'API_IMPORT'
     );
 
-    const report = await prisma.dailySalesReport.create({
+    const report = await prisma.salesReport.create({
       data: {
         orgId,
         businessDate: new Date(businessDate),
@@ -106,7 +106,7 @@ export const getAllSalesReports: Handler = async (req, res) => {
       });
     }
     
-    const where: Prisma.DailySalesReportWhereInput = { orgId };
+    const where: Prisma.SalesReportWhereInput = { orgId };
     const startDateValue = typeof startDate === 'string' ? startDate : undefined;
     const endDateValue = typeof endDate === 'string' ? endDate : undefined;
     const statusValue = typeof status === 'string' ? status : undefined;
@@ -127,7 +127,7 @@ export const getAllSalesReports: Handler = async (req, res) => {
       if (endDateValue) where.businessDate.lte = new Date(endDateValue);
     }
     
-    const reports = await prisma.dailySalesReport.findMany({
+    const reports = await prisma.salesReport.findMany({
       where,
       include: {
         uploadedBy: {
@@ -162,7 +162,7 @@ export const getSalesReportById: Handler = async (req, res) => {
       });
     }
     
-    const report = await prisma.dailySalesReport.findFirst({
+    const report = await prisma.salesReport.findFirst({
       where: { id, orgId },
       include: {
         uploadedBy: {
@@ -213,7 +213,7 @@ export const updateSalesReport: Handler = async (req, res) => {
       });
     }
     
-    const existing = await prisma.dailySalesReport.findFirst({
+    const existing = await prisma.salesReport.findFirst({
       where: { id, orgId }
     });
     
@@ -224,7 +224,7 @@ export const updateSalesReport: Handler = async (req, res) => {
       });
     }
     
-    const updateData: Prisma.DailySalesReportUpdateInput = {};
+    const updateData: Prisma.SalesReportUpdateInput = {};
     if (grossSalesCents !== undefined) {
       updateData.grossSalesCents = Number.parseInt(String(grossSalesCents), 10);
     }
@@ -248,7 +248,7 @@ export const updateSalesReport: Handler = async (req, res) => {
     }
     if (notes !== undefined) updateData.notes = notes;
     
-    const report = await prisma.dailySalesReport.update({
+    const report = await prisma.salesReport.update({
       where: { id },
       data: updateData
     });
@@ -279,18 +279,18 @@ export const approveSalesReport: Handler = async (req, res) => {
       });
     }
     
-    const report = await prisma.dailySalesReport.findFirst({
+const report = await prisma.salesReport.findFirst({
       where: { id, orgId }
     });
-    
+
     if (!report) {
       return res.status(404).json({
         success: false,
         error: 'Sales report not found'
       });
     }
-    
-    const updatedReport = await prisma.dailySalesReport.update({
+
+    const updatedReport = await prisma.salesReport.update({
       where: { id },
       data: { status: 'APPROVED' }
     });
@@ -322,27 +322,27 @@ export const rejectSalesReport: Handler = async (req, res) => {
       });
     }
     
-    const report = await prisma.dailySalesReport.findFirst({
+    const report = await prisma.salesReport.findFirst({
       where: { id, orgId }
     });
-    
+
     if (!report) {
       return res.status(404).json({
         success: false,
         error: 'Sales report not found'
       });
     }
-    
-    const updateData: Prisma.DailySalesReportUpdateInput = { status: 'REJECTED' };
+
+    const updateData: Prisma.SalesReportUpdateInput = { status: 'REJECTED' };
     if (notes) {
       updateData.notes = notes;
     }
     
-    const updatedReport = await prisma.dailySalesReport.update({
+    const updatedReport = await prisma.salesReport.update({
       where: { id },
       data: updateData
     });
-    
+
     res.json({
       success: true,
       message: 'Sales report rejected',
@@ -369,18 +369,18 @@ export const deleteSalesReport: Handler = async (req, res) => {
       });
     }
     
-    const report = await prisma.dailySalesReport.findFirst({
+const report = await prisma.salesReport.findFirst({
       where: { id, orgId }
     });
-    
+
     if (!report) {
       return res.status(404).json({
         success: false,
         error: 'Sales report not found'
       });
     }
-    
-    await prisma.dailySalesReport.delete({
+
+    await prisma.salesReport.delete({
       where: { id }
     });
     
@@ -426,7 +426,7 @@ export const getSalesAnalytics: Handler = async (req, res) => {
       });
     }
 
-    const reports = await prisma.dailySalesReport.findMany({
+    const reports = await prisma.salesReport.findMany({
       where: {
         orgId,
         status: 'APPROVED',

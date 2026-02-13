@@ -143,13 +143,19 @@ export default function App() {
             </View>
             {activeTab === 'capture' && (
               <View style={{ flex: 1 }}>
-                <ScanScreen onCancel={handleCaptureCancel} />
+                <ScanScreen 
+                  onCancel={handleCaptureCancel}
+                  showReviewScreen={true}
+                  onExpenseSaved={() => {
+                    setActiveTab(previousTab);
+                  }}
+                />
               </View>
             )}
             <View style={{ flex: 1, display: activeTab === 'category' ? 'flex' : 'none' }}>
               <CategoryScreen onExpensePress={setSelectedExpense} />
             </View>
-            {!homeHasOverlay && (
+            {!homeHasOverlay && activeTab !== 'capture' && (
               <BottomNavigation
                 activeTab={activeTab}
                 onTabPress={handleTabPress}

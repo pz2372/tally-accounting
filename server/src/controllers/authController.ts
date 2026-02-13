@@ -200,14 +200,6 @@ export const firebaseLogin: Handler = async (req, res) => {
               preset: true
             }
           },
-          receipts: {
-            where: {
-              receiptDate: {
-                gte: startOfMonth,
-                lte: endOfMonth
-              }
-            }
-          },
           expenses: {
             where: {
               expenseDate: {
@@ -278,7 +270,6 @@ export const firebaseLogin: Handler = async (req, res) => {
       firstOrgData: firstOrgData ? {
         orgId: firstOrgData.id,
         categories: firstOrgData.orgCategories,
-        receipts: firstOrgData.receipts,
         expenses: firstOrgData.expenses,
         matches: firstOrgData.matches
       } : null,

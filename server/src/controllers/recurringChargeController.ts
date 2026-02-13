@@ -15,6 +15,7 @@ export const createRecurringCharge: Handler = async (req, res) => {
       amountCents,
       currency,
       orgCategoryId,
+      presetCategoryId,
       dayOfMonth,
       useLastDay,
       startDate,
@@ -43,7 +44,8 @@ export const createRecurringCharge: Handler = async (req, res) => {
       });
     }
     
-    // Validate category if provided
+    // Validate category if provided - prefer orgCategoryId
+    let finalOrgCategoryId: string | null = null;
     if (orgCategoryId) {
       const category = await prisma.orgCategory.findFirst({
         where: { id: orgCategoryId, orgId, isEnabled: true }
@@ -52,9 +54,23 @@ export const createRecurringCharge: Handler = async (req, res) => {
       if (!category) {
         return res.status(404).json({
           success: false,
-          error: 'Category not found or not enabled'
+          error: 'Organization category not found or not enabled'
         });
       }
+      finalOrgCategoryId = orgCategoryId;
+    } else if (presetCategoryId) {
+      const preset = await prisma.presetCategory.findFirst({
+        where: { id: presetCategoryId, isActive: true }
+      });
+      
+      if (!preset) {
+        return res.status(404).json({
+          success: false,
+          error: 'Preset category not found or not active'
+        });
+      }
+      // For recurring charges with preset category, store null and will use preset name when creating expenses
+      finalOrgCategoryId = null;
     }
     
     // Calculate next run date
@@ -86,7 +102,7 @@ export const createRecurringCharge: Handler = async (req, res) => {
         merchant,
         amountCents: parseInt(amountCents),
         currency: currency || 'USD',
-        orgCategoryId,
+        orgCategoryId: finalOrgCategoryId,
         dayOfMonth: parseInt(dayOfMonth),
         useLastDay: useLastDay || false,
         startDate: new Date(startDate),
@@ -229,6 +245,7 @@ export const updateRecurringCharge: Handler = async (req, res) => {
       merchant,
       amountCents,
       orgCategoryId,
+      presetCategoryId,
       dayOfMonth,
       useLastDay,
       endDate
@@ -258,7 +275,9 @@ export const updateRecurringCharge: Handler = async (req, res) => {
     if (amountCents !== undefined) {
       updateData.amountCents = Number.parseInt(String(amountCents), 10);
     }
-    if (orgCategoryId !== undefined) {
+    
+    // Handle category update - prefer orgCategoryId
+    if (orgCategoryId !== undefined || presetCategoryId !== undefined) {
       if (orgCategoryId) {
         const category = await prisma.orgCategory.findFirst({
           where: { id: orgCategoryId, orgId, isEnabled: true }
@@ -267,11 +286,24 @@ export const updateRecurringCharge: Handler = async (req, res) => {
         if (!category) {
           return res.status(404).json({
             success: false,
-            error: 'Category not found or not enabled'
+            error: 'Organization category not found or not enabled'
           });
         }
+        updateData.orgCategoryId = orgCategoryId;
+      } else if (presetCategoryId) {
+        const preset = await prisma.presetCategory.findFirst({
+          where: { id: presetCategoryId, isActive: true }
+        });
+        
+        if (!preset) {
+          return res.status(404).json({
+            success: false,
+            error: 'Preset category not found or not active'
+          });
+        }
+        // For recurring charges with preset category, store null
+        updateData.orgCategoryId = null;
       }
-      updateData.orgCategoryId = orgCategoryId;
     }
     
     if (dayOfMonth !== undefined) {

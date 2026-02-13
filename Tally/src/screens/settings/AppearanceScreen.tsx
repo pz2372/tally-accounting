@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 interface AppearanceScreenProps {
   onBack: () => void;
@@ -14,9 +15,11 @@ export default function AppearanceScreen({ onBack }: AppearanceScreenProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<'light' | 'dark' | 'auto'>('light');
 
+  const swipeHandlers = useSwipeBack(onBack);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -112,7 +115,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.textPrimary,
     textAlign: 'center',

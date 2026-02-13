@@ -12,8 +12,13 @@ import LanguageScreen from './settings/LanguageScreen';
 import ContactSupportScreen from './settings/ContactSupportScreen';
 import RateAppScreen from './settings/RateAppScreen';
 import CategoriesScreen from './settings/CategoriesScreen';
+import ExportDataScreen from './settings/ExportDataScreen';
+import RolesScreen from './settings/rolesScreen';
+import PrivacyPolicyScreen from './settings/PrivacyPolicyScreen';
+import TermsConditionsScreen from './settings/TermsConditionsScreen';
 import { Image } from 'react-native';
 import { logout } from '../services/authService';
+import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -23,7 +28,7 @@ interface SettingsScreenProps {
     name?: string;
     email?: string;
     phoneNumber?: string;
-    organizations?: Array<{ id: string; name: string }>;
+    organizations?: Array<{ id: string; name: string; role?: string }>;
   } | null;
 }
 
@@ -31,6 +36,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
   const { t } = useContext(LanguageContext);
   const [activeSubScreen, setActiveSubScreen] = useState<string | null>(null);
   const subScreenSlideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  const isEmployee = currentUser?.organizations?.[0]?.role === 'EMPLOYEE';
   
   const handleLogout = async () => {
     await logout();
@@ -78,11 +84,23 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
       case 'categories':
         SubScreenComponent = <CategoriesScreen onBack={handleSubScreenBack} />;
         break;
+      case 'export':
+        SubScreenComponent = <ExportDataScreen onBack={handleSubScreenBack} />;
+        break;
+      case 'roles':
+        SubScreenComponent = <RolesScreen onBack={handleSubScreenBack} />;
+        break;
       case 'contact':
         SubScreenComponent = <ContactSupportScreen onBack={handleSubScreenBack} />;
         break;
       case 'rate':
         SubScreenComponent = <RateAppScreen onBack={handleSubScreenBack} />;
+        break;
+      case 'privacy':
+        SubScreenComponent = <PrivacyPolicyScreen onBack={handleSubScreenBack} />;
+        break;
+      case 'terms':
+        SubScreenComponent = <TermsConditionsScreen onBack={handleSubScreenBack} />;
         break;
       default:
         return null;
@@ -95,10 +113,12 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
     );
   };
 
+  const swipeHandlers = useSwipeBack(onBack);
+
   return (
     <>
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -125,7 +145,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            {hasOrganization && (
+            {hasOrganization && !isEmployee && (
               <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('business')}>
                 <View style={styles.settingLeft}>
                   <View style={[styles.iconContainer, { backgroundColor: colors.primaryLight }]}>
@@ -152,7 +172,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            {hasOrganization && (
+            {hasOrganization && !isEmployee && (
               <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('categories')}>
                 <View style={styles.settingLeft}>
                   <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
@@ -164,8 +184,20 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               </TouchableOpacity>
             )}
 
-            {hasOrganization && (
-              <TouchableOpacity style={styles.settingItem}>
+            {hasOrganization && !isEmployee && (
+              <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('roles')}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: '#DBEAFE' }]}>
+                    <Ionicons name="people-outline" size={22} color={colors.primary} />
+                  </View>
+                  <Text style={styles.settingLabel}>{t('settings.roles')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+
+            {hasOrganization && !isEmployee && (
+              <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('export')}>
                 <View style={styles.settingLeft}>
                   <View style={[styles.iconContainer, { backgroundColor: '#DBEAFE' }]}>
                     <Ionicons name="download-outline" size={22} color={colors.primary} />
@@ -206,7 +238,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('settings.legal')}</Text>
             
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('privacy')}>
               <View style={styles.settingLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: '#F3F4F6' }]}>
                   <Ionicons name="shield-checkmark-outline" size={22} color={colors.textPrimary} />
@@ -216,7 +248,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingItem}>
+            <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('terms')}>
               <View style={styles.settingLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: '#F3F4F6' }]}>
                   <Ionicons name="document-text-outline" size={22} color={colors.textPrimary} />
@@ -263,21 +295,20 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
   },
   backButton: {
     padding: spacing.xs,
-    marginTop: 2,
   },
   headerContent: {
     flex: 1,
     paddingHorizontal: spacing.md,
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.textPrimary,
     textAlign: 'center',

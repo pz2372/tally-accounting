@@ -1,9 +1,16 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useContext, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { getCachedData, CACHE_KEYS } from '../services/cacheService';
+import { getAccessToken, refreshAccessToken } from '../services/authService';
+import { useSwipeBack } from '../hooks/useSwipeBack';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface StatementsScreenProps {
   onBack: () => void;
@@ -18,13 +25,16 @@ interface Statement {
   totalTransactions: number;
   matchedTransactions: number;
   totalAmount: number;
-  fileType: 'pdf' | 'csv' | 'qfx';
+  type: 'statement' | 'sales';
   status: 'processed' | 'processing' | 'error';
 }
 
 export default function StatementsScreen({ onBack, onNavigate }: StatementsScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [statements, setStatements] = useState<Statement[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'statement' | 'sales'>('all');
   
   // Check if selected month is current month or later
   const isCurrentOrFutureMonth = () => {
@@ -34,63 +44,233 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
             selectedMonth.getMonth() >= now.getMonth());
   };
 
-  const statements: Statement[] = [
-    {
-      id: 1,
-      name: 'January 2026 Statement',
-      period: 'Jan 1 - Jan 31, 2026',
-      uploadDate: 'Feb 1, 2026',
-      totalTransactions: 92,
-      matchedTransactions: 83,
-      totalAmount: 12450.00,
-      fileType: 'pdf',
-      status: 'processed',
-    },
-    {
-      id: 2,
-      name: 'December 2025 Statement',
-      period: 'Dec 1 - Dec 31, 2025',
-      uploadDate: 'Jan 5, 2026',
-      totalTransactions: 85,
-      matchedTransactions: 78,
-      totalAmount: 11230.50,
-      fileType: 'csv',
-      status: 'processed',
-    },
-    {
-      id: 3,
-      name: 'November 2025 Statement',
-      period: 'Nov 1 - Nov 30, 2025',
-      uploadDate: 'Dec 3, 2025',
-      totalTransactions: 73,
-      matchedTransactions: 68,
-      totalAmount: 9845.75,
-      fileType: 'pdf',
-      status: 'processed',
-    },
-    {
-      id: 4,
-      name: 'October 2025 Statement',
-      period: 'Oct 1 - Oct 31, 2025',
-      uploadDate: 'Nov 2, 2025',
-      totalTransactions: 81,
-      matchedTransactions: 75,
-      totalAmount: 10567.25,
-      fileType: 'qfx',
-      status: 'processed',
-    },
-  ];
+  useEffect(() => {
+    loadStatements();
+  }, [selectedMonth]);
+
+  const loadStatements = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get user data which contains organizations
+      const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+      if (!userDataStr) {
+        console.log('No user data found');
+        setStatements([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      const userData = JSON.parse(userDataStr);
+      const firstOrgId = userData?.organizations?.[0]?.id;
+      
+      if (!firstOrgId) {
+        console.log('No organization ID found');
+        setStatements([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Format month for query (YYYY-MM)
+      const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
+      const cacheKey = `${CACHE_KEYS.ORG_STATEMENTS}${firstOrgId}_${monthKey}`;
+
+      // Try to load from cache first
+      const cachedStatements = await getCachedData(cacheKey);
+      
+      if (cachedStatements && Array.isArray(cachedStatements) && cachedStatements.length > 0) {
+        console.log('Loading statements from cache');
+        setStatements(cachedStatements);
+        setIsLoading(false);
+        return;
+      }
+
+      // If not in cache, fetch from server
+      console.log('Fetching statements from server');
+      
+      const token = await getAccessToken();
+      if (!token) {
+        console.log('No auth token available');
+        setStatements([]);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const [statementsResponse, salesResponse] = await Promise.all([
+          axios.get(
+            `${API_URL}/api/statements`,
+            {
+              params: { statementMonth: monthKey },
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'X-Org-Id': firstOrgId
+              }
+            }
+          ),
+          axios.get(
+            `${API_URL}/api/sales-reports`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'X-Org-Id': firstOrgId
+              }
+            }
+          )
+        ]);
+
+        const transformedDocuments: Statement[] = [];
+
+        // Transform statements
+        if (statementsResponse.data.success && statementsResponse.data.statements) {
+          const transformedStatements: Statement[] = statementsResponse.data.statements.map((stmt: any) => ({
+            id: stmt.id,
+            name: stmt.provider || 'Bank Statement',
+            period: stmt.statementMonth || '',
+            uploadDate: new Date(stmt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            totalTransactions: stmt._count?.transactions || 0,
+            matchedTransactions: 0,
+            totalAmount: 0,
+            type: 'statement' as const,
+            status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing'
+          }));
+          transformedDocuments.push(...transformedStatements);
+        }
+
+        // Transform sales reports
+        if (salesResponse.data.success && salesResponse.data.reports) {
+          const transformedSales: Statement[] = salesResponse.data.reports
+            .filter((report: any) => {
+              const reportDate = new Date(report.businessDate);
+              return reportDate.getFullYear() === selectedMonth.getFullYear() && 
+                     reportDate.getMonth() === selectedMonth.getMonth();
+            })
+            .map((report: any) => ({
+              id: report.id,
+              name: 'Daily Sales Report',
+              period: new Date(report.businessDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              uploadDate: new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              totalTransactions: 0,
+              matchedTransactions: 0,
+              totalAmount: report.netSales || 0,
+              type: 'sales' as const,
+              status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing'
+            }));
+          transformedDocuments.push(...transformedSales);
+        }
+
+        // Sort by upload date (most recent first)
+        transformedDocuments.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+
+        // Save to cache
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(transformedDocuments));
+        
+        setStatements(transformedDocuments);
+      } catch (apiError: any) {
+        // If 401, try refreshing token and retry once
+        if (apiError.response?.status === 401) {
+          console.log('Token expired, refreshing and retrying...');
+          const newToken = await refreshAccessToken();
+          
+          if (newToken) {
+            const [retryStatementsResponse, retrySalesResponse] = await Promise.all([
+              axios.get(
+                `${API_URL}/api/statements`,
+                {
+                  params: { statementMonth: monthKey },
+                  headers: {
+                    'Authorization': `Bearer ${newToken}`,
+                    'X-Org-Id': firstOrgId
+                  }
+                }
+              ),
+              axios.get(
+                `${API_URL}/api/sales-reports`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${newToken}`,
+                    'X-Org-Id': firstOrgId
+                  }
+                }
+              )
+            ]);
+
+            const transformedDocuments: Statement[] = [];
+
+            if (retryStatementsResponse.data.success && retryStatementsResponse.data.statements) {
+              const transformedStatements: Statement[] = retryStatementsResponse.data.statements.map((stmt: any) => ({
+                id: stmt.id,
+                name: stmt.provider || 'Bank Statement',
+                period: stmt.statementMonth || '',
+                uploadDate: new Date(stmt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                totalTransactions: stmt._count?.transactions || 0,
+                matchedTransactions: 0,
+                totalAmount: 0,
+                type: 'statement' as const,
+                status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing'
+              }));
+              transformedDocuments.push(...transformedStatements);
+            }
+
+            if (retrySalesResponse.data.success && retrySalesResponse.data.reports) {
+              const transformedSales: Statement[] = retrySalesResponse.data.reports
+                .filter((report: any) => {
+                  const reportDate = new Date(report.businessDate);
+                  return reportDate.getFullYear() === selectedMonth.getFullYear() && 
+                         reportDate.getMonth() === selectedMonth.getMonth();
+                })
+                .map((report: any) => ({
+                  id: report.id,
+                  name: 'Daily Sales Report',
+                  period: new Date(report.businessDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                  uploadDate: new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                  totalTransactions: 0,
+                  matchedTransactions: 0,
+                  totalAmount: report.netSales || 0,
+                  type: 'sales' as const,
+                  status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing'
+                }));
+              transformedDocuments.push(...transformedSales);
+            }
+
+            transformedDocuments.sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(transformedDocuments));
+            setStatements(transformedDocuments);
+          } else {
+            throw apiError;
+          }
+        } else {
+          throw apiError;
+        }
+      }
+    } catch (error: any) {
+      console.error('Error loading statements:', error);
+      // If there's an error fetching, still show cached data if available
+      const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        const firstOrgId = userData?.organizations?.[0]?.id;
+        if (firstOrgId) {
+          const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
+          const cacheKey = `${CACHE_KEYS.ORG_STATEMENTS}${firstOrgId}_${monthKey}`;
+          const cachedStatements = await getCachedData(cacheKey);
+          setStatements(cachedStatements || []);
+        }
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filters = ['All', 'PDF', 'CSV', 'QFX'];
 
-  const getFileIcon = (fileType: Statement['fileType']) => {
-    switch (fileType) {
-      case 'pdf':
+  const getFileIcon = (type: Statement['type']) => {
+    switch (type) {
+      case 'statement':
         return 'document-text';
-      case 'csv':
-        return 'grid';
-      case 'qfx':
-        return 'code-working';
+      case 'sales':
+        return 'cash';
       default:
         return 'document';
     }
@@ -121,10 +301,17 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
         return 'Unknown';
     }
   };
+  // Filter statements based on selected type
+  const filteredStatements = statements.filter(statement => {
+    if (selectedFilter === 'all') return true;
+    return statement.type === selectedFilter;
+  });
+
+  const swipeHandlers = useSwipeBack(onBack);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -168,20 +355,85 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
           </TouchableOpacity>
         </View>
 
+        {/* Filter Buttons */}
+        <View style={styles.filterContainer}>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              selectedFilter === 'all' && styles.filterButtonActive,
+            ]}
+            onPress={() => setSelectedFilter('all')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              selectedFilter === 'all' && styles.filterButtonTextActive,
+            ]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              selectedFilter === 'statement' && styles.filterButtonActive,
+            ]}
+            onPress={() => setSelectedFilter('statement')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              selectedFilter === 'statement' && styles.filterButtonTextActive,
+            ]}>
+              Statements
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              selectedFilter === 'sales' && styles.filterButtonActive,
+            ]}
+            onPress={() => setSelectedFilter('sales')}
+          >
+            <Text style={[
+              styles.filterButtonText,
+              selectedFilter === 'sales' && styles.filterButtonTextActive,
+            ]}>
+              Sales
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Statements Grid */}
-          <View style={styles.statementsGrid}>
-            {statements.map((statement) => (
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading statements...</Text>
+            </View>
+          ) : statements.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="document-outline" size={64} color={colors.textTertiary} />
+              <Text style={styles.emptyText}>No statements found</Text>
+              <Text style={styles.emptySubtext}>Upload a statement to get started</Text>
+            </View>
+          ) : filteredStatements.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="document-text-outline" size={64} color={colors.textSecondary} />
+              <Text style={styles.emptyText}>No {selectedFilter === 'all' ? 'documents' : selectedFilter === 'statement' ? 'statements' : 'sales reports'} found</Text>
+              <Text style={styles.emptySubtext}>Try selecting a different filter or month.</Text>
+            </View>
+          ) : (
+            <View style={styles.statementsGrid}>
+              {filteredStatements.map((statement) => (
               <TouchableOpacity key={statement.id} style={styles.statementCard}>
                 {/* Statement Image/Preview */}
                 <View style={styles.statementImageContainer}>
                   <Ionicons 
-                    name={getFileIcon(statement.fileType) as any} 
+                    name={getFileIcon(statement.type) as any} 
                     size={48} 
                     color={colors.primary} 
                   />
                   <View style={styles.fileTypeBadge}>
-                    <Text style={styles.fileTypeText}>{statement.fileType.toUpperCase()}</Text>
+                    <Text style={styles.fileTypeText}>{statement.type === 'statement' ? 'STATEMENT' : 'SALES'}</Text>
                   </View>
                 </View>
                 
@@ -193,8 +445,9 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
                   {statement.matchedTransactions}/{statement.totalTransactions} matched
                 </Text>
               </TouchableOpacity>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -263,6 +516,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
   },
+  filterContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  filterButtonTextActive: {
+    color: colors.surface,
+  },
   content: {
     flex: 1,
     paddingHorizontal: spacing.xl,
@@ -316,6 +597,36 @@ const styles = StyleSheet.create({
   },
   statementInfo: {
     fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxl * 2,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxl * 2,
+    paddingHorizontal: spacing.xl,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+  },
+  emptySubtext: {
+    fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
   },

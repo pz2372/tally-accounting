@@ -20,7 +20,7 @@ export const runMatching: Handler = async (req, res) => {
     }
     
     // Verify statement belongs to org
-    const statement = await prisma.cardStatement.findFirst({
+    const statement = await prisma.statement.findFirst({
       where: { id: statementId, orgId },
       include: {
         transactions: true
@@ -48,9 +48,6 @@ export const runMatching: Handler = async (req, res) => {
       where: {
         orgId,
         matches: { none: {} }
-      },
-      include: {
-        receipt: true
       }
     });
     
@@ -58,7 +55,7 @@ export const runMatching: Handler = async (req, res) => {
     
     // Simple matching algorithm - can be enhanced
     for (const transaction of statement.transactions) {
-      const txnDate = transaction.txnDate ?? transaction.postedDate;
+      const txnDate = transaction.transactionDate ?? transaction.postedDate;
       if (!txnDate) continue;
 
       for (const expense of expenses) {
@@ -80,7 +77,7 @@ export const runMatching: Handler = async (req, res) => {
         // Merchant similarity (basic)
         let merchantConfidence = 0.5;
         const txMerchant = (transaction.merchantNorm || transaction.merchantRaw || '').toLowerCase();
-        const expenseMerchant = (expense.merchant || expense.receipt?.merchant || '').toLowerCase();
+        const expenseMerchant = (expense.merchant || '').toLowerCase();
 
         if (txMerchant && expenseMerchant) {
           if (txMerchant === expenseMerchant) {
@@ -167,7 +164,6 @@ export const getAllMatches: Handler = async (req, res) => {
       include: {
         expense: {
           include: {
-            receipt: true,
             orgCategory: {
               include: {
                 preset: true

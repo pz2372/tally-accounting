@@ -31,6 +31,7 @@ const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextF
       const decodedId = decoded?.id as string | undefined;
 
       if (!decodedId) {
+        console.error('JWT verification failed: no id in payload');
         return res.status(401).json({
           success: false,
           error: 'Invalid token payload'
@@ -50,6 +51,7 @@ const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextF
       }) as UserWithMemberships | null;
 
       if (!dbUser) {
+        console.error('JWT verification failed: user not found', decodedId);
         return res.status(401).json({
           success: false,
           error: 'User not found'
@@ -85,6 +87,7 @@ const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextF
       next();
     } catch (jwtError) {
       // If JWT verification fails, try Firebase token (backward compatibility)
+      console.log('JWT verification failed, trying Firebase token. JWT Error:', jwtError.message);
       try {
         const decodedToken = await getAuth().verifyIdToken(token) as DecodedIdToken;
 

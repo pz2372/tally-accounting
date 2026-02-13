@@ -33,9 +33,47 @@ export const storeUser = async (user: unknown) => {
 // Get stored access token
 export const getAccessToken = async (): Promise<string | null> => {
   try {
-    return await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+    const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+    
+    // If no token, try to refresh using Firebase
+    if (!token) {
+      console.log('No access token found, attempting Firebase token refresh');
+      const refreshed = await refreshAccessToken();
+      return refreshed;
+    }
+    
+    return token;
   } catch (error) {
     console.error('Error getting access token:', error);
+    return null;
+  }
+};
+
+// Refresh access token using Firebase ID token
+export const refreshAccessToken = async (): Promise<string | null> => {
+  try {
+    // Get fresh Firebase ID token
+    const { token: firebaseToken, error: tokenError } = await getIdToken();
+    
+    if (tokenError || !firebaseToken) {
+      console.error('Failed to get Firebase token for refresh:', tokenError);
+      return null;
+    }
+
+    // Exchange for new access token
+    const { accessToken, refreshToken, error: serverError } = await exchangeFirebaseToken(firebaseToken);
+    
+    if (serverError || !accessToken) {
+      console.error('Failed to refresh access token:', serverError);
+      return null;
+    }
+
+    // Store new tokens
+    await storeTokens(accessToken, refreshToken);
+    
+    return accessToken;
+  } catch (error) {
+    console.error('Error refreshing access token:', error);
     return null;
   }
 };

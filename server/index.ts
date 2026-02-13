@@ -15,11 +15,12 @@ import expenseRoutes from './src/routes/expenseRoutes';
 import categoryRoutes from './src/routes/categoryRoutes';
 import authRoutes from './src/routes/authRoutes';
 import organizationRoutes from './src/routes/organizationRoutes';
-import receiptRoutes from './src/routes/receiptRoutes';
 import statementRoutes from './src/routes/statementRoutes';
 import matchRoutes from './src/routes/matchRoutes';
 import salesReportRoutes from './src/routes/salesReportRoutes';
 import recurringChargeRoutes from './src/routes/recurringChargeRoutes';
+import uploadRoutes from './src/routes/uploadRoutes';
+import supportRoutes from './src/routes/supportRoutes';
 
 // Middleware
 app.use(cors());
@@ -29,14 +30,15 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/', mainRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/upload', uploadRoutes);
 app.use('/api/statements', statementRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/sales-reports', salesReportRoutes);
 app.use('/api/recurring-charges', recurringChargeRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/expenses', expenseRoutes);
-app.use('/api/receipts', receiptRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/support', supportRoutes);
 
 // Error handling middleware
 app.use((err: Error, req, res, next) => {

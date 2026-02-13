@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 interface RateAppScreenProps {
   onBack: () => void;
@@ -54,9 +55,11 @@ export default function RateAppScreen({ onBack }: RateAppScreenProps) {
     }
   };
 
+  const swipeHandlers = useSwipeBack(onBack);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -102,22 +105,6 @@ export default function RateAppScreen({ onBack }: RateAppScreenProps) {
               </Text>
             )}
           </View>
-
-          {/* Benefits */}
-          <View style={styles.benefits}>
-            <View style={styles.benefitItem}>
-              <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-              <Text style={styles.benefitText}>{t('rateApp.helpGrow')}</Text>
-            </View>
-            <View style={styles.benefitItem}>
-              <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-              <Text style={styles.benefitText}>{t('rateApp.shareExperience')}</Text>
-            </View>
-            <View style={styles.benefitItem}>
-              <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-              <Text style={styles.benefitText}>{t('rateApp.supportDevelopment')}</Text>
-            </View>
-          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -149,7 +136,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.textPrimary,
     textAlign: 'center',
@@ -169,7 +156,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#FEE2E2',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.xl,

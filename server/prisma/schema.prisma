@@ -81,6 +81,12 @@ enum RecurringChargeStatus {
   CANCELED
 }
 
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  CASH
+}
+
 model User {
   id              String   @id @default(cuid())
   firebaseUid     String?  @unique
@@ -93,8 +99,9 @@ model User {
 
   memberships OrgUser[]
   ownedOrganizations Organization[]
-  uploadedStatements CardStatement[] @relation("StatementsUploadedBy")
-  uploadedSalesReports DailySalesReport[]
+  uploadedStatements Statement[] @relation("StatementsUploadedBy")
+  uploadedSalesReports SalesReport[]
+  supportTickets SupportTicket[]
 }
 
 model Organization {
@@ -113,13 +120,13 @@ model Organization {
   // Categories enabled for this org (from the preset list)
   orgCategories OrgCategory[]
 
-  receipts    Receipt[]
   expenses    Expense[]
-  statements  CardStatement[]
-  salesReports DailySalesReport[]
+  statements  Statement[]
+  salesReports SalesReport[]
   matches     ReceiptMatch[]
   recurringCharges RecurringCharge[]
   recurringChargeInstances RecurringChargeInstance[]
+  supportTickets SupportTicket[]
 
   @@index([billingOwnerId])
 }
@@ -210,38 +217,19 @@ model OrgCategory {
   @@index([orgId, visibleToEmployees])
 }
 
-model Receipt {
-  id          String   @id @default(cuid())
-  orgId       String
-
-  imageUrl    String?
-  imageHash   String?
-  ocrText     String?
-
-  merchant    String?
-  totalCents  Int?
-  currency    String   @default("USD")
-  receiptDate DateTime?
-  confidence  Float?
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  org         Organization @relation(fields: [orgId], references: [id])
-  expense     Expense?
-
-  @@index([orgId, createdAt])
-  @@index([orgId, merchant])
-}
-
 model Expense {
   id          String   @id @default(cuid())
   orgId       String
-  receiptId   String?  @unique
+
+  // Receipt/scan data (stored directly on expense)
+  receiptUrl  String?
+  ocrText     String?
+  confidence  Float?
 
   merchant    String?
   amountCents Int
   currency    String   @default("USD")
+  paymentMethod PaymentMethod @default(CREDIT_CARD)
 
   orgCategoryId String?
   orgCategory   OrgCategory? @relation(fields: [orgCategoryId], references: [id])
@@ -262,7 +250,6 @@ model Expense {
   updatedAt   DateTime @updatedAt
 
   org         Organization @relation(fields: [orgId], references: [id])
-  receipt     Receipt?     @relation(fields: [receiptId], references: [id])
 
   matches     ReceiptMatch[]
 
@@ -271,7 +258,7 @@ model Expense {
   @@index([orgId, orgCategoryId])
 }
 
-model CardStatement {
+model Statement {
   id             String   @id @default(cuid())
   orgId          String
 
@@ -286,29 +273,29 @@ model CardStatement {
   updatedAt      DateTime @updatedAt
 
   org            Organization @relation(fields: [orgId], references: [id])
-  transactions   CardTransaction[]
+  transactions   StatementTransaction[]
 
   @@index([orgId, createdAt])
   @@index([uploadedById])
 }
 
-model CardTransaction {
-  id           String   @id @default(cuid())
-  statementId  String
+model StatementTransaction {
+  id              String   @id @default(cuid())
+  statementId     String
 
-  postedDate   DateTime
-  txnDate      DateTime?
-  merchantRaw  String
-  merchantNorm String?
-  amountCents  Int
-  currency     String    @default("USD")
-  last4        String?
+  postedDate      DateTime
+  transactionDate DateTime?
+  merchantRaw     String
+  merchantNorm    String?
+  amountCents     Int
+  currency        String    @default("USD")
+  last4           String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  statement    CardStatement @relation(fields: [statementId], references: [id])
-  matches      ReceiptMatch[]
+  statement       Statement @relation(fields: [statementId], references: [id])
+  matches         ReceiptMatch[]
 
   @@index([statementId, postedDate])
   @@index([statementId, amountCents])
@@ -328,14 +315,14 @@ model ReceiptMatch {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  org         Organization    @relation(fields: [orgId], references: [id])
-  expense     Expense         @relation(fields: [expenseId], references: [id])
-  cardTxn     CardTransaction @relation(fields: [cardTxnId], references: [id])
+  org         Organization         @relation(fields: [orgId], references: [id])
+  expense     Expense              @relation(fields: [expenseId], references: [id])
+  cardTxn     StatementTransaction @relation(fields: [cardTxnId], references: [id])
 
   @@unique([expenseId, cardTxnId])
 }
 
-model DailySalesReport {
+model SalesReport {
   id            String            @id @default(cuid())
   orgId         String
   businessDate  DateTime          // the sales day (normalize to midnight in org timezone)
@@ -429,4 +416,28 @@ model RecurringChargeInstance {
   // Prevent double-creation for same charge + month/date
   @@unique([recurringChargeId, runDate])
   @@index([orgId, runDate])
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id        String              @id @default(cuid())
+  subject   String
+  message   String
+  status    SupportTicketStatus @default(OPEN)
+  userId    String
+  orgId     String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  user User          @relation(fields: [userId], references: [id])
+  org  Organization? @relation(fields: [orgId], references: [id])
+
+  @@index([userId])
+  @@index([orgId])
 }

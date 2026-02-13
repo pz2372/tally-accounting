@@ -3,8 +3,9 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, borderRadius } from '../styles/theme';
-import { LanguageContext } from '../contexts/LanguageContext';
+import { colors, spacing, borderRadius } from '../../styles/theme';
+import { LanguageContext } from '../../contexts/LanguageContext';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 const ORG_MEMBERS_KEY = '@org_members';
 
@@ -157,9 +158,11 @@ export default function RolesScreen({ onBack }: RolesScreenProps) {
     handleCloseAdd();
   };
 
+  const swipeHandlers = useSwipeBack(onBack);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
@@ -412,7 +415,7 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
+    marginTop: '50%',
   },
   memberList: {
     gap: spacing.md,

@@ -4,24 +4,43 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface SalesReportScreenProps {
   onBack: () => void;
 }
 
-interface SalesReport {
-  id: number;
-  date: string;
-  day: number;
-  totalSales: number;
-  totalOrders: number;
-  averageOrderValue: number;
-  status: 'completed' | 'processing' | 'pending';
+interface ExpenseCategory {
+  name: string;
+  amount: number;
+}
+
+interface MonthlyReport {
+  month: string; // "2026-02"
+  netSales: number;
+  grossSales: number;
+  cash: number;
+  tips: number;
+  tax: number;
+  discounts: number;
+  refunds: number;
+  expenses: number;
+  expenseCategories: ExpenseCategory[];
 }
 
 export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
-  const { t } = useContext(LanguageContext);
+  const { t, language } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [expensesExpanded, setExpensesExpanded] = useState(false);
+  
+  // Map language to locale for date formatting
+  const getLocale = () => {
+    switch (language) {
+      case 'es': return 'es-ES';
+      case 'zh': return 'zh-CN';
+      default: return 'en-US';
+    }
+  };
   
   // Check if selected month is current month or later
   const isCurrentOrFutureMonth = () => {
@@ -31,92 +50,78 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
             selectedMonth.getMonth() >= now.getMonth());
   };
 
-  const salesReports: SalesReport[] = [
-    {
-      id: 1,
-      date: 'Feb 1, 2026',
-      day: 1,
-      totalSales: 1245.50,
-      totalOrders: 23,
-      averageOrderValue: 54.15,
-      status: 'completed',
+  // Mock data for different months
+  const monthlyReports: { [key: string]: MonthlyReport } = {
+    '2026-02': {
+      month: '2026-02',
+      grossSales: 45000.00,
+      netSales: 37245.50,
+      cash: 13500.00,
+      tips: 3756.50,
+      tax: 3375.00,
+      discounts: 2250.00,
+      refunds: 1500.00,
+      expenses: 9810.00,
+      expenseCategories: [
+        { name: t('salesReport.labor'), amount: 4200.00 },
+        { name: t('salesReport.rent'), amount: 2500.00 },
+        { name: t('salesReport.supplies'), amount: 1800.00 },
+        { name: t('salesReport.utilities'), amount: 810.00 },
+        { name: t('salesReport.other'), amount: 500.00 },
+      ],
     },
-    {
-      id: 2,
-      date: 'Jan 31, 2026',
-      day: 31,
-      totalSales: 1567.80,
-      totalOrders: 31,
-      averageOrderValue: 50.57,
-      status: 'completed',
+    '2026-01': {
+      month: '2026-01',
+      grossSales: 52000.00,
+      netSales: 43567.80,
+      cash: 18620.00,
+      tips: 4256.20,
+      tax: 3900.00,
+      discounts: 2700.00,
+      refunds: 1200.00,
+      expenses: 12345.00,
+      expenseCategories: [
+        { name: t('salesReport.labor'), amount: 5200.00 },
+        { name: t('salesReport.rent'), amount: 2500.00 },
+        { name: t('salesReport.supplies'), amount: 2400.00 },
+        { name: t('salesReport.utilities'), amount: 1245.00 },
+        { name: t('salesReport.other'), amount: 1000.00 },
+      ],
     },
-    {
-      id: 3,
-      date: 'Jan 30, 2026',
-      day: 30,
-      totalSales: 987.25,
-      totalOrders: 18,
-      averageOrderValue: 54.85,
-      status: 'completed',
+    '2025-12': {
+      month: '2025-12',
+      grossSales: 48000.00,
+      netSales: 39987.25,
+      cash: 16340.00,
+      tips: 3987.25,
+      tax: 3600.00,
+      discounts: 2400.00,
+      refunds: 900.00,
+      expenses: 11234.00,
+      expenseCategories: [
+        { name: t('salesReport.labor'), amount: 4800.00 },
+        { name: t('salesReport.rent'), amount: 2500.00 },
+        { name: t('salesReport.supplies'), amount: 2100.00 },
+        { name: t('salesReport.utilities'), amount: 1034.00 },
+        { name: t('salesReport.other'), amount: 800.00 },
+      ],
     },
-    {
-      id: 4,
-      date: 'Jan 29, 2026',
-      day: 29,
-      totalSales: 2134.90,
-      totalOrders: 42,
-      averageOrderValue: 50.83,
-      status: 'completed',
-    },
-    {
-      id: 5,
-      date: 'Jan 28, 2026',
-      day: 28,
-      totalSales: 1456.75,
-      totalOrders: 27,
-      averageOrderValue: 53.95,
-      status: 'completed',
-    },
-    {
-      id: 6,
-      date: 'Jan 27, 2026',
-      day: 27,
-      totalSales: 1789.40,
-      totalOrders: 35,
-      averageOrderValue: 51.13,
-      status: 'completed',
-    },
-  ];
-
-  const getStatusColor = (status: SalesReport['status']) => {
-    switch (status) {
-      case 'completed':
-        return colors.primary;
-      case 'processing':
-        return colors.orange;
-      case 'pending':
-        return colors.textTertiary;
-      default:
-        return colors.textSecondary;
-    }
   };
 
-  const getStatusText = (status: SalesReport['status']) => {
-    switch (status) {
-      case 'completed':
-        return 'Completed';
-      case 'processing':
-        return 'Processing...';
-      case 'pending':
-        return 'Pending';
-      default:
-        return 'Unknown';
-    }
+  // Get current month key
+  const getMonthKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
   };
+
+  const currentMonthData = monthlyReports[getMonthKey(selectedMonth)];
+
+  const swipeHandlers = useSwipeBack(onBack);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -141,7 +146,7 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
           
           <View style={styles.monthInfo}>
             <Text style={styles.monthText}>
-              {selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {selectedMonth.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' })}
             </Text>
           </View>
           
@@ -159,29 +164,139 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Sales Reports Grid */}
-          <View style={styles.reportsGrid}>
-            {salesReports.map((report) => (
-              <TouchableOpacity key={report.id} style={styles.reportCard}>
-                {/* Report Icon */}
-                <View style={styles.reportImageContainer}>
-                  <Ionicons 
-                    name="stats-chart" 
-                    size={48} 
-                    color={colors.primary} 
-                  />
+          {currentMonthData ? (
+            <View style={styles.monthlyReport}>
+              {/* Net Profit Card */}
+              <View style={styles.netProfitCard}>
+                <View style={styles.netProfitContent}>
+                  <Text style={styles.netProfitLabel}>{t('salesReport.netProfit')}</Text>
+                  <Text style={styles.netProfitValue}>
+                    ${(currentMonthData.netSales - currentMonthData.expenses).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </Text>
+                  <Text style={styles.netProfitPercentage}>
+                    {(((currentMonthData.netSales - currentMonthData.expenses) / currentMonthData.netSales) * 100).toFixed(1)}%
+                  </Text>
                 </View>
-                
-                {/* Report Date */}
-                <Text style={styles.reportDate}>{report.date}</Text>
-                
-                {/* Sales Info */}
-                <Text style={styles.reportSales}>
-                  ${report.totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+              </View>
+
+              {/* Section 1: Gross & Net Sales */}
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionContent}>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.grossSales')}</Text>
+                    <Text style={styles.sectionValue}>
+                      ${currentMonthData.grossSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.netSales')}</Text>
+                    <Text style={[styles.sectionValue]}>
+                      ${currentMonthData.netSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Section 2: Expenses with Expandable Categories */}
+              <View style={styles.sectionCard}>
+                <TouchableOpacity
+                  style={styles.expensesHeader}
+                  onPress={() => setExpensesExpanded(!expensesExpanded)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.expensesHeaderLeft}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.expenses')}</Text>
+                  </View>
+                  <View style={styles.expensesHeaderRight}>
+                    <Text style={styles.sectionValue}>
+                      ${currentMonthData.expenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                    <Ionicons
+                      name={expensesExpanded ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color={colors.textSecondary}
+                      style={styles.chevronIcon}
+                    />
+                  </View>
+                </TouchableOpacity>
+                {expensesExpanded && (
+                  <View style={styles.categoryBreakdown}>
+                    {currentMonthData.expenseCategories.map((category, index) => {
+                      const percentage = (category.amount / currentMonthData.netSales) * 100;
+                      return (
+                        <View key={index}>
+                          <View style={styles.categoryRow}>
+                            <Text style={styles.categoryName}>{category.name}</Text>
+                            <View style={styles.categoryRight}>
+                              <Text style={styles.categoryAmount}>
+                                ${category.amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                              </Text>
+                              <Text style={[styles.percentageText, styles.greenText]}>
+                                {percentage.toFixed(1)}%
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
+              {/* Section 3: Cash */}
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionContent}>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.cashRevenue')}</Text>
+                    <Text style={styles.sectionValue}>
+                      ${(currentMonthData.cash + currentMonthData.tips).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.cashAfterExpenses')}</Text>
+                    <Text style={styles.sectionValue}>
+                      ${((currentMonthData.cash + currentMonthData.tips) - currentMonthData.expenses).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Section 4: Other Financial Details */}
+              <View style={styles.sectionCard}>
+                <View style={styles.sectionContent}>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.tax')}</Text>
+                    <Text style={styles.sectionValue}>
+                      ${currentMonthData.tax.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.tips')}</Text>
+                    <Text style={styles.sectionValue}>
+                      ${currentMonthData.tips.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.refunds')}</Text>
+                    <Text style={styles.sectionValue}>
+                      ${currentMonthData.refunds.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.discounts')}</Text>
+                    <Text style={styles.sectionValue}>
+                      ${currentMonthData.discounts.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.noDataContainer}>
+              <Ionicons name="analytics-outline" size={64} color={colors.textTertiary} />
+              <Text style={styles.noDataText}>{t('salesReport.noData')}</Text>
+            </View>
+          )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -255,58 +370,137 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
   },
-  reportsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.lg,
+  monthlyReport: {
     paddingBottom: spacing.xl,
+    gap: spacing.md,
   },
-  reportCard: {
-    width: '47%',
+  netProfitCard: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
     alignItems: 'center',
   },
-  reportImageContainer: {
-    width: '100%',
-    aspectRatio: 1,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.lg,
+  netProfitContent: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-    position: 'relative',
   },
-  statusBadge: {
-    position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reportDate: {
+  netProfitLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '500',
     color: colors.textSecondary,
-    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: spacing.xs,
   },
-  reportSales: {
-    fontSize: 18,
+  netProfitValue: {
+    fontSize: 32,
     fontWeight: '700',
     color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: spacing.xs,
   },
-  reportOrders: {
-    fontSize: 12,
+  netProfitPercentage: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#31cc5f',
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+  },
+  expensesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  expensesHeaderLeft: {
+    flex: 1,
+  },
+  sectionContent: {
+    gap: spacing.xs,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 2,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
     color: colors.textSecondary,
-    textAlign: 'center',
+  },
+  sectionValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  expensesHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  chevronIcon: {
+    marginLeft: spacing.xs,
+  },
+  categoryBreakdown: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  categoryDivider: {
+    height: 1,
+    backgroundColor: colors.borderLight,
+    marginVertical: spacing.xs,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  categoryName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  categoryRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  categoryAmount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  percentageText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textTertiary,
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  greenText: {
+    color: '#31cc5f',
+  },
+
+  noDataContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxl * 2,
+  },
+  noDataText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.textTertiary,
+    marginTop: spacing.lg,
   },
 });

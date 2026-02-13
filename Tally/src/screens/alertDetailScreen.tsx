@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import DocumentScanner from 'react-native-document-scanner-plugin';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 
@@ -34,18 +33,28 @@ export default function AlertDetailScreen({ alert, onBack, onResolve }: AlertDet
   const handleScan = async () => {
     setShowReceiptModal(false);
     
-    // Wait for modal to fully dismiss before opening scanner
+    // Wait for modal to fully dismiss before opening camera
     setTimeout(async () => {
       try {
-        const { scannedImages } = await DocumentScanner.scanDocument({
-          maxNumDocuments: 1,
+        // Request camera permissions
+        const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+        
+        if (permissionResult.granted === false) {
+          RNAlert.alert('Permission Required', 'Camera permission is required to take photos');
+          return;
+        }
+        
+        const result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: false,
+          quality: 0.8,
         });
 
-        if (scannedImages && scannedImages.length > 0) {
-          setSelectedReceipt(scannedImages[0]);
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setSelectedReceipt(result.assets[0].uri);
         }
       } catch (error) {
-        console.log('Scanner cancelled or error:', error);
+        console.log('Camera cancelled or error:', error);
       }
     }, 300);
   };

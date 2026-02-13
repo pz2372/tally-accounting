@@ -82,7 +82,6 @@ export const getOrganization: Handler = async (req, res) => {
         subscription: true,
         _count: {
           select: {
-            receipts: true,
             expenses: true,
             statements: true
           }

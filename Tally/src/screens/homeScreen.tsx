@@ -5,13 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { getOrgCachedData } from '../services/cacheService';
 import NewExpenseScreen from './newExpenseScreen';
 import UploadStatementScreen from './uploadStatementScreen';
 import NeedsAttentionScreen from './needsAttentionScreen';
 import StatementsScreen from './statementsScreen';
 import RecurringScreen from './recurringScreen';
 import SalesReportScreen from './salesReportScreen';
-import RolesScreen from './rolesScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -41,7 +41,7 @@ interface HomeScreenProps {
   currentUser?: {
     name?: string;
     email?: string;
-    organizations?: Array<{ id: string; name: string }>;
+    organizations?: Array<{ id: string; name: string; role?: string }>;
   } | null;
 }
 
@@ -55,7 +55,7 @@ export default function HomeScreen({
   const { t } = useContext(LanguageContext);
   const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
-  const [activeScreen, setActiveScreen] = useState<'home' | 'newExpense' | 'uploadStatement' | 'needsAttention' | 'statements' | 'recurring' | 'salesReport' | 'roles'>('home');
+  const [activeScreen, setActiveScreen] = useState<'home' | 'newExpense' | 'uploadStatement' | 'needsAttention' | 'statements' | 'recurring' | 'salesReport' | 'sales'>('home');
   const [metrics, setMetrics] = useState<HomeMetrics>(defaultMetrics);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
@@ -120,6 +120,32 @@ export default function HomeScreen({
           };
         }
 
+        // Compute totalSpent from cached expenses (same source as category screen)
+        if (selectedBusinessId) {
+          const orgData = await getOrgCachedData(selectedBusinessId);
+          if (orgData?.expenses && Array.isArray(orgData.expenses)) {
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            const orgCategories = orgData.categories;
+
+            const expenseTotal = orgData.expenses.reduce((sum: number, expense: any) => {
+              if (!expense.orgCategoryId || expense.deletedAt) return sum;
+              const expenseDate = new Date(expense.expenseDate);
+              if (expenseDate.getMonth() !== currentMonth || expenseDate.getFullYear() !== currentYear) {
+                return sum;
+              }
+              // Only count if expense belongs to a valid, enabled category
+              if (orgCategories && Array.isArray(orgCategories)) {
+                const orgCat = orgCategories.find((oc: any) => oc.id === expense.orgCategoryId);
+                if (!orgCat) return sum;
+              }
+              return sum + (expense.amountCents / 100);
+            }, 0);
+            nextMetrics.totalSpent = expenseTotal;
+          }
+        }
+
         if (isActive) {
           setMetrics(nextMetrics);
         }
@@ -137,6 +163,7 @@ export default function HomeScreen({
 
   const selectedBusiness = businesses.find((business) => business.id === selectedBusinessId);
   const businessName = selectedBusiness?.name || 'Organization';
+  const isEmployee = selectedBusiness?.role === 'EMPLOYEE';
   const totalSpent = metrics.totalSpent;
   const totalSales = metrics.totalSales;
   const netProfit = totalSales - totalSpent;
@@ -145,7 +172,7 @@ export default function HomeScreen({
   const capturedReceipts = metrics.capturedReceipts;
   const totalTransactions = metrics.totalTransactions;
   const unmatchedItems = metrics.unmatchedItems;
-  
+
   // Get locale from language context
   const getLocale = () => {
     switch (t('nav.home')) {
@@ -225,8 +252,8 @@ export default function HomeScreen({
       case 'salesReport':
         ScreenComponent = <SalesReportScreen onBack={handleBack} />;
         break;
-      case 'roles':
-        ScreenComponent = <RolesScreen onBack={handleBack} />;
+      case 'sales':
+        ScreenComponent = <SalesReportScreen onBack={handleBack} />;
         break;
       default:
         return null;
@@ -312,15 +339,11 @@ export default function HomeScreen({
 
             <View style={styles.overviewStatsGrid}>
               <View style={styles.overviewStatLeft}>
-                <Text style={styles.overviewStatLabel}>{t('home.netProfit')}</Text>
-                <Text style={styles.overviewStatValueLarge}>${netProfit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
+                <Text style={styles.overviewStatLabel}>{t('home.grossSales')}</Text>
+                <Text style={styles.overviewStatValueLarge}>${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
               </View>
               <View style={styles.overviewDivider} />
               <View style={styles.overviewStatRight}>
-                <View style={styles.overviewStatRightItem}>
-                  <Text style={styles.overviewStatLabel}>{t('home.grossSales')}</Text>
-                  <Text style={styles.overviewStatValue}>${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
-                </View>
                 <View style={styles.overviewStatRightItem}>
                   <Text style={styles.overviewStatLabel}>{capitalize(t('home.expenses'))}</Text>
                   <Text style={styles.overviewStatValue}>${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
@@ -328,6 +351,38 @@ export default function HomeScreen({
               </View>
             </View>
           </View>
+
+          {/* Quick Actions */}
+          {!isEmployee && (
+          <View style={styles.quickActions}>
+            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('statements')}>
+              <Ionicons name="document-text-outline" size={24} color={colors.textSecondary} />
+              <Text style={styles.actionLabel}>{t('home.statements')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('recurring')}>
+              <Ionicons name="repeat-outline" size={24} color={colors.textSecondary} />
+              <Text style={styles.actionLabel}>{t('home.recurring')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('sales')}>
+              <Ionicons name="trending-up-outline" size={24} color={colors.textSecondary} />
+              <Text style={styles.actionLabel}>{t('home.sales')}</Text>
+            </TouchableOpacity>
+          </View>
+          )}
+
+          {/* New Expense Button */}
+          <TouchableOpacity style={styles.newExpenseButton} onPress={() => setActiveScreen('newExpense')}>
+            <Ionicons name="add-circle" size={26} color={colors.primary} />
+            <Text style={styles.newExpenseText}>{t('home.newExpense')}</Text>
+          </TouchableOpacity>
+
+          {/* Upload Statement Button */}
+          <TouchableOpacity style={styles.uploadStatementButton} onPress={() => setActiveScreen('uploadStatement')}>
+            <Ionicons name="cloud-upload-outline" size={24} color={colors.primary} />
+            <Text style={styles.uploadStatementText}>{t('home.newStatement')}</Text>
+          </TouchableOpacity>
 
           {/* Receipt Tracking Card */}
           <View style={styles.trackingCard}>
@@ -349,39 +404,6 @@ export default function HomeScreen({
             </View>
           </View>
 
-          {/* New Expense Button */}
-          <TouchableOpacity style={styles.newExpenseButton} onPress={() => setActiveScreen('newExpense')}>
-            <Ionicons name="add-circle" size={26} color={colors.primary} />
-            <Text style={styles.newExpenseText}>{t('home.newExpense')}</Text>
-          </TouchableOpacity>
-
-          {/* Upload Statement Button */}
-          <TouchableOpacity style={styles.uploadStatementButton} onPress={() => setActiveScreen('uploadStatement')}>
-            <Ionicons name="cloud-upload-outline" size={24} color={colors.primary} />
-            <Text style={styles.uploadStatementText}>{t('home.newStatement')}</Text>
-          </TouchableOpacity>
-
-
-
-          {/* Needs Attention hidden until later version */}
-
-          {/* Quick Actions */}
-          <View style={styles.quickActions}>
-            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('statements')}>
-              <Ionicons name="document-text-outline" size={24} color={colors.textSecondary} />
-              <Text style={styles.actionLabel}>{t('home.statements')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('recurring')}>
-              <Ionicons name="repeat-outline" size={24} color={colors.textSecondary} />
-              <Text style={styles.actionLabel}>{t('home.recurring')}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionCard} onPress={() => setActiveScreen('roles')}>
-              <Ionicons name="people-outline" size={24} color={colors.textSecondary} />
-              <Text style={styles.actionLabel}>{t('home.roles')}</Text>
-            </TouchableOpacity>
-          </View>
         </ScrollView>
       </SafeAreaView>
       {renderOverlayScreen()}

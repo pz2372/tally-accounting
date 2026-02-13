@@ -1,9 +1,11 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
+import { createAuthenticatedAxios } from '../../services/authService';
 
 interface ContactSupportScreenProps {
   onBack: () => void;
@@ -13,20 +15,41 @@ export default function ContactSupportScreen({ onBack }: ContactSupportScreenPro
   const { t } = useContext(LanguageContext);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!subject || !message) {
       Alert.alert(t('contactSupport.missingInfo'), t('contactSupport.fillAllFields'));
       return;
     }
-    Alert.alert(t('contactSupport.messageSent'), t('contactSupport.responseTime'), [
-      { text: 'OK', onPress: onBack },
-    ]);
+
+    setIsSending(true);
+    try {
+      const api = await createAuthenticatedAxios();
+      await api.post('/api/support', {
+        subject: subject.trim(),
+        message: message.trim(),
+      });
+
+      Alert.alert(t('contactSupport.messageSent'), t('contactSupport.responseTime'), [
+        { text: 'OK', onPress: onBack },
+      ]);
+    } catch (error: any) {
+      console.warn('Failed to send support message:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.error || 'Failed to send message. Please try again.'
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
+
+  const swipeHandlers = useSwipeBack(onBack);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -47,14 +70,6 @@ export default function ContactSupportScreen({ onBack }: ContactSupportScreenPro
               </View>
               <Text style={styles.quickContactLabel}>{t('contactSupport.email')}</Text>
               <Text style={styles.quickContactValue}>support@acme.com</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.quickContactItem}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="chatbubble" size={24} color="#10B981" />
-              </View>
-              <Text style={styles.quickContactLabel}>{t('contactSupport.liveChat')}</Text>
-              <Text style={styles.quickContactValue}>{t('contactSupport.available')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -86,8 +101,16 @@ export default function ContactSupportScreen({ onBack }: ContactSupportScreenPro
               />
             </View>
 
-            <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.submitButtonText}>{t('contactSupport.submit')}</Text>
+            <TouchableOpacity 
+              style={[styles.submitButton, isSending && styles.submitButtonDisabled]} 
+              onPress={handleSubmit}
+              disabled={isSending}
+            >
+              {isSending ? (
+                <ActivityIndicator color={colors.surface} />
+              ) : (
+                <Text style={styles.submitButtonText}>{t('contactSupport.submit')}</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -121,7 +144,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.textPrimary,
     textAlign: 'center',
@@ -200,6 +223,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     alignItems: 'center',
     marginTop: spacing.md,
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
   },
   submitButtonText: {
     fontSize: 15,

@@ -1,10 +1,12 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
+import { createAuthenticatedAxios } from '../../services/authService';
 
 const BUSINESS_DETAILS_KEY = '@business_details';
 
@@ -22,6 +24,7 @@ export default function BusinessDetailsScreen({ onBack, currentUser }: BusinessD
   const [address, setAddress] = useState('');
   const [industry, setIndustry] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -61,14 +64,25 @@ export default function BusinessDetailsScreen({ onBack, currentUser }: BusinessD
   }, [currentUser]);
 
   const handleSaveChanges = async () => {
+    setIsSaving(true);
     try {
+      // Save org name to backend
+      const orgId = currentUser?.organizations?.[0]?.id;
+      if (orgId) {
+        const api = await createAuthenticatedAxios();
+        await api.put('/api/organizations', 
+          { name: businessName.trim() },
+          { headers: { 'x-org-id': orgId } }
+        );
+      }
+
+      // Cache all fields locally
       const businessData = {
         businessName: businessName.trim(),
         taxId: taxId.trim(),
         address: address.trim(),
         industry: industry.trim(),
       };
-      
       await AsyncStorage.setItem(BUSINESS_DETAILS_KEY, JSON.stringify(businessData));
       
       Alert.alert(
@@ -76,18 +90,22 @@ export default function BusinessDetailsScreen({ onBack, currentUser }: BusinessD
         'Business details updated successfully',
         [{ text: 'OK', onPress: onBack }]
       );
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Failed to save business details:', error);
       Alert.alert(
         'Error',
-        'Failed to save changes. Please try again.'
+        error.response?.data?.error || 'Failed to save changes. Please try again.'
       );
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  const swipeHandlers = useSwipeBack(onBack);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -141,11 +159,15 @@ export default function BusinessDetailsScreen({ onBack, currentUser }: BusinessD
           {/* Save Button */}
           <View style={styles.buttonContainer}>
             <TouchableOpacity 
-              style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} 
+              style={[styles.saveButton, (isLoading || isSaving) && styles.saveButtonDisabled]} 
               onPress={handleSaveChanges}
-              disabled={isLoading}
+              disabled={isLoading || isSaving}
             >
-              <Text style={styles.saveButtonText}>{t('businessDetails.saveChanges')}</Text>
+              {isSaving ? (
+                <ActivityIndicator color={colors.surface} />
+              ) : (
+                <Text style={styles.saveButtonText}>{t('businessDetails.saveChanges')}</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -179,7 +201,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.textPrimary,
     textAlign: 'center',

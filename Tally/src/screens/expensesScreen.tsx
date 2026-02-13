@@ -1,12 +1,12 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import DatePickerModal from '../components/DatePickerModal';
-import { getCategoryColor } from '../components/categories';
+import { getCategoryColor, CATEGORIES } from '../components/categories';
 import { getOrgCachedData } from '../services/cacheService';
 
 interface Expense {
@@ -28,13 +28,22 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
   const { t } = useContext(LanguageContext);
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [isDateFilterActive, setIsDateFilterActive] = useState(false);
   const [expenseGroups, setExpenseGroups] = useState<ExpenseGroup[]>([]);
+  const [allExpenses, setAllExpenses] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadExpenses();
   }, []);
+
+  useEffect(() => {
+    filterExpenses();
+  }, [selectedCategory, allExpenses, selectedDate, isDateFilterActive, searchQuery]);
 
   const loadExpenses = async () => {
     try {
@@ -58,9 +67,26 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
 
       // Load org data from cache
       const orgData = await getOrgCachedData(firstOrgId);
-      const { expenses, categories } = orgData || {};
+      const { expenses, categories: orgCategories } = orgData || {};
+
+      // Combine preset categories from categories.ts with orgCategories from cache
+      const presetMapped = CATEGORIES.map((categoryName: string, index: number) => ({
+        id: `preset-${index}`,
+        preset: {
+          name: categoryName,
+        },
+      }));
+      
+      // Add org-specific categories from cache
+      const allCategories = [...presetMapped];
+      if (orgCategories && Array.isArray(orgCategories)) {
+        allCategories.push(...orgCategories);
+      }
+      
+      setCategories(allCategories);
 
       if (!expenses || !Array.isArray(expenses)) {
+        setAllExpenses([]);
         setExpenseGroups([]);
         setIsLoading(false);
         return;
@@ -71,7 +97,7 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
         .filter((exp: any) => !exp.deletedAt)
         .map((exp: any) => {
           const expenseDate = new Date(exp.expenseDate);
-          const orgCat = categories?.find((c: any) => c.id === exp.orgCategoryId);
+          const orgCat = orgCategories?.find((c: any) => c.id === exp.orgCategoryId);
           const categoryName = exp.categoryNameSnapshot || orgCat?.preset?.name || 'Miscellaneous';
           
           return {
@@ -87,62 +113,188 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
         })
         .sort((a: any, b: any) => b.fullDate.getTime() - a.fullDate.getTime());
 
-      // Group by date
-      const grouped = validExpenses.reduce((acc: { [key: string]: Expense[] }, expense: any) => {
-        const dateKey = expense.fullDate.toDateString();
-        if (!acc[dateKey]) {
-          acc[dateKey] = [];
-        }
-        acc[dateKey].push(expense);
-        return acc;
-      }, {});
-
-      // Convert to ExpenseGroup array with formatted date labels
-      const groups: ExpenseGroup[] = Object.entries(grouped).map(([dateKey, expenses]: [string, any]) => {
-        const date = new Date(dateKey);
-        const dateLabel = date.toLocaleDateString('en-US', { 
-          weekday: 'short', 
-          month: 'short', 
-          day: 'numeric' 
-        }).toUpperCase();
-        
-        return {
-          dateLabel,
-          expenses,
-        };
-      });
-
-      setExpenseGroups(groups);
+      setAllExpenses(validExpenses);
     } catch (error) {
       console.error('Error loading expenses:', error);
+      setAllExpenses([]);
       setExpenseGroups([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const onDateChange = (event: any, date?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
+  const filterExpenses = () => {
+    if (allExpenses.length === 0) {
+      setExpenseGroups([]);
+      return;
     }
-    if (date) {
-      setSelectedDate(date);
+
+    // Filter expenses based on selected category
+    let filtered = selectedCategory === 'All Categories' 
+      ? allExpenses 
+      : allExpenses.filter((exp: any) => exp.category === selectedCategory);
+
+    // Filter by selected date only if date filter is active
+    if (isDateFilterActive) {
+      const selectedDateStr = selectedDate.toDateString();
+      filtered = filtered.filter((exp: any) => exp.fullDate.toDateString() === selectedDateStr);
     }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((exp: any) => {
+        // Search by vendor
+        const vendorMatch = exp.vendor.toLowerCase().includes(query);
+        
+        // Search by amount (convert to string, search both with and without $)
+        const amountStr = exp.amount.toString();
+        const amountMatch = amountStr.includes(query) || query.replace('$', '').includes(amountStr);
+        
+        // Search by category
+        const categoryMatch = exp.category.toLowerCase().includes(query);
+        
+        // Search by date (formatted date)
+        const dateStr = exp.fullDate.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric',
+          year: 'numeric'
+        }).toLowerCase();
+        const dateMatch = dateStr.includes(query);
+        
+        return vendorMatch || amountMatch || categoryMatch || dateMatch;
+      });
+    }
+
+    // Group by date
+    const grouped = filtered.reduce((acc: { [key: string]: Expense[] }, expense: any) => {
+      const dateKey = expense.fullDate.toDateString();
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
+      }
+      acc[dateKey].push(expense);
+      return acc;
+    }, {});
+
+    // Convert to ExpenseGroup array with formatted date labels
+    const groups: ExpenseGroup[] = Object.entries(grouped).map(([dateKey, expenses]: [string, any]) => {
+      const date = new Date(dateKey);
+      const dateLabel = date.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      }).toUpperCase();
+      
+      return {
+        dateLabel,
+        expenses,
+      };
+    });
+
+    setExpenseGroups(groups);
+  };
+
+  const onDateChange = (date: Date) => {
+    setSelectedDate(date);
+    setIsDateFilterActive(true);
+  };
+
+  const handleResetDate = () => {
+    setIsDateFilterActive(false);
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={styles.container}>
+      <Pressable 
+        style={styles.container} 
+        onPress={() => showCategoryPicker && setShowCategoryPicker(false)}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>{t('expenses.title')}</Text>
             <Text style={styles.subtitle}>{t('expenses.subtitle')}</Text>
           </View>
-          <TouchableOpacity style={styles.categoryButton}>
-            <Text style={styles.categoryButtonText}>{selectedCategory}</Text>
-            <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
-          </TouchableOpacity>
+          <View>
+            <TouchableOpacity 
+              style={styles.categoryButton}
+              onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+            >
+              <Text style={styles.categoryButtonText}>
+                {selectedCategory === 'All Categories' 
+                  ? t('expenses.allCategories') 
+                  : CATEGORIES.includes(selectedCategory)
+                    ? t('categories.' + selectedCategory.toLowerCase())
+                    : selectedCategory}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
+            
+            {/* Category Dropdown */}
+            {showCategoryPicker && (
+              <Pressable 
+                style={styles.categoryDropdown}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <ScrollView style={styles.categoryDropdownScroll} nestedScrollEnabled>
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryDropdownItem,
+                      selectedCategory === 'All Categories' && styles.categoryDropdownItemSelected
+                    ]}
+                    onPress={() => {
+                      setSelectedCategory('All Categories');
+                      setShowCategoryPicker(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.categoryDropdownItemText,
+                      selectedCategory === 'All Categories' && styles.categoryDropdownItemTextSelected
+                    ]}>
+                      {t('expenses.allCategories')}
+                    </Text>
+                    {selectedCategory === 'All Categories' && (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+
+                  {categories.map((cat: any) => {
+                    const categoryName = cat.preset?.name || cat.name || cat.categoryName || 'Unnamed Category';
+                    const isPresetCategory = CATEGORIES.includes(categoryName);
+                    return (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[
+                          styles.categoryDropdownItem,
+                          selectedCategory === categoryName && styles.categoryDropdownItemSelected
+                        ]}
+                        onPress={() => {
+                          setSelectedCategory(categoryName);
+                          setShowCategoryPicker(false);
+                        }}
+                      >
+                        <View style={styles.categoryDropdownItemContent}>
+                          <View style={[
+                            styles.categoryColorDot,
+                            { backgroundColor: getCategoryColor(categoryName) }
+                          ]} />
+                          <Text style={[
+                            styles.categoryDropdownItemText,
+                            selectedCategory === categoryName && styles.categoryDropdownItemTextSelected
+                          ]}>
+                            {isPresetCategory ? t('categories.' + categoryName.toLowerCase()) : categoryName}
+                          </Text>
+                        </View>
+                        {selectedCategory === categoryName && (
+                          <Ionicons name="checkmark" size={18} color={colors.primary} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {/* Search Bar */}
@@ -151,9 +303,16 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
             <Ionicons name="search" size={20} color={colors.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search merchant, amount..."
+              placeholder={t('expenses.search')}
               placeholderTextColor={colors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
             />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
           <TouchableOpacity 
             style={styles.calendarButton}
@@ -169,6 +328,7 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
           selectedDate={selectedDate}
           onDateChange={onDateChange}
           onClose={() => setShowDatePicker(false)}
+          onReset={handleResetDate}
         />
 
         {/* Expense List */}
@@ -180,7 +340,7 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
           ) : expenseGroups.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="receipt-outline" size={64} color={colors.textTertiary} />
-              <Text style={styles.emptyText}>No expenses yet</Text>
+              <Text style={styles.emptyText}>No expenses</Text>
             </View>
           ) : (
             expenseGroups.map((group, groupIndex) => (
@@ -205,7 +365,11 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
                     <Text style={styles.expenseVendor}>{expense.vendor}</Text>
                     <View style={styles.expenseTags}>
                       <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(expense.category) }]}>
-                        <Text style={styles.categoryTagText}>{expense.category}</Text>
+                        <Text style={styles.categoryTagText}>
+                          {CATEGORIES.includes(expense.category) 
+                            ? t('categories.' + expense.category.toLowerCase()) 
+                            : expense.category}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -220,7 +384,7 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
           ))
           )}
         </ScrollView>
-      </View>
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -240,6 +404,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
+    position: 'relative',
+    zIndex: 10,
   },
   title: {
     ...typography.title,
@@ -418,5 +584,57 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  categoryDropdown: {
+    position: 'absolute',
+    top: 50,
+    right: 0,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minWidth: 200,
+    maxHeight: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 1000,
+    overflow: 'hidden',
+  },
+  categoryDropdownScroll: {
+    maxHeight: 300,
+  },
+  categoryDropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  categoryDropdownItemSelected: {
+    backgroundColor: colors.background,
+  },
+  categoryDropdownItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  categoryColorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  categoryDropdownItemText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  categoryDropdownItemTextSelected: {
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

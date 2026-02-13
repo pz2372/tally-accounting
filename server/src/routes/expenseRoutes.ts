@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as expenseController from '../controllers/expenseController';
 import { requireOrg, verifyToken } from '../middleware/auth';
+import { uploadSingle } from '../middleware/upload';
 
 const router = Router();
 
@@ -16,6 +17,9 @@ router.get('/:id', expenseController.getExpenseById);
 
 // POST /api/expenses - Create new expense
 router.post('/', expenseController.createExpense);
+
+// POST /api/expenses/with-receipt - Create expense with receipt image (combined flow)
+router.post('/with-receipt', uploadSingle, expenseController.createExpenseWithReceipt);
 
 // PUT /api/expenses/:id - Update expense
 router.put('/:id', expenseController.updateExpense);

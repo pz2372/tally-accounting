@@ -67,7 +67,7 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
 
   useEffect(() => {
     loadCategoryData();
-  }, []);
+  }, [selectedMonth]);
 
   const loadCategoryData = async () => {
     try {
@@ -123,10 +123,17 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
           }
         });
 
-      // Organize expenses by category
+      // Organize expenses by category (filtered by selected month)
       if (expenses && Array.isArray(expenses)) {
         expenses.forEach((expense: any) => {
           if (!expense.orgCategoryId || expense.deletedAt) return;
+
+          // Filter by selected month
+          const expenseDate = new Date(expense.expenseDate);
+          if (expenseDate.getMonth() !== selectedMonth.getMonth() || 
+              expenseDate.getFullYear() !== selectedMonth.getFullYear()) {
+            return;
+          }
 
           // Find the preset ID for this org category
           const orgCat = orgCategories?.find((oc: any) => oc.id === expense.orgCategoryId);
@@ -135,7 +142,6 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
           const categoryData = categoryMap.get(orgCat.presetCategoryId);
           if (!categoryData) return;
 
-          const expenseDate = new Date(expense.expenseDate);
           const amountDollars = expense.amountCents / 100;
 
           categoryData.expenses.push({
@@ -185,6 +191,14 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
     setExpandedCategory(expandedCategory === categoryName ? null : categoryName);
   };
 
+  const formatMonth = (date: Date): string => {
+    const monthKeys = ['january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december'];
+    const monthIndex = date.getMonth();
+    const year = date.getFullYear();
+    return `${t('month.' + monthKeys[monthIndex])} ${year}`;
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView style={styles.container}>
@@ -215,7 +229,7 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
           
           <View style={styles.monthInfo}>
             <Text style={styles.monthText}>
-              {selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {formatMonth(selectedMonth)}
             </Text>
           </View>
           
@@ -244,12 +258,12 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
 
         {/* By Category Section */}
         <View style={styles.categorySection}>
-          <Text style={styles.categoryTitle}>By Category</Text>
+          <Text style={styles.categoryTitle}>{t('category.byCategory')}</Text>
           
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading expenses...</Text>
+              <Text style={styles.loadingText}>{t('category.loadingExpenses')}</Text>
             </View>
           ) : (
             categories.map((category, index) => {
@@ -271,7 +285,9 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
                           styles.categoryName,
                           category.expenseCount === 0 && styles.categoryNameEmpty
                         ]}>
-                          {category.name}
+                          {CATEGORIES.includes(category.name) 
+                            ? t('categories.' + category.name.toLowerCase())
+                            : category.name}
                         </Text>
                       </View>
                       <View style={styles.categoryRight}>

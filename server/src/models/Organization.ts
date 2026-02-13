@@ -1,11 +1,10 @@
 import type { Organization as PrismaOrganization } from '@prisma/client';
-import type CardStatement from './CardStatement';
-import type DailySalesReport from './DailySalesReport';
+import type Statement from './Statement';
+import type SalesReport from './SalesReport';
 import type Expense from './Expense';
 import type OrgCategory from './OrgCategory';
 import type OrgUser from './OrgUser';
 import type OrganizationSubscription from './OrganizationSubscription';
-import type Receipt from './Receipt';
 import type ReceiptMatch from './ReceiptMatch';
 import type RecurringCharge from './RecurringCharge';
 import type RecurringChargeInstance from './RecurringChargeInstance';
@@ -16,10 +15,9 @@ export interface Organization extends PrismaOrganization {
 	members?: OrgUser[];
 	subscription?: OrganizationSubscription | null;
 	orgCategories?: OrgCategory[];
-	receipts?: Receipt[];
 	expenses?: Expense[];
-	statements?: CardStatement[];
-	salesReports?: DailySalesReport[];
+	statements?: Statement[];
+	salesReports?: SalesReport[];
 	matches?: ReceiptMatch[];
 	recurringCharges?: RecurringCharge[];
 	recurringChargeInstances?: RecurringChargeInstance[];

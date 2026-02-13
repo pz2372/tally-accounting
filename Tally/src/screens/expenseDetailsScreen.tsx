@@ -1,9 +1,13 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { CATEGORIES, getCategoryColor as getColorFromCategories } from '../components/categories';
+import ScanScreen from './scanScreen';
+import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface ExpenseDetailsScreenProps {
     expense: {
@@ -14,6 +18,7 @@ interface ExpenseDetailsScreenProps {
         category: string;
         status: 'Approved' | 'Pending';
         amount: number;
+        paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH';
     };
     onBack: () => void;
 }
@@ -37,25 +42,85 @@ const getCategoryColor = (category: string): string => {
     }
 };
 
-const formatDate = (dateStr: string, day: number): string => {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
-    const monthIndex = dateStr === 'JAN' ? 0 : dateStr === 'FEB' ? 1 : 0; // Simplified
-    const date = new Date(2026, monthIndex, day);
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return `${dayNames[date.getDay()]}, ${months[monthIndex]} ${day}`;
-};
-
 export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetailsScreenProps) {
     const { t } = useContext(LanguageContext);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+    const [showPaymentPicker, setShowPaymentPicker] = useState(false);
     const [editCategory, setEditCategory] = useState(expense.category);
+    const [editPaymentMethod, setEditPaymentMethod] = useState<'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'>(expense.paymentMethod || 'CREDIT_CARD');
     const [editDescription, setEditDescription] = useState('Monthly Subscription');
+    const [showReceiptModal, setShowReceiptModal] = useState(false);
+    const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
+    const [showScanScreen, setShowScanScreen] = useState(false);
+
+    const formatDate = (dateStr: string, day: number): string => {
+        const monthKeys = ['january', 'february', 'march', 'april', 'may', 'june',
+            'july', 'august', 'september', 'october', 'november', 'december'];
+        const monthIndex = dateStr === 'JAN' ? 0 : dateStr === 'FEB' ? 1 : 0; // Simplified
+        const date = new Date(2026, monthIndex, day);
+        return `${t('month.' + monthKeys[monthIndex])} ${day}, ${date.getFullYear()}`;
+    };
+
+    const getPaymentMethodDisplay = (method: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | undefined): { label: string; icon: string } => {
+        switch (method) {
+            case 'CREDIT_CARD':
+                return { label: 'Credit Card', icon: 'card-outline' };
+            case 'DEBIT_CARD':
+                return { label: 'Debit Card', icon: 'card-outline' };
+            case 'CASH':
+                return { label: 'Cash', icon: 'cash-outline' };
+            default:
+                return { label: 'Credit Card', icon: 'card-outline' };
+        }
+    };
+
+    const handleTakePhoto = () => {
+        setShowReceiptModal(false);
+        setShowScanScreen(true);
+    };
+    
+    const handleCaptureComplete = (imageUri: string) => {
+        setSelectedReceipt(imageUri);
+        setShowScanScreen(false);
+    };
+    
+    const handleChooseFromLibrary = async () => {
+        setShowReceiptModal(false);
+        
+        const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        
+        if (permissionResult.granted === false) {
+            Alert.alert(t('alertDetail.permissionRequired'), t('alertDetail.photoLibraryPermission'));
+            return;
+        }
+        
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            quality: 1,
+        });
+        
+        if (!result.canceled) {
+            setSelectedReceipt(result.assets[0].uri);
+        }
+    };
+
+    if (showScanScreen) {
+        return (
+            <ScanScreen 
+                onCancel={() => setShowScanScreen(false)}
+                onSave={(imageUri) => handleCaptureComplete(imageUri)}
+            />
+        );
+    }
+
+    const swipeHandlers = useSwipeBack(onBack);
 
     return (
         <SafeAreaView style={styles.safeArea} edges={['top']}>
-            <View style={styles.container}>
+            <View style={styles.container} {...swipeHandlers}>
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -73,11 +138,28 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                     <View style={styles.detailsCard}>
                                                 <View style={styles.tagsContainer}>
                             <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(expense.category) }]}>
-                                <Text style={styles.categoryTagText}>{expense.category}</Text>
+                                <Text style={styles.categoryTagText}>
+                                    {CATEGORIES.includes(expense.category)
+                                        ? t('categories.' + expense.category.toLowerCase())
+                                        : expense.category}
+                                </Text>
                             </View>
                         </View>
                         <Text style={styles.vendorName}>{expense.vendor}</Text>
                         <Text style={styles.amount}>${expense.amount.toFixed(2)}</Text>
+
+                        {/* Payment Method */}
+                        <View style={styles.paymentMethodRow}>
+                            <Ionicons 
+                                name={getPaymentMethodDisplay(expense.paymentMethod).icon as any} 
+                                size={16} 
+                                color={colors.textSecondary}
+                                style={{ marginRight: spacing.xs }}
+                            />
+                            <Text style={styles.paymentMethodText}>
+                                {getPaymentMethodDisplay(expense.paymentMethod).label}
+                            </Text>
+                        </View>
 
                         
                         <Text style={styles.description}>Monthly Subscription</Text>
@@ -88,7 +170,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                     <View style={styles.receiptSection}>
                         <Ionicons name="document-outline" size={64} color={colors.textTertiary} />
                         <Text style={styles.receiptText}>{t('details.noReceipt')}</Text>
-                        <TouchableOpacity style={styles.uploadButton}>
+                        <TouchableOpacity style={styles.uploadButton} onPress={() => setShowReceiptModal(true)}>
                             <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
                             <Text style={styles.uploadButtonText}>{t('details.uploadReceipt')}</Text>
                         </TouchableOpacity>
@@ -108,7 +190,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                             onPress={() => setShowDeleteModal(true)}
                         >
                             <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                            <Text style={styles.deleteButtonText}>Delete</Text>
+                            <Text style={styles.deleteButtonText}>{t('details.deleteExpense')}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -124,14 +206,14 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                     <View style={styles.modalOverlay}>
                         <View style={styles.modalContent}>
                             <Ionicons name="warning" size={48} color="#EF4444" style={{ marginBottom: spacing.lg }} />
-                            <Text style={styles.modalTitle}>Delete Expense?</Text>
-                            <Text style={styles.modalMessage}>Are you sure you want to delete this expense? This action cannot be undone.</Text>
+                            <Text style={styles.modalTitle}>{t('details.deleteTitle')}</Text>
+                            <Text style={styles.modalMessage}>{t('details.deleteMessage')}</Text>
                             <View style={styles.modalButtons}>
                                 <TouchableOpacity 
                                     style={styles.modalCancelButton}
                                     onPress={() => setShowDeleteModal(false)}
                                 >
-                                    <Text style={styles.modalCancelText}>Cancel</Text>
+                                    <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity 
                                     style={styles.modalDeleteButton}
@@ -140,7 +222,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                                         // Handle delete logic here
                                     }}
                                 >
-                                    <Text style={styles.modalDeleteText}>Delete</Text>
+                                    <Text style={styles.modalDeleteText}>{t('common.delete')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -155,31 +237,178 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                     onRequestClose={() => setShowEditModal(false)}
                 >
                     <View style={styles.modalOverlay}>
-                        <View style={styles.editModalContent}>
+                        <Pressable 
+                            style={styles.editModalContent}
+                            onPress={() => {
+                                if (showCategoryPicker) setShowCategoryPicker(false);
+                                if (showPaymentPicker) setShowPaymentPicker(false);
+                            }}
+                        >
                             <View style={styles.editModalHeader}>
-                                <Text style={styles.modalTitle}>Edit Expense</Text>
+                                <Text style={styles.modalTitle}>{t('details.editTitle')}</Text>
                                 <TouchableOpacity onPress={() => setShowEditModal(false)}>
                                     <Ionicons name="close" size={24} color={colors.textPrimary} />
                                 </TouchableOpacity>
                             </View>
                             
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Category</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={editCategory}
-                                    onChangeText={setEditCategory}
-                                    placeholder="Enter category"
-                                />
+                            <View style={[styles.inputGroup, showCategoryPicker && styles.inputGroupActive]}>
+                                <Text style={styles.inputLabel}>{t('details.category')}</Text>
+                                <TouchableOpacity
+                                    style={styles.categoryPickerButton}
+                                    onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+                                >
+                                    <View style={styles.categoryPickerContent}>
+                                        <View style={[
+                                            styles.categoryColorDot,
+                                            { backgroundColor: getColorFromCategories(editCategory) }
+                                        ]} />
+                                        <Text style={styles.categoryPickerText}>
+                                            {CATEGORIES.includes(editCategory)
+                                                ? t('categories.' + editCategory.toLowerCase())
+                                                : editCategory}
+                                        </Text>
+                                    </View>
+                                    <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+                                </TouchableOpacity>
+
+                                {showCategoryPicker && (
+                                    <Pressable
+                                        style={styles.categoryDropdown}
+                                        onPress={(e) => e.stopPropagation()}
+                                    >
+                                        <ScrollView style={styles.categoryDropdownScroll} nestedScrollEnabled>
+                                            {CATEGORIES.map((category) => (
+                                                <TouchableOpacity
+                                                    key={category}
+                                                    style={[
+                                                        styles.categoryDropdownItem,
+                                                        editCategory === category && styles.categoryDropdownItemSelected
+                                                    ]}
+                                                    onPress={() => {
+                                                        setEditCategory(category);
+                                                        setShowCategoryPicker(false);
+                                                    }}
+                                                >
+                                                    <View style={styles.categoryDropdownItemContent}>
+                                                        <View style={[
+                                                            styles.categoryColorDot,
+                                                            { backgroundColor: getColorFromCategories(category) }
+                                                        ]} />
+                                                        <Text style={[
+                                                            styles.categoryDropdownItemText,
+                                                            editCategory === category && styles.categoryDropdownItemTextSelected
+                                                        ]}>{t('categories.' + category.toLowerCase())}</Text>
+                                                    </View>
+                                                    {editCategory === category && (
+                                                        <Ionicons name="checkmark" size={18} color={colors.primary} />
+                                                    )}
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </Pressable>
+                                )}
+                            </View>
+
+                            {/* Payment Method Picker */}
+                            <View style={[styles.inputGroup, showPaymentPicker && styles.inputGroupActive]}>
+                                <Text style={styles.inputLabel}>Payment Method</Text>
+                                <TouchableOpacity
+                                    style={styles.categoryPickerButton}
+                                    onPress={() => setShowPaymentPicker(!showPaymentPicker)}
+                                >
+                                    <View style={styles.categoryPickerContent}>
+                                        <Ionicons 
+                                            name={getPaymentMethodDisplay(editPaymentMethod).icon as any} 
+                                            size={20} 
+                                            color={colors.textPrimary}
+                                            style={{ marginRight: spacing.xs }}
+                                        />
+                                        <Text style={styles.categoryPickerText}>
+                                            {getPaymentMethodDisplay(editPaymentMethod).label}
+                                        </Text>
+                                    </View>
+                                    <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+                                </TouchableOpacity>
+
+                                {showPaymentPicker && (
+                                    <Pressable
+                                        style={styles.categoryDropdown}
+                                        onPress={(e) => e.stopPropagation()}
+                                    >
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.categoryDropdownItem,
+                                                editPaymentMethod === 'CREDIT_CARD' && styles.categoryDropdownItemSelected
+                                            ]}
+                                            onPress={() => {
+                                                setEditPaymentMethod('CREDIT_CARD');
+                                                setShowPaymentPicker(false);
+                                            }}
+                                        >
+                                            <View style={styles.categoryDropdownItemContent}>
+                                                <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                                                <Text style={[
+                                                    styles.categoryDropdownItemText,
+                                                    editPaymentMethod === 'CREDIT_CARD' && styles.categoryDropdownItemTextSelected
+                                                ]}>Credit Card</Text>
+                                            </View>
+                                            {editPaymentMethod === 'CREDIT_CARD' && (
+                                                <Ionicons name="checkmark" size={18} color={colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.categoryDropdownItem,
+                                                editPaymentMethod === 'DEBIT_CARD' && styles.categoryDropdownItemSelected
+                                            ]}
+                                            onPress={() => {
+                                                setEditPaymentMethod('DEBIT_CARD');
+                                                setShowPaymentPicker(false);
+                                            }}
+                                        >
+                                            <View style={styles.categoryDropdownItemContent}>
+                                                <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                                                <Text style={[
+                                                    styles.categoryDropdownItemText,
+                                                    editPaymentMethod === 'DEBIT_CARD' && styles.categoryDropdownItemTextSelected
+                                                ]}>Debit Card</Text>
+                                            </View>
+                                            {editPaymentMethod === 'DEBIT_CARD' && (
+                                                <Ionicons name="checkmark" size={18} color={colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.categoryDropdownItem,
+                                                editPaymentMethod === 'CASH' && styles.categoryDropdownItemSelected
+                                            ]}
+                                            onPress={() => {
+                                                setEditPaymentMethod('CASH');
+                                                setShowPaymentPicker(false);
+                                            }}
+                                        >
+                                            <View style={styles.categoryDropdownItemContent}>
+                                                <Ionicons name="cash-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                                                <Text style={[
+                                                    styles.categoryDropdownItemText,
+                                                    editPaymentMethod === 'CASH' && styles.categoryDropdownItemTextSelected
+                                                ]}>Cash</Text>
+                                            </View>
+                                            {editPaymentMethod === 'CASH' && (
+                                                <Ionicons name="checkmark" size={18} color={colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    </Pressable>
+                                )}
                             </View>
 
                             <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Description</Text>
+                                <Text style={styles.inputLabel}>{t('details.note')}</Text>
                                 <TextInput
                                     style={styles.input}
                                     value={editDescription}
                                     onChangeText={setEditDescription}
-                                    placeholder="Enter description"
+                                    placeholder={t('details.notePlaceholder')}
                                 />
                             </View>
 
@@ -187,13 +416,62 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                                 style={styles.saveButton}
                                 onPress={() => {
                                     setShowEditModal(false);
+                                    setShowCategoryPicker(false);
+                                    setShowPaymentPicker(false);
                                     // Handle save logic here
                                 }}
                             >
-                                <Text style={styles.saveButtonText}>Save Changes</Text>
+                                <Text style={styles.saveButtonText}>{t('common.saveChanges')}</Text>
+                            </TouchableOpacity>
+                        </Pressable>
+                    </View>
+                </Modal>
+
+                {/* Receipt Options Modal */}
+                <Modal
+                    visible={showReceiptModal}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setShowReceiptModal(false)}
+                >
+                    <TouchableOpacity 
+                        style={styles.modalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setShowReceiptModal(false)}
+                    >
+                        <View style={styles.receiptModalContent} onStartShouldSetResponder={() => true}>
+                            <Text style={styles.receiptModalTitle}>{t('details.uploadReceipt')}</Text>
+                            
+                            <TouchableOpacity 
+                                style={styles.receiptOption}
+                                onPress={handleTakePhoto}
+                            >
+                                <View style={styles.receiptOptionIcon}>
+                                    <Ionicons name="camera" size={24} color={colors.primary} />
+                                </View>
+                                <Text style={styles.receiptOptionText}>{t('newExpense.takePhoto')}</Text>
+                                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity 
+                                style={styles.receiptOption}
+                                onPress={handleChooseFromLibrary}
+                            >
+                                <View style={styles.receiptOptionIcon}>
+                                    <Ionicons name="images" size={24} color={colors.primary} />
+                                </View>
+                                <Text style={styles.receiptOptionText}>{t('newExpense.chooseFromLibrary')}</Text>
+                                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity 
+                                style={styles.cancelButton}
+                                onPress={() => setShowReceiptModal(false)}
+                            >
+                                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    </TouchableOpacity>
                 </Modal>
             </View>
         </SafeAreaView>
@@ -225,7 +503,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.md,
     },
     title: {
-        ...typography.title,
+        ...typography.heading,
         textAlign: 'center',
     },
     placeholder: {
@@ -327,6 +605,17 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: spacing.lg,
     },
+    paymentMethodRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: spacing.sm,
+    },
+    paymentMethodText: {
+        fontSize: 14,
+        color: colors.textSecondary,
+        fontWeight: '500',
+    },
     actionButtons: {
         flexDirection: 'row',
         gap: spacing.md,
@@ -373,7 +662,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: spacing.xxl,
+        padding: spacing.xl,
     },
     modalContent: {
         backgroundColor: colors.surface,
@@ -442,6 +731,11 @@ const styles = StyleSheet.create({
     },
     inputGroup: {
         marginBottom: spacing.lg,
+        position: 'relative',
+        zIndex: 1,
+    },
+    inputGroupActive: {
+        zIndex: 1000,
     },
     inputLabel: {
         fontSize: 14,
@@ -459,6 +753,78 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: colors.textPrimary,
     },
+    categoryPickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: borderRadius.md,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+    },
+    categoryPickerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    categoryPickerText: {
+        fontSize: 15,
+        color: colors.textPrimary,
+    },
+    categoryColorDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    categoryDropdown: {
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        right: 0,
+        marginTop: spacing.xs,
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.md,
+        borderWidth: 1,
+        borderColor: colors.border,
+        maxHeight: 250,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        overflow: 'hidden',
+    },
+    categoryDropdownScroll: {
+        maxHeight: 250,
+    },
+    categoryDropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+        backgroundColor: colors.surface,
+    },
+    categoryDropdownItemSelected: {
+        backgroundColor: colors.background,
+    },
+    categoryDropdownItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    categoryDropdownItemText: {
+        fontSize: 15,
+        color: colors.textPrimary,
+    },
+    categoryDropdownItemTextSelected: {
+        fontWeight: '600',
+        color: colors.primary,
+    },
     saveButton: {
         backgroundColor: '#10B981',
         paddingVertical: spacing.md,
@@ -470,5 +836,56 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: colors.surface,
+    },
+    receiptModalContent: {
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.xl,
+        padding: spacing.xl,
+        width: '100%',
+        maxWidth: 400,
+    },
+    receiptModalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: colors.textPrimary,
+        marginBottom: spacing.xl,
+        textAlign: 'center',
+    },
+    receiptOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+        padding: spacing.lg,
+        borderRadius: borderRadius.lg,
+        marginBottom: spacing.md,
+        gap: spacing.md,
+    },
+    receiptOptionIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: borderRadius.md,
+        backgroundColor: colors.primaryLight,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    receiptOptionText: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.textPrimary,
+    },
+    cancelButton: {
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        paddingVertical: spacing.lg,
+        borderRadius: borderRadius.lg,
+        marginTop: spacing.md,
+        alignItems: 'center',
+    },
+    cancelButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.textPrimary,
     },
 });

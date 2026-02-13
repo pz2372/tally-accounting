@@ -1,85 +1,196 @@
 // Firebase configuration for Tally mobile app
-// Using Firebase JS SDK (web) for Expo Go compatibility
+// Using Firebase Auth REST API for React Native compatibility
 
-import { initializeApp } from 'firebase/app';
-import { 
-  getReactNativePersistence,
-  initializeAuth,
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged as firebaseOnAuthStateChanged,
-  User
-} from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Firebase config from GoogleService-Info.plist
-const firebaseConfig = {
-  apiKey: "AIzaSyDUAfgY-vHfcjvxeJo2DHVfE8pMbQhe1pk",
-  authDomain: "tally-81bd5.firebaseapp.com",
-  projectId: "tally-81bd5",
-  storageBucket: "tally-81bd5.firebasestorage.app",
-  messagingSenderId: "720402260367",
-  appId: "1:720402260367:ios:b11a5d19dc6efd55952bfa"
+const FIREBASE_API_KEY = 'AIzaSyDUAfgY-vHfcjvxeJo2DHVfE8pMbQhe1pk';
+const AUTH_BASE_URL = 'https://identitytoolkit.googleapis.com/v1';
+const TOKEN_REFRESH_URL = 'https://securetoken.googleapis.com/v1';
+
+const FIREBASE_USER_KEY = '@firebase_user';
+
+export type User = {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  emailVerified: boolean;
+  idToken: string;
+  refreshToken: string;
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+let currentUser: User | null = null;
 
-// Initialize Auth with AsyncStorage persistence
-export const firebaseAuth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+// Load persisted user on startup
+const loadPersistedUser = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(FIREBASE_USER_KEY);
+    if (raw) {
+      currentUser = JSON.parse(raw);
+    }
+  } catch (error) {
+    console.warn('Failed to load persisted firebase user:', error);
+  }
+};
+loadPersistedUser();
 
-// Auth helper functions
+const persistUser = async (user: User | null) => {
+  try {
+    if (user) {
+      await AsyncStorage.setItem(FIREBASE_USER_KEY, JSON.stringify(user));
+    } else {
+      await AsyncStorage.removeItem(FIREBASE_USER_KEY);
+    }
+  } catch (error) {
+    console.warn('Failed to persist firebase user:', error);
+  }
+};
+
+// Sign in with email/password via REST API
 export const signInWithEmail = async (email: string, password: string) => {
   try {
-    const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
-    return { user: userCredential.user, error: null };
+    console.log('Attempting Firebase REST sign in...');
+    
+    const response = await fetch(
+      `${AUTH_BASE_URL}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const errorMessage = data.error?.message || 'Authentication failed';
+      console.error('Firebase REST sign in error:', errorMessage);
+      return { user: null, error: errorMessage };
+    }
+
+    const user: User = {
+      uid: data.localId,
+      email: data.email,
+      displayName: data.displayName || null,
+      photoURL: data.profilePicture || null,
+      emailVerified: data.emailVerified || false,
+      idToken: data.idToken,
+      refreshToken: data.refreshToken,
+    };
+
+    currentUser = user;
+    await persistUser(user);
+
+    console.log('Firebase REST sign in successful!');
+    return { user, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    console.error('Firebase signIn error:', error);
+    return { user: null, error: error.message || 'Firebase authentication failed' };
   }
 };
 
+// Sign up with email/password via REST API
 export const signUpWithEmail = async (email: string, password: string) => {
   try {
-    const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-    return { user: userCredential.user, error: null };
+    const response = await fetch(
+      `${AUTH_BASE_URL}/accounts:signUp?key=${FIREBASE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { user: null, error: data.error?.message || 'Registration failed' };
+    }
+
+    const user: User = {
+      uid: data.localId,
+      email: data.email,
+      displayName: null,
+      photoURL: null,
+      emailVerified: false,
+      idToken: data.idToken,
+      refreshToken: data.refreshToken,
+    };
+
+    currentUser = user;
+    await persistUser(user);
+
+    return { user, error: null };
   } catch (error: any) {
     return { user: null, error: error.message };
   }
 };
 
+// Sign out
 export const signOut = async () => {
   try {
-    await firebaseSignOut(firebaseAuth);
+    currentUser = null;
+    await persistUser(null);
     return { error: null };
   } catch (error: any) {
     return { error: error.message };
   }
 };
 
-export const getCurrentUser = () => {
-  return firebaseAuth.currentUser;
-};
+export const getCurrentUser = () => currentUser;
 
-// Listen to auth state changes
+// Listen to auth state changes (simplified - checks persisted state)
 export const onAuthStateChanged = (callback: (user: User | null) => void) => {
-  return firebaseOnAuthStateChanged(firebaseAuth, callback);
+  // Call immediately with current state
+  loadPersistedUser().then(() => callback(currentUser));
+  // Return unsubscribe function
+  return () => {};
 };
 
-// Get ID token for API calls
+// Get ID token, refreshing if needed
 export const getIdToken = async () => {
-  const user = firebaseAuth.currentUser;
-  if (user) {
-    try {
-      const token = await user.getIdToken();
-      return { token, error: null };
-    } catch (error: any) {
-      return { token: null, error: error.message };
-    }
+  if (!currentUser) {
+    return { token: null, error: 'No user logged in' };
   }
-  return { token: null, error: 'No user logged in' };
-};
 
-export default firebaseAuth;
+  // Try to refresh the token
+  try {
+    const response = await fetch(
+      `${TOKEN_REFRESH_URL}/token?key=${FIREBASE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'refresh_token',
+          refresh_token: currentUser.refreshToken,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok) {
+      currentUser = {
+        ...currentUser,
+        idToken: data.id_token,
+        refreshToken: data.refresh_token,
+      };
+      await persistUser(currentUser);
+      return { token: data.id_token, error: null };
+    }
+
+    // If refresh fails, return existing token
+    return { token: currentUser.idToken, error: null };
+  } catch (error: any) {
+    // If refresh fails, return existing token
+    return { token: currentUser.idToken, error: null };
+  }
+};

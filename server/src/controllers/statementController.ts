@@ -27,7 +27,7 @@ export const uploadStatement: Handler = async (req, res) => {
     
     // Create statement with transactions in a transaction
     const statement = await prisma.$transaction(async (tx) => {
-      const newStatement = await tx.cardStatement.create({
+      const newStatement = await tx.statement.create({
         data: {
           orgId,
           provider,
@@ -41,7 +41,7 @@ export const uploadStatement: Handler = async (req, res) => {
       const transactionData = transactions.map(t => ({
         statementId: newStatement.id,
         postedDate: new Date(t.postedDate || t.postDate || t.transactionDate),
-        txnDate: t.transactionDate ? new Date(t.transactionDate) : null,
+        transactionDate: t.transactionDate ? new Date(t.transactionDate) : null,
         merchantRaw: t.merchant,
         merchantNorm: t.merchantNorm || null,
         amountCents: Number.parseInt(String(t.amountCents), 10),
@@ -49,7 +49,7 @@ export const uploadStatement: Handler = async (req, res) => {
         last4: t.last4 || null
       }));
       
-      await tx.cardTransaction.createMany({
+      await tx.statementTransaction.createMany({
         data: transactionData
       });
       
@@ -82,13 +82,13 @@ export const getAllStatements: Handler = async (req, res) => {
       });
     }
     
-    const where: Prisma.CardStatementWhereInput = { orgId };
+    const where: Prisma.StatementWhereInput = { orgId };
     const providerValue = typeof provider === 'string' ? provider : undefined;
     const statementMonthValue = typeof statementMonth === 'string' ? statementMonth : undefined;
     if (providerValue) where.provider = providerValue;
     if (statementMonthValue) where.statementMonth = statementMonthValue;
     
-    const statements = await prisma.cardStatement.findMany({
+    const statements = await prisma.statement.findMany({
       where,
       include: {
         uploadedBy: {
@@ -126,7 +126,7 @@ export const getStatementById: Handler = async (req, res) => {
       });
     }
     
-    const statement = await prisma.cardStatement.findFirst({
+    const statement = await prisma.statement.findFirst({
       where: { id, orgId },
       include: {
         uploadedBy: {
@@ -137,9 +137,6 @@ export const getStatementById: Handler = async (req, res) => {
             matches: {
               include: {
                 expense: {
-                  include: {
-                    receipt: true
-                  }
                 }
               }
             }
@@ -183,7 +180,7 @@ export const getStatementTransactions: Handler = async (req, res) => {
     }
     
     // Verify statement belongs to org
-    const statement = await prisma.cardStatement.findFirst({
+    const statement = await prisma.statement.findFirst({
       where: { id, orgId }
     });
     
@@ -194,7 +191,7 @@ export const getStatementTransactions: Handler = async (req, res) => {
       });
     }
     
-    const where: Prisma.CardTransactionWhereInput = { statementId: id };
+    const where: Prisma.StatementTransactionWhereInput = { statementId: id };
     const merchantValue = typeof merchant === 'string' ? merchant : undefined;
     if (merchantValue) {
       where.OR = [
@@ -203,15 +200,12 @@ export const getStatementTransactions: Handler = async (req, res) => {
       ];
     }
     
-    const transactions = await prisma.cardTransaction.findMany({
+    const transactions = await prisma.statementTransaction.findMany({
       where,
       include: {
         matches: {
           include: {
             expense: {
-              include: {
-                receipt: true
-              }
             }
           }
         }
@@ -254,7 +248,7 @@ export const deleteStatement: Handler = async (req, res) => {
     }
     
     // Verify statement belongs to org
-    const statement = await prisma.cardStatement.findFirst({
+    const statement = await prisma.statement.findFirst({
       where: { id, orgId }
     });
     
@@ -275,12 +269,12 @@ export const deleteStatement: Handler = async (req, res) => {
       });
       
       // Delete transactions
-      await tx.cardTransaction.deleteMany({
+      await tx.statementTransaction.deleteMany({
         where: { statementId: id }
       });
       
       // Delete statement
-      await tx.cardStatement.delete({
+      await tx.statement.delete({
         where: { id }
       });
     });

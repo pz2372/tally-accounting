@@ -1,22 +1,31 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Platform } from 'react-native';
+import React, { useContext } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { Calendar } from 'react-native-calendars';
 import { colors, spacing, borderRadius } from '../styles/theme';
+import { LanguageContext } from '../contexts/LanguageContext';
 
 interface DatePickerModalProps {
   visible: boolean;
   selectedDate: Date;
-  onDateChange: (event: any, date?: Date) => void;
+  onDateChange: (date: Date) => void;
   onClose: () => void;
+  onReset?: () => void;
 }
 
 export default function DatePickerModal({ 
   visible, 
   selectedDate, 
   onDateChange, 
-  onClose 
+  onClose,
+  onReset
 }: DatePickerModalProps) {
+  const { t } = useContext(LanguageContext);
+  
+  const formatDate = (date: Date) => {
+    return date.toISOString().split('T')[0];
+  };
+
   if (!visible) return null;
 
   return (
@@ -32,29 +41,56 @@ export default function DatePickerModal({
         onPress={onClose}
       >
         <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-          <View style={styles.datePickerHeader}>
-            <Text style={styles.datePickerTitle}>Select Date</Text>
-            <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color={colors.textPrimary} />
+          <Calendar
+            current={formatDate(selectedDate)}
+            onDayPress={(day) => {
+              onDateChange(new Date(day.timestamp));
+            }}
+            maxDate={formatDate(new Date())}
+            markedDates={{
+              [formatDate(selectedDate)]: {
+                selected: true,
+                selectedColor: colors.primary,
+                selectedTextColor: colors.surface,
+              }
+            }}
+            theme={{
+              backgroundColor: colors.surface,
+              calendarBackground: colors.surface,
+              textSectionTitleColor: colors.textSecondary,
+              selectedDayBackgroundColor: colors.primary,
+              selectedDayTextColor: colors.surface,
+              todayTextColor: colors.primary,
+              dayTextColor: colors.textPrimary,
+              textDisabledColor: colors.textTertiary,
+              monthTextColor: colors.textPrimary,
+              textMonthFontWeight: '700',
+              textDayFontSize: 16,
+              textMonthFontSize: 18,
+              textDayHeaderFontSize: 14,
+              arrowColor: colors.primary,
+            }}
+          />
+
+          <View style={styles.datePickerActions}>
+            {onReset && (
+              <TouchableOpacity 
+                style={styles.resetButton}
+                onPress={() => {
+                  onReset();
+                  onClose();
+                }}
+              >
+                <Text style={styles.resetButtonText}>{t('datePicker.showAll')}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity 
+              style={styles.doneButton}
+              onPress={onClose}
+            >
+              <Text style={styles.doneButtonText}>{t('common.done')}</Text>
             </TouchableOpacity>
           </View>
-          <DateTimePicker
-            value={selectedDate}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            onChange={onDateChange}
-            maximumDate={new Date()}
-          />
-          {Platform.OS === 'ios' && (
-            <View style={styles.datePickerActions}>
-              <TouchableOpacity 
-                style={styles.doneButton}
-                onPress={onClose}
-              >
-                <Text style={styles.doneButtonText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       </TouchableOpacity>
     </Modal>
@@ -75,20 +111,24 @@ const styles = StyleSheet.create({
     width: '90%',
     maxWidth: 400,
   },
-  datePickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  datePickerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
   datePickerActions: {
     flexDirection: 'row',
     justifyContent: 'center',
+    gap: spacing.md,
     marginTop: spacing.lg,
+  },
+  resetButton: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  resetButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
   },
   doneButton: {
     backgroundColor: colors.primary,

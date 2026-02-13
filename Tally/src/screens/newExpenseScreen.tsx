@@ -1,13 +1,13 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, Alert, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import DatePickerModal from '../components/DatePickerModal';
-import ScanScreen from './scanScreen';
-import { CATEGORIES } from '../components/categories';
+import { CATEGORIES, getCategoryColor } from '../components/categories';
+import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface NewExpenseScreenProps {
   onBack: () => void;
@@ -15,34 +15,41 @@ interface NewExpenseScreenProps {
 
 export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
   const { t } = useContext(LanguageContext);
-  const [vendor, setVendor] = useState('');
+  const [merchant, setMerchant] = useState('');
   const [amount, setAmount] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Select Category');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'Credit Card' | 'Debit Card' | 'Cash'>('Credit Card');
+  const [showPaymentPicker, setShowPaymentPicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [notes, setNotes] = useState('');
-  const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
-  const [showScanScreen, setShowScanScreen] = useState(false);
 
-  const handleTakePhoto = () => {
-    setShowReceiptModal(false);
-    setShowScanScreen(true);
-  };
-  
-  const handleCaptureComplete = (imageUri: string) => {
-    setSelectedReceipt(imageUri);
-    setShowScanScreen(false);
+  const handleTakePhoto = async () => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert(t('newExpense.permissionRequired'), t('newExpense.cameraPermissionMessage'));
+      return;
+    }
+    
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setSelectedReceipt(result.assets[0].uri);
+    }
   };
   
   const handleChooseFromLibrary = async () => {
-    setShowReceiptModal(false);
-    
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (permissionResult.granted === false) {
-      Alert.alert('Permission Required', 'Photo library permission is required');
+      Alert.alert(t('newExpense.permissionRequired'), t('newExpense.libraryPermissionMessage'));
       return;
     }
     
@@ -57,21 +64,39 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
     }
   };
 
+  const handleReceiptPress = () => {
+    Alert.alert(
+      t('newExpense.addReceipt'),
+      t('newExpense.chooseOption'),
+      [
+        {
+          text: t('newExpense.takePhoto'),
+          onPress: handleTakePhoto,
+        },
+        {
+          text: t('newExpense.chooseFromLibrary'),
+          onPress: handleChooseFromLibrary,
+        },
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleSave = () => {
     // TODO: Implement save logic
     onBack();
   };
 
+  const swipeHandlers = useSwipeBack(onBack);
+
   return (
     <>
-      {showScanScreen ? (
-        <ScanScreen 
-          onCancel={() => setShowScanScreen(false)}
-          onSave={(imageUri) => handleCaptureComplete(imageUri)}
-        />
-      ) : (
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.container} {...swipeHandlers}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -81,16 +106,23 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
           <View style={styles.headerRight} />
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Vendor Input */}
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          onScrollBeginDrag={() => {
+            if (showCategoryPicker) setShowCategoryPicker(false);
+            if (showPaymentPicker) setShowPaymentPicker(false);
+          }}
+        >
+          {/* Merchant Input */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('newExpense.vendor')}</Text>
+            <Text style={styles.label}>{t('newExpense.merchant')}</Text>
             <TextInput
               style={styles.input}
-              placeholder={t('newExpense.vendorPlaceholder')}
+              placeholder={t('newExpense.merchantPlaceholder')}
               placeholderTextColor={colors.textSecondary}
-              value={vendor}
-              onChangeText={setVendor}
+              value={merchant}
+              onChangeText={setMerchant}
             />
           </View>
 
@@ -101,7 +133,7 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
               <Text style={styles.currencySymbol}>$</Text>
               <TextInput
                 style={styles.amountInput}
-                placeholder="0.00"
+                placeholder={t('newExpense.amountPlaceholder')}
                 placeholderTextColor={colors.textSecondary}
                 value={amount}
                 onChangeText={setAmount}
@@ -111,39 +143,157 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
           </View>
 
           {/* Category Picker */}
-          <View style={styles.inputGroup}>
+          <View style={[styles.inputGroup, showCategoryPicker && styles.inputGroupActive]}>
             <Text style={styles.label}>{t('newExpense.category')}</Text>
             <TouchableOpacity
               style={styles.pickerButton}
               onPress={() => setShowCategoryPicker(!showCategoryPicker)}
             >
-              <Text style={[
-                styles.pickerButtonText,
-                selectedCategory === 'Select Category' && styles.pickerPlaceholder
-              ]}>
-                {selectedCategory}
-              </Text>
+              <View style={styles.pickerButtonContent}>
+                {selectedCategory && (
+                  <View style={[
+                    styles.categoryColorDot,
+                    { backgroundColor: getCategoryColor(selectedCategory) }
+                  ]} />
+                )}
+                <Text style={[
+                  styles.pickerButtonText,
+                  !selectedCategory && styles.pickerPlaceholder
+                ]}>
+                  {selectedCategory || t('newExpense.selectCategory')}
+                </Text>
+              </View>
               <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
 
             {showCategoryPicker && (
-              <View style={styles.pickerDropdown}>
-                {CATEGORIES.map((category) => (
-                  <TouchableOpacity
-                    key={category}
-                    style={styles.pickerItem}
-                    onPress={() => {
-                      setSelectedCategory(category);
-                      setShowCategoryPicker(false);
-                    }}
-                  >
-                    <Text style={styles.pickerItemText}>{category}</Text>
-                    {selectedCategory === category && (
-                      <Ionicons name="checkmark" size={20} color={colors.primary} />
-                    )}
-                  </TouchableOpacity>
-                ))}
+              <Pressable 
+                style={styles.pickerDropdown}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <ScrollView style={styles.pickerDropdownScroll} nestedScrollEnabled>
+                  {CATEGORIES.map((category) => (
+                    <TouchableOpacity
+                      key={category}
+                      style={[
+                        styles.pickerItem,
+                        selectedCategory === category && styles.pickerItemSelected
+                      ]}
+                      onPress={() => {
+                        setSelectedCategory(category);
+                        setShowCategoryPicker(false);
+                      }}
+                    >
+                      <View style={styles.pickerItemContent}>
+                        <View style={[
+                          styles.categoryColorDot,
+                          { backgroundColor: getCategoryColor(category) }
+                        ]} />
+                        <Text style={[
+                          styles.pickerItemText,
+                          selectedCategory === category && styles.pickerItemTextSelected
+                        ]}>{category}</Text>
+                      </View>
+                      {selectedCategory === category && (
+                        <Ionicons name="checkmark" size={18} color={colors.primary} />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Payment Method Picker */}
+          <View style={[styles.inputGroup, showPaymentPicker && styles.inputGroupActive]}>
+            <Text style={styles.label}>{t('newExpense.paymentMethod')}</Text>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setShowPaymentPicker(!showPaymentPicker)}
+            >
+              <View style={styles.pickerButtonContent}>
+                <Ionicons 
+                  name={paymentMethod === 'Cash' ? 'cash-outline' : 'card-outline'} 
+                  size={20} 
+                  color={colors.textPrimary}
+                  style={{ marginRight: spacing.xs }}
+                />
+                <Text style={styles.pickerButtonText}>
+                  {t(`newExpense.${paymentMethod === 'Credit Card' ? 'creditCard' : paymentMethod === 'Debit Card' ? 'debitCard' : 'cash'}`)}
+                </Text>
               </View>
+              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            {showPaymentPicker && (
+              <Pressable 
+                style={styles.pickerDropdown}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.pickerItem,
+                    paymentMethod === 'Credit Card' && styles.pickerItemSelected
+                  ]}
+                  onPress={() => {
+                    setPaymentMethod('Credit Card');
+                    setShowPaymentPicker(false);
+                  }}
+                >
+                  <View style={styles.pickerItemContent}>
+                    <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                    <Text style={[
+                      styles.pickerItemText,
+                      paymentMethod === 'Credit Card' && styles.pickerItemTextSelected
+                    ]}>{t('newExpense.creditCard')}</Text>
+                  </View>
+                  {paymentMethod === 'Credit Card' && (
+                    <Ionicons name="checkmark" size={18} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.pickerItem,
+                    paymentMethod === 'Debit Card' && styles.pickerItemSelected
+                  ]}
+                  onPress={() => {
+                    setPaymentMethod('Debit Card');
+                    setShowPaymentPicker(false);
+                  }}
+                >
+                  <View style={styles.pickerItemContent}>
+                    <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                    <Text style={[
+                      styles.pickerItemText,
+                      paymentMethod === 'Debit Card' && styles.pickerItemTextSelected
+                    ]}>{t('newExpense.debitCard')}</Text>
+                  </View>
+                  {paymentMethod === 'Debit Card' && (
+                    <Ionicons name="checkmark" size={18} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.pickerItem,
+                    paymentMethod === 'Cash' && styles.pickerItemSelected
+                  ]}
+                  onPress={() => {
+                    setPaymentMethod('Cash');
+                    setShowPaymentPicker(false);
+                  }}
+                >
+                  <View style={styles.pickerItemContent}>
+                    <Ionicons name="cash-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                    <Text style={[
+                      styles.pickerItemText,
+                      paymentMethod === 'Cash' && styles.pickerItemTextSelected
+                    ]}>{t('newExpense.cash')}</Text>
+                  </View>
+                  {paymentMethod === 'Cash' && (
+                    <Ionicons name="checkmark" size={18} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              </Pressable>
             )}
           </View>
 
@@ -157,8 +307,19 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
               <Text style={styles.pickerButtonText}>
                 {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </Text>
-              <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
+          </View>
+
+          {/* Notes Input */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>{t('newExpense.notes')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('newExpense.notesPlaceholder')}
+              placeholderTextColor={colors.textSecondary}
+              value={notes}
+              onChangeText={setNotes}
+            />
           </View>
 
           {/* Receipt Upload */}
@@ -166,37 +327,29 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
             <Text style={styles.label}>{t('newExpense.receipt')}</Text>
             <TouchableOpacity 
               style={styles.uploadButton}
-              onPress={() => setShowReceiptModal(true)}
+              onPress={handleReceiptPress}
             >
               <Ionicons name="camera-outline" size={24} color={colors.primary} />
               <Text style={styles.uploadButtonText}>
-                {selectedReceipt ? 'Change Receipt' : t('newExpense.uploadReceipt')}
+                {selectedReceipt ? t('newExpense.changeReceipt') : t('newExpense.uploadReceipt')}
               </Text>
             </TouchableOpacity>
             {selectedReceipt && (
-              <View style={styles.receiptPreview}>
-                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
-                <Text style={styles.receiptPreviewText}>Receipt attached</Text>
-                <TouchableOpacity onPress={() => setSelectedReceipt(null)}>
-                  <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+              <View style={styles.receiptSection}>
+                <Text style={styles.receiptSectionTitle}>{t('newExpense.receipt')}</Text>
+                <Image
+                  source={{ uri: selectedReceipt }}
+                  style={styles.receiptImage}
+                  resizeMode="contain"
+                />
+                <TouchableOpacity 
+                  style={styles.removeReceiptButton}
+                  onPress={() => setSelectedReceipt(null)}
+                >
+                  <Ionicons name="close-circle" size={24} color={colors.surface} />
                 </TouchableOpacity>
               </View>
             )}
-          </View>
-
-          {/* Notes Input */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('newExpense.notes')}</Text>
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              placeholder={t('newExpense.notesPlaceholder')}
-              placeholderTextColor={colors.textSecondary}
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
           </View>
         </ScrollView>
 
@@ -212,64 +365,13 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
           <DatePickerModal
             visible={showDatePicker}
             selectedDate={selectedDate}
-            onDateChange={(event, date) => {
-              if (date) {
-                setSelectedDate(date);
-              }
-            }}
+            onDateChange={(date) => setSelectedDate(date)}
             onClose={() => setShowDatePicker(false)}
           />
         )}
 
-        {/* Receipt Options Modal */}
-        <Modal
-          visible={showReceiptModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowReceiptModal(false)}
-        >
-          <TouchableOpacity 
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowReceiptModal(false)}
-          >
-            <View style={styles.receiptModalContent} onStartShouldSetResponder={() => true}>
-              <Text style={styles.receiptModalTitle}>{t('newExpense.uploadReceipt')}</Text>
-              
-              <TouchableOpacity 
-                style={styles.receiptOption}
-                onPress={handleTakePhoto}
-              >
-                <View style={styles.receiptOptionIcon}>
-                  <Ionicons name="camera" size={24} color={colors.primary} />
-                </View>
-                <Text style={styles.receiptOptionText}>{t('newExpense.takePhoto')}</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.receiptOption}
-                onPress={handleChooseFromLibrary}
-              >
-                <View style={styles.receiptOptionIcon}>
-                  <Ionicons name="images" size={24} color={colors.primary} />
-                </View>
-                <Text style={styles.receiptOptionText}>{t('newExpense.chooseFromLibrary')}</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => setShowReceiptModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-          </View>
+        </View>
         </SafeAreaView>
-      )}
     </>
   );
 }
@@ -288,9 +390,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingVertical: spacing.lg
   },
   backButton: {
     padding: spacing.xs,
@@ -310,6 +410,11 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: spacing.xl,
+    position: 'relative',
+    zIndex: 1,
+  },
+  inputGroupActive: {
+    zIndex: 1000,
   },
   label: {
     fontSize: 14,
@@ -360,6 +465,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  pickerButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   pickerButtonText: {
     fontSize: 15,
     color: colors.textPrimary,
@@ -368,16 +478,25 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   pickerDropdown: {
-    marginTop: spacing.sm,
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: spacing.xs,
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    elevation: 4,
+    maxHeight: 300,
+    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
+    overflow: 'hidden',
+  },
+  pickerDropdownScroll: {
+    maxHeight: 300,
   },
   pickerItem: {
     flexDirection: 'row',
@@ -387,10 +506,28 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  pickerItemSelected: {
+    backgroundColor: colors.background,
+  },
+  pickerItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   pickerItemText: {
     fontSize: 15,
     color: colors.textPrimary,
+  },
+  pickerItemTextSelected: {
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  categoryColorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   uploadButton: {
     flexDirection: 'row',
@@ -409,10 +546,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
-  notesInput: {
-    minHeight: 100,
-    paddingTop: spacing.md,
-  },
   footer: {
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
@@ -423,6 +556,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: borderRadius.lg,
     paddingVertical: spacing.lg,
+    marginBottom: spacing.lg,
     alignItems: 'center',
   },
   saveButtonText: {
@@ -430,80 +564,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.surface,
   },
-  receiptPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginTop: spacing.sm,
-    gap: spacing.sm,
-  },
-  receiptPreviewText: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  receiptModalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
-    padding: spacing.xl,
-    width: '100%',
-    maxWidth: 400,
-  },
-  receiptModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: spacing.xl,
-    textAlign: 'center',
-  },
-  receiptOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    padding: spacing.lg,
-    borderRadius: borderRadius.lg,
-    marginBottom: spacing.md,
-    gap: spacing.md,
-  },
-  receiptOptionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  receiptOptionText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  cancelButton: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.lg,
-    borderRadius: borderRadius.lg,
+  receiptSection: {
     marginTop: spacing.md,
-    alignItems: 'center',
+    position: 'relative',
   },
-  cancelButtonText: {
-    fontSize: 16,
+  receiptSectionTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
+    marginBottom: spacing.md,
+  },
+  receiptImage: {
+    width: '100%',
+    height: 300,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  removeReceiptButton: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    padding: spacing.xs,
   },
 });
