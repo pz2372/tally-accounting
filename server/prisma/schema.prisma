@@ -127,6 +127,7 @@ model Organization {
   recurringCharges RecurringCharge[]
   recurringChargeInstances RecurringChargeInstance[]
   supportTickets SupportTicket[]
+  plaidItems       PlaidItem[]
 
   @@index([billingOwnerId])
 }
@@ -440,4 +441,104 @@ model SupportTicket {
 
   @@index([userId])
   @@index([orgId])
+}
+
+model PlaidItem {
+  id              String   @id @default(cuid())
+  orgId           String
+  accessToken     String
+  itemId          String   @unique
+  institutionId   String?
+  institutionName String?
+  syncCursor      String?  // cursor for /transactions/sync pagination
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  org      Organization  @relation(fields: [orgId], references: [id])
+  accounts PlaidAccount[]
+
+  @@index([orgId])
+}
+
+model PlaidAccount {
+  id               String   @id @default(cuid())
+  plaidItemId      String
+  accountId        String   @unique
+  name             String
+  officialName     String?
+  type             String
+  subtype          String?
+  mask             String?
+  currentBalance   Float?
+  availableBalance Float?
+  currency         String   @default("USD")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  plaidItem    PlaidItem       @relation(fields: [plaidItemId], references: [id], onDelete: Cascade)
+  transactions CardTransaction[]
+
+  @@index([plaidItemId])
+}
+
+model CardTransaction {
+  id                           String   @id @default(cuid())
+  orgId                        String
+
+  // Plaid identifiers
+  plaidTransactionId           String   @unique  // transaction_id from Plaid
+  plaidAccountId               String            // FK → PlaidAccount.accountId
+  pendingTransactionId         String?           // set when this posted txn replaces a pending one
+
+  // Core financials
+  // Plaid convention: positive = money out (debit), negative = money in (credit)
+  amount                       Float
+  isoCurrencyCode              String?
+  unofficialCurrencyCode       String?
+
+  // Dates
+  date                         DateTime          // posted date
+  authorizedDate               DateTime?         // when card was swiped/authorized
+  authorizedDatetime           DateTime?         // full datetime if available
+  datetime                     DateTime?         // posted datetime if available
+
+  // Merchant / description
+  name                         String            // raw transaction name from Plaid
+  merchantName                 String?           // normalized merchant name
+  merchantEntityId             String?           // Plaid's stable merchant entity ID
+  logoUrl                      String?
+  website                      String?
+
+  // Payment context
+  paymentChannel               String?           // "in_store" | "online" | "other"
+  transactionCode              String?           // e.g. "cash", "atm"
+  pending                      Boolean  @default(false)
+
+  // Plaid legacy categories
+  categoryId                   String?
+  category                     Json?             // String[] from Plaid
+
+  // Plaid personal finance category (newer)
+  personalFinanceCategory      String?           // e.g. "FOOD_AND_DRINK"
+  personalFinanceCategoryDetail String?          // e.g. "FOOD_AND_DRINK_RESTAURANTS"
+  personalFinanceCategoryIconUrl String?
+
+  // Merchant location
+  address                      String?
+  city                         String?
+  region                       String?           // state/province
+  postalCode                   String?
+  country                      String?
+  lat                          Float?
+  lon                          Float?
+
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  plaidAccount PlaidAccount @relation(fields: [plaidAccountId], references: [accountId])
+
+  @@index([orgId, date])
+  @@index([orgId, pending])
+  @@index([plaidAccountId, date])
+  @@index([pendingTransactionId])
 }
