@@ -1,0 +1,208 @@
+.register-page {
+  padding: 120px 0 80px;
+  min-height: 100vh;
+  background: transparent;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+}
+
+.register-page::before {
+  content: '';
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(ellipse, rgba(99, 102, 241, 0.1), transparent 70%);
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.register-container {
+  width: 100%;
+  max-width: 500px;
+  padding: 0 24px;
+}
+
+.register-card {
+  padding: 40px;
+}
+
+.register-card:hover {
+  transform: none;
+}
+
+/* Steps */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 32px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+
+.step.active {
+  opacity: 1;
+}
+
+.step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.step.active .step-num {
+  background: linear-gradient(135deg, #6366f1, #818cf8);
+  color: white;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.3);
+}
+
+.step-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.step.active .step-label {
+  color: white;
+}
+
+.step-line {
+  width: 40px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 12px;
+}
+
+/* Titles */
+.register-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 8px;
+  color: white;
+}
+
+.register-subtitle {
+  text-align: center;
+  color: var(--text-light);
+  font-size: 0.9rem;
+  margin-bottom: 28px;
+}
+
+/* Buttons */
+.register-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.register-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.register-actions .btn:last-child {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Error */
+.api-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+/* Success */
+.success-card {
+  text-align: center;
+  padding: 48px 40px;
+}
+
+.success-card:hover {
+  transform: none;
+}
+
+.success-icon {
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.success-card h2 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin-bottom: 12px;
+  color: white;
+}
+
+.success-card p {
+  color: var(--text-light);
+  font-size: 0.95rem;
+  margin-bottom: 24px;
+}
+
+.success-details {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+
+.success-details strong {
+  color: var(--text-light);
+}
+
+/* Spinner */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@media (max-width: 540px) {
+  .register-card {
+    padding: 28px 20px;
+  }
+
+  .step-label {
+    display: none;
+  }
+}

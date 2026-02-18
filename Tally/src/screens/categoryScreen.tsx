@@ -19,11 +19,15 @@ import { getCachedData, getOrgCachedData } from '../services/cacheService';
 import { CATEGORIES, CATEGORY_CONFIG } from '../components/categories';
 
 interface ExpenseItem {
+  id: string;
   date: string;
   day: number;
   vendor: string;
   description: string;
   amount: number;
+  paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH';
+  orgCategoryId?: string;
+  notes?: string;
 }
 
 interface CategoryData {
@@ -145,11 +149,15 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
           const amountDollars = expense.amountCents / 100;
 
           categoryData.expenses.push({
+            id: expense.id,
             date: expenseDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
             day: expenseDate.getDate(),
             vendor: expense.merchant || 'Unknown',
             description: expense.notes || expense.categoryNameSnapshot || '',
-            amount: amountDollars
+            amount: amountDollars,
+            paymentMethod: expense.paymentMethod,
+            orgCategoryId: expense.orgCategoryId,
+            notes: expense.notes,
           });
 
           categoryData.amount += amountDollars;
@@ -208,10 +216,6 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
             <Text style={styles.title}>{t('category.title')}</Text>
             <Text style={styles.subtitle}>{t('category.subtitle')}</Text>
           </View>
-          <TouchableOpacity style={styles.compareButton}>
-            <Text style={styles.compareIcon}>⇄</Text>
-            <Text style={styles.compareText}>{t('category.compare')}</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Month Selector */}
@@ -318,13 +322,16 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
                           style={styles.expenseItem}
                           activeOpacity={0.7}
                           onPress={() => onExpensePress && onExpensePress({
-                            id: `${category.name}-${expIndex}`,
+                            id: expense.id,
                             date: expense.date,
                             day: expense.day,
                             vendor: expense.vendor,
                             category: category.name,
                             status: 'Approved' as const,
                             amount: expense.amount,
+                            paymentMethod: expense.paymentMethod,
+                            orgCategoryId: expense.orgCategoryId,
+                            notes: expense.notes,
                           })}
                         >
                           <View style={styles.expenseDate}>

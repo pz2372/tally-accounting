@@ -24,6 +24,9 @@ interface Expense {
   category: string;
   status: 'Approved' | 'Pending';
   amount: number;
+  paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH';
+  orgCategoryId?: string;
+  notes?: string;
 }
 
 export default function App() {

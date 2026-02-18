@@ -38,6 +38,7 @@ const translations: Record<string, Record<string, string>> = {
     'common.success': 'Success',
     'common.ok': 'OK',
     'common.validationError': 'Validation Error',
+    'common.error': 'Error',
     
     // Months
     'month.january': 'January',
@@ -74,13 +75,13 @@ const translations: Record<string, Record<string, string>> = {
     'home.recurringSubtitle': 'Manage recurring expenses',
     'home.salesReport': 'Sales Report',
     'home.salesReportSubtitle': 'View sales analytics',
-    'home.sales': 'Sales',
+    'home.sales': 'Report',
     'home.roles': 'Roles',
     'home.recentActivity': 'Recent Activity',
     'home.viewAll': 'View All',
     'home.receiptTracking': 'Receipt Tracking',
     'home.matched': 'Matched',
-    'home.unmatchedLabel': 'Unmatched',
+    'home.unmatchedLabel': 'Missing Receipt',
     
     // Settings
     'settings.title': 'Settings',
@@ -113,7 +114,7 @@ const translations: Record<string, Record<string, string>> = {
     'categories.transportation': 'Transportation',
     
     // Category Screen
-    'category.title': 'Monthly Report',
+    'category.title': 'Category',
     'category.subtitle': 'Expense Breakdown',
     'category.compare': 'Compare',
     'category.totalExpenses': 'Total Expenses',
@@ -147,6 +148,16 @@ const translations: Record<string, Record<string, string>> = {
     'details.notes': 'Notes',
     'details.note': 'Note',
     'details.notePlaceholder': 'Enter description',
+    'details.paymentMethod': 'Payment Method',
+    'details.creditCard': 'Credit Card',
+    'details.debitCard': 'Debit Card',
+    'details.cash': 'Cash',
+    'details.deleteSuccess': 'Expense deleted successfully',
+    'details.deleteError': 'Failed to delete expense',
+    'details.editSuccess': 'Expense updated successfully',
+    'details.editError': 'Failed to update expense',
+    'details.deleting': 'Deleting...',
+    'details.saving': 'Saving...',
     
     // New Expense Screen
     'newExpense.title': 'New Expense',
@@ -421,6 +432,7 @@ const translations: Record<string, Record<string, string>> = {
     'common.success': 'Éxito',
     'common.ok': 'OK',
     'common.validationError': 'Error de Validación',
+    'common.error': 'Error',
     
     // Months
     'month.january': 'Enero',
@@ -457,13 +469,13 @@ const translations: Record<string, Record<string, string>> = {
     'home.recurringSubtitle': 'Gestionar gastos recurrentes',
     'home.salesReport': 'Informe de Ventas',
     'home.salesReportSubtitle': 'Ver análisis de ventas',
-    'home.sales': 'Ventas',
+    'home.sales': 'Informe',
     'home.roles': 'Roles',
     'home.recentActivity': 'Actividad Reciente',
     'home.viewAll': 'Ver Todo',
     'home.receiptTracking': 'Seguimiento de Recibos',
     'home.matched': 'Coincidentes',
-    'home.unmatchedLabel': 'Sin Coincidencia',
+    'home.unmatchedLabel': 'Recibo Faltante',
     
     // Settings
     'settings.title': 'Configuración',
@@ -496,7 +508,7 @@ const translations: Record<string, Record<string, string>> = {
     'categories.transportation': 'Transporte',
     
     // Category Screen
-    'category.title': 'Informe Mensual',
+    'category.title': 'Categoría',
     'category.subtitle': 'Desglose de Gastos',
     'category.compare': 'Comparar',
     'category.totalExpenses': 'Gastos Totales',
@@ -530,6 +542,16 @@ const translations: Record<string, Record<string, string>> = {
     'details.notes': 'Notas',
     'details.note': 'Nota',
     'details.notePlaceholder': 'Ingrese descripción',
+    'details.paymentMethod': 'Método de Pago',
+    'details.creditCard': 'Tarjeta de Crédito',
+    'details.debitCard': 'Tarjeta de Débito',
+    'details.cash': 'Efectivo',
+    'details.deleteSuccess': 'Gasto eliminado exitosamente',
+    'details.deleteError': 'Error al eliminar el gasto',
+    'details.editSuccess': 'Gasto actualizado exitosamente',
+    'details.editError': 'Error al actualizar el gasto',
+    'details.deleting': 'Eliminando...',
+    'details.saving': 'Guardando...',
     
     // New Expense Screen
     'newExpense.title': 'Nuevo Gasto',
@@ -729,6 +751,7 @@ const translations: Record<string, Record<string, string>> = {
     'common.success': '成功',
     'common.ok': '确定',
     'common.validationError': '验证错误',
+    'common.error': '错误',
     
     // Months
     'month.january': '一月',
@@ -765,13 +788,13 @@ const translations: Record<string, Record<string, string>> = {
     'home.recurringSubtitle': '管理定期支出',
     'home.salesReport': '销售报告',
     'home.salesReportSubtitle': '查看销售分析',
-    'home.sales': '销售',
+    'home.sales': '报告',
     'home.roles': '角色',
     'home.recentActivity': '最近活动',
     'home.viewAll': '查看全部',
     'home.receiptTracking': '收据跟踪',
     'home.matched': '已匹配',
-    'home.unmatchedLabel': '未匹配',
+    'home.unmatchedLabel': '缺少收据',
     
     // Settings
     'settings.title': '设置',
@@ -804,7 +827,7 @@ const translations: Record<string, Record<string, string>> = {
     'categories.transportation': '运输',
     
     // Category Screen
-    'category.title': '月度报告',
+    'category.title': '类别',
     'category.subtitle': '支出明细',
     'category.compare': '对比',
     'category.totalExpenses': '总支出',
@@ -835,6 +858,16 @@ const translations: Record<string, Record<string, string>> = {
     'details.notes': '备注',
     'details.note': '备注',
     'details.notePlaceholder': '输入描述',
+    'details.paymentMethod': '支付方式',
+    'details.creditCard': '信用卡',
+    'details.debitCard': '借记卡',
+    'details.cash': '现金',
+    'details.deleteSuccess': '支出已成功删除',
+    'details.deleteError': '删除支出失败',
+    'details.editSuccess': '支出已成功更新',
+    'details.editError': '更新支出失败',
+    'details.deleting': '删除中...',
+    'details.saving': '保存中...',
     
     // New Expense Screen
     'newExpense.title': '新支出',

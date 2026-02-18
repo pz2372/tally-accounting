@@ -21,6 +21,7 @@ import salesReportRoutes from './src/routes/salesReportRoutes';
 import recurringChargeRoutes from './src/routes/recurringChargeRoutes';
 import uploadRoutes from './src/routes/uploadRoutes';
 import supportRoutes from './src/routes/supportRoutes';
+import plaidRoutes from './src/routes/plaidRoutes';
 
 // Middleware
 app.use(cors());
@@ -39,6 +40,7 @@ app.use('/api/organizations', organizationRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/plaid', plaidRoutes);
 
 // Error handling middleware
 app.use((err: Error, req, res, next) => {

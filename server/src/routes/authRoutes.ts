@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as authController from '../controllers/authController';
 import * as userController from '../controllers/userController';
+import * as verificationController from '../controllers/verificationController';
 import { verifyToken } from '../middleware/auth';
 import { requireAdmin } from '../middleware/roleAuth';
 
@@ -20,6 +21,10 @@ router.get('/me', userController.getCurrentUser);
 
 // POST /api/auth/token - Create custom token
 router.post('/token', authController.createCustomToken);
+
+// Email verification codes (for sensitive actions like Connect Cards)
+router.post('/send-verification-code', verificationController.sendCode);
+router.post('/verify-code', verificationController.verifyCode);
 
 // PUT /api/auth/profile - Update user profile
 router.put('/profile', userController.updateProfile);

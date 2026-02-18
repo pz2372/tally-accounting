@@ -346,7 +346,7 @@ export default function HomeScreen({
               <View style={styles.overviewStatRight}>
                 <View style={styles.overviewStatRightItem}>
                   <Text style={styles.overviewStatLabel}>{capitalize(t('home.expenses'))}</Text>
-                  <Text style={styles.overviewStatValue}>${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
+                  <Text style={styles.overviewStatValueLarge}>${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
                 </View>
               </View>
             </View>

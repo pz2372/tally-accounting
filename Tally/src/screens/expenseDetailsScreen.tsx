@@ -1,11 +1,14 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { CATEGORIES, getCategoryColor as getColorFromCategories } from '../components/categories';
+import { createAuthenticatedAxios } from '../services/authService';
+import { CACHE_KEYS } from '../services/cacheService';
 import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
@@ -19,8 +22,12 @@ interface ExpenseDetailsScreenProps {
         status: 'Approved' | 'Pending';
         amount: number;
         paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH';
+        orgCategoryId?: string;
+        notes?: string;
     };
     onBack: () => void;
+    onExpenseDeleted?: () => void;
+    onExpenseUpdated?: () => void;
 }
 
 const getCategoryColor = (category: string): string => {
@@ -42,7 +49,7 @@ const getCategoryColor = (category: string): string => {
     }
 };
 
-export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetailsScreenProps) {
+export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted, onExpenseUpdated }: ExpenseDetailsScreenProps) {
     const { t } = useContext(LanguageContext);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -50,10 +57,16 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
     const [showPaymentPicker, setShowPaymentPicker] = useState(false);
     const [editCategory, setEditCategory] = useState(expense.category);
     const [editPaymentMethod, setEditPaymentMethod] = useState<'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'>(expense.paymentMethod || 'CREDIT_CARD');
-    const [editDescription, setEditDescription] = useState('Monthly Subscription');
+    const [editDescription, setEditDescription] = useState(expense.notes || '');
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
     const [showScanScreen, setShowScanScreen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const hasChanges = editCategory !== expense.category ||
+        editPaymentMethod !== (expense.paymentMethod || 'CREDIT_CARD') ||
+        editDescription !== (expense.notes || '');
 
     const formatDate = (dateStr: string, day: number): string => {
         const monthKeys = ['january', 'february', 'march', 'april', 'may', 'june',
@@ -66,13 +79,125 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
     const getPaymentMethodDisplay = (method: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | undefined): { label: string; icon: string } => {
         switch (method) {
             case 'CREDIT_CARD':
-                return { label: 'Credit Card', icon: 'card-outline' };
+                return { label: t('details.creditCard'), icon: 'card-outline' };
             case 'DEBIT_CARD':
-                return { label: 'Debit Card', icon: 'card-outline' };
+                return { label: t('details.debitCard'), icon: 'card-outline' };
             case 'CASH':
-                return { label: 'Cash', icon: 'cash-outline' };
+                return { label: t('details.cash'), icon: 'cash-outline' };
             default:
-                return { label: 'Credit Card', icon: 'card-outline' };
+                return { label: t('details.creditCard'), icon: 'card-outline' };
+        }
+    };
+
+    const getOrgId = async (): Promise<string | null> => {
+        try {
+            const userStr = await AsyncStorage.getItem('@current_user');
+            if (!userStr) return null;
+            const user = JSON.parse(userStr);
+            return user.organizations?.[0]?.id || null;
+        } catch {
+            return null;
+        }
+    };
+
+    const updateExpenseCache = async (orgId: string, updater: (expenses: any[]) => any[]) => {
+        const key = `${CACHE_KEYS.ORG_EXPENSES}${orgId}`;
+        const raw = await AsyncStorage.getItem(key);
+        if (!raw) return;
+        const expenses = JSON.parse(raw);
+        const updated = updater(expenses);
+        await AsyncStorage.setItem(key, JSON.stringify(updated));
+    };
+
+    const handleDelete = async () => {
+        try {
+            setIsDeleting(true);
+            const orgId = await getOrgId();
+            if (!orgId) throw new Error('No org');
+
+            const api = await createAuthenticatedAxios();
+            await api.delete(`/api/expenses/${expense.id}`, {
+                headers: { 'x-org-id': orgId }
+            });
+
+            // Remove from cache
+            await updateExpenseCache(orgId, (expenses) =>
+                expenses.filter((e: any) => e.id !== expense.id)
+            );
+
+            setShowDeleteModal(false);
+            Alert.alert(t('common.success'), t('details.deleteSuccess'));
+            onExpenseDeleted?.();
+            onBack();
+        } catch (error) {
+            console.error('Delete expense error:', error);
+            Alert.alert(t('common.error') || 'Error', t('details.deleteError'));
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const handleSaveEdit = async () => {
+        try {
+            setIsSaving(true);
+            const orgId = await getOrgId();
+            if (!orgId) throw new Error('No org');
+
+            const api = await createAuthenticatedAxios();
+            const updatePayload: any = {
+                paymentMethod: editPaymentMethod,
+                notes: editDescription,
+            };
+
+            // If category changed, find the matching orgCategory
+            if (editCategory !== expense.category) {
+                // Load org categories from cache to find the orgCategoryId
+                const orgCatsRaw = await AsyncStorage.getItem(`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`);
+                if (orgCatsRaw) {
+                    const orgCats = JSON.parse(orgCatsRaw);
+                    // Find org category whose preset name or custom name matches
+                    const matchingOrgCat = orgCats.find((oc: any) => {
+                        const name = oc.customName || oc.preset?.name;
+                        return name === editCategory;
+                    });
+                    if (matchingOrgCat) {
+                        updatePayload.orgCategoryId = matchingOrgCat.id;
+                    }
+                }
+            }
+
+            const response = await api.put(`/api/expenses/${expense.id}`, updatePayload, {
+                headers: { 'x-org-id': orgId }
+            });
+
+            // Update cache
+            if (response.data.success) {
+                await updateExpenseCache(orgId, (expenses) =>
+                    expenses.map((e: any) => {
+                        if (e.id !== expense.id) return e;
+                        return {
+                            ...e,
+                            paymentMethod: editPaymentMethod,
+                            notes: editDescription,
+                            ...(response.data.expense?.orgCategoryId && {
+                                orgCategoryId: response.data.expense.orgCategoryId,
+                                categoryNameSnapshot: response.data.expense.categoryNameSnapshot,
+                            }),
+                        };
+                    })
+                );
+            }
+
+            setShowEditModal(false);
+            setShowCategoryPicker(false);
+            setShowPaymentPicker(false);
+            Alert.alert(t('common.success'), t('details.editSuccess'));
+            onExpenseUpdated?.();
+        } catch (error) {
+            console.error('Edit expense error:', error);
+            Alert.alert(t('common.error') || 'Error', t('details.editError'));
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -162,7 +287,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                         </View>
 
                         
-                        <Text style={styles.description}>Monthly Subscription</Text>
+                        <Text style={styles.description}>{expense.notes || ''}</Text>
                                                 <Text style={styles.expenseDate}>{formatDate(expense.date, expense.day)}</Text>
                     </View>
 
@@ -216,13 +341,11 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                                     <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity 
-                                    style={styles.modalDeleteButton}
-                                    onPress={() => {
-                                        setShowDeleteModal(false);
-                                        // Handle delete logic here
-                                    }}
+                                    style={[styles.modalDeleteButton, isDeleting && { opacity: 0.6 }]}
+                                    onPress={handleDelete}
+                                    disabled={isDeleting}
                                 >
-                                    <Text style={styles.modalDeleteText}>{t('common.delete')}</Text>
+                                    <Text style={styles.modalDeleteText}>{isDeleting ? t('details.deleting') : t('common.delete')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -311,7 +434,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
 
                             {/* Payment Method Picker */}
                             <View style={[styles.inputGroup, showPaymentPicker && styles.inputGroupActive]}>
-                                <Text style={styles.inputLabel}>Payment Method</Text>
+                                <Text style={styles.inputLabel}>{t('details.paymentMethod')}</Text>
                                 <TouchableOpacity
                                     style={styles.categoryPickerButton}
                                     onPress={() => setShowPaymentPicker(!showPaymentPicker)}
@@ -350,7 +473,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                                                 <Text style={[
                                                     styles.categoryDropdownItemText,
                                                     editPaymentMethod === 'CREDIT_CARD' && styles.categoryDropdownItemTextSelected
-                                                ]}>Credit Card</Text>
+                                                ]}>{t('details.creditCard')}</Text>
                                             </View>
                                             {editPaymentMethod === 'CREDIT_CARD' && (
                                                 <Ionicons name="checkmark" size={18} color={colors.primary} />
@@ -371,7 +494,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                                                 <Text style={[
                                                     styles.categoryDropdownItemText,
                                                     editPaymentMethod === 'DEBIT_CARD' && styles.categoryDropdownItemTextSelected
-                                                ]}>Debit Card</Text>
+                                                ]}>{t('details.debitCard')}</Text>
                                             </View>
                                             {editPaymentMethod === 'DEBIT_CARD' && (
                                                 <Ionicons name="checkmark" size={18} color={colors.primary} />
@@ -392,7 +515,7 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                                                 <Text style={[
                                                     styles.categoryDropdownItemText,
                                                     editPaymentMethod === 'CASH' && styles.categoryDropdownItemTextSelected
-                                                ]}>Cash</Text>
+                                                ]}>{t('details.cash')}</Text>
                                             </View>
                                             {editPaymentMethod === 'CASH' && (
                                                 <Ionicons name="checkmark" size={18} color={colors.primary} />
@@ -413,15 +536,11 @@ export default function ExpenseDetailsScreen({ expense, onBack }: ExpenseDetails
                             </View>
 
                             <TouchableOpacity 
-                                style={styles.saveButton}
-                                onPress={() => {
-                                    setShowEditModal(false);
-                                    setShowCategoryPicker(false);
-                                    setShowPaymentPicker(false);
-                                    // Handle save logic here
-                                }}
+                                style={[styles.saveButton, (isSaving || !hasChanges) && { opacity: 0.6 }]}
+                                onPress={handleSaveEdit}
+                                disabled={isSaving || !hasChanges}
                             >
-                                <Text style={styles.saveButtonText}>{t('common.saveChanges')}</Text>
+                                <Text style={styles.saveButtonText}>{isSaving ? t('details.saving') : t('common.saveChanges')}</Text>
                             </TouchableOpacity>
                         </Pressable>
                     </View>

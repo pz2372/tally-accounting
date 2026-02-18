@@ -20,7 +20,7 @@ export const getAllExpenses: Handler = async (req, res) => {
     
     const { startDate, endDate, categoryId, minAmount, maxAmount } = req.query;
     
-    const where: Prisma.ExpenseWhereInput = { orgId };
+    const where: Prisma.ExpenseWhereInput = { orgId, deletedAt: null };
     const startDateValue = typeof startDate === 'string' ? startDate : undefined;
     const endDateValue = typeof endDate === 'string' ? endDate : undefined;
     const categoryIdValue = typeof categoryId === 'string' ? categoryId : undefined;
@@ -329,8 +329,9 @@ export const deleteExpense: Handler = async (req, res) => {
       });
     }
     
-    await prisma.expense.delete({
-      where: { id }
+    await prisma.expense.update({
+      where: { id },
+      data: { deletedAt: new Date() }
     });
     
     res.json({ 

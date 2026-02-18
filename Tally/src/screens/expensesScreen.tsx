@@ -109,6 +109,9 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
             status: 'Approved' as const,
             amount: exp.amountCents / 100,
             fullDate: expenseDate,
+            paymentMethod: exp.paymentMethod,
+            orgCategoryId: exp.orgCategoryId,
+            notes: exp.notes,
           };
         })
         .sort((a: any, b: any) => b.fullDate.getTime() - a.fullDate.getTime());
@@ -205,9 +208,8 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <Pressable 
-        style={styles.container} 
-        onPress={() => showCategoryPicker && setShowCategoryPicker(false)}
+      <View 
+        style={styles.container}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -332,7 +334,11 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
         />
 
         {/* Expense List */}
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          onScrollBeginDrag={() => showCategoryPicker && setShowCategoryPicker(false)}
+        >
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
@@ -384,7 +390,7 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
           ))
           )}
         </ScrollView>
-      </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
