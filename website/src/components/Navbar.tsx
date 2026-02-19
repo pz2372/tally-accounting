@@ -20,7 +20,6 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const isActive = (path: string) => location.pathname === path;
 
   return (
     <nav className={`navbar ${hidden ? 'navbar-hidden' : ''}`}>

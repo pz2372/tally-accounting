@@ -8,7 +8,6 @@ import {
   Shield,
   Zap,
   Users,
-  ArrowRight,
   Sparkles,
   Camera,
   FileCheck,
@@ -428,7 +427,6 @@ function CategoryScreen() {
     { name: 'Transportation', color: '#3B82F6', amount: 620.00, count: 2 },
   ];
   const total = categories.reduce((s, c) => s + c.amount, 0);
-  const expanded = categories[0];
   return (
     <div className="mock-category-screen">
       <div className="mock-cat-screen-header">
@@ -511,7 +509,6 @@ function FeatureSection({ feature, index, onVisible }: {
     if (isInView) onVisible(index);
   }, [isInView, index, onVisible]);
 
-  const isEven = index % 2 === 0;
 
   return (
     <div ref={ref} className="feature-scroll-section">
