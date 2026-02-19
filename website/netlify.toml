@@ -1,0 +1,10 @@
+[build]
+  base    = "website"
+  command = "npm run build"
+  publish = "dist"
+
+# SPA fallback — lets react-router-dom handle all routes client-side
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
