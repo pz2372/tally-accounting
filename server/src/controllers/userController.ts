@@ -30,9 +30,10 @@ export const getCurrentUser: Handler = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('getCurrentUser error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -55,9 +56,10 @@ export const createCustomToken: Handler = async (req, res) => {
       token: customToken
     });
   } catch (error) {
+    console.error('createCustomToken error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -85,9 +87,10 @@ export const updateProfile: Handler = async (req, res) => {
       message: 'Profile updated successfully'
     });
   } catch (error) {
+    console.error('updateProfile error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -110,9 +113,10 @@ export const verifyEmail: Handler = async (req, res) => {
       message: 'Verification email sent'
     });
   } catch (error) {
+    console.error('verifyEmail error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -136,9 +140,10 @@ export const getAllUsers: Handler = async (req, res) => {
       users
     });
   } catch (error) {
+    console.error('getAllUsers error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -173,9 +178,10 @@ export const setUserRole: Handler = async (req, res) => {
       message: 'User role updated successfully'
     });
   } catch (error) {
+    console.error('setUserRole error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -223,9 +229,10 @@ export const createEmployee: Handler = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('createEmployee error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };

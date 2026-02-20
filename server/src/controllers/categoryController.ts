@@ -18,9 +18,10 @@ export const getAllPresetCategories: Handler = async (req, res) => {
       categories: presets
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('getAllPresetCategories error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -60,9 +61,10 @@ export const getOrgCategories: Handler = async (req, res) => {
       }))
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('getOrgCategories error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -130,9 +132,10 @@ export const enableCategory: Handler = async (req, res) => {
       category: orgCategory
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('enableCategory error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -176,9 +179,10 @@ export const updateOrgCategory: Handler = async (req, res) => {
         error: 'Category not found'
       });
     }
-    res.status(500).json({ 
+    console.error('updateOrgCategory error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -212,9 +216,10 @@ export const disableCategory: Handler = async (req, res) => {
         error: 'Category not found'
       });
     }
-    res.status(500).json({ 
+    console.error('disableCategory error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -250,9 +255,10 @@ export const seedPresetCategories: Handler = async (req, res) => {
       categories: created
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('seedPresetCategories error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -326,9 +332,10 @@ export const batchUpdateCategories: Handler = async (req, res) => {
       }))
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('batchUpdateCategories error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };

@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { signInWithEmail as firebaseSignIn, signOut as firebaseSignOut, getIdToken } from '../config/firebase';
 import { cacheLoginData, clearCache } from './cacheService';
@@ -6,16 +6,16 @@ import { cacheLoginData, clearCache } from './cacheService';
 // Update this with your server URL
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
-const ACCESS_TOKEN_KEY = '@access_token';
-const REFRESH_TOKEN_KEY = '@refresh_token';
-const USER_KEY = '@current_user';
+const ACCESS_TOKEN_KEY = 'access_token';
+const REFRESH_TOKEN_KEY = 'refresh_token';
+const USER_KEY = 'current_user';
 
 // Store tokens securely
 export const storeTokens = async (accessToken: string, refreshToken?: string) => {
   try {
-    await AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
     if (refreshToken) {
-      await AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
     }
   } catch (error) {
     console.error('Error storing tokens:', error);
@@ -24,7 +24,7 @@ export const storeTokens = async (accessToken: string, refreshToken?: string) =>
 
 export const storeUser = async (user: unknown) => {
   try {
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
   } catch (error) {
     console.error('Error storing user:', error);
   }
@@ -33,15 +33,14 @@ export const storeUser = async (user: unknown) => {
 // Get stored access token
 export const getAccessToken = async (): Promise<string | null> => {
   try {
-    const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
-    
+    const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+
     // If no token, try to refresh using Firebase
     if (!token) {
-      console.log('No access token found, attempting Firebase token refresh');
       const refreshed = await refreshAccessToken();
       return refreshed;
     }
-    
+
     return token;
   } catch (error) {
     console.error('Error getting access token:', error);
@@ -52,25 +51,19 @@ export const getAccessToken = async (): Promise<string | null> => {
 // Refresh access token using Firebase ID token
 export const refreshAccessToken = async (): Promise<string | null> => {
   try {
-    // Get fresh Firebase ID token
     const { token: firebaseToken, error: tokenError } = await getIdToken();
-    
+
     if (tokenError || !firebaseToken) {
-      console.error('Failed to get Firebase token for refresh:', tokenError);
       return null;
     }
 
-    // Exchange for new access token
     const { accessToken, refreshToken, error: serverError } = await exchangeFirebaseToken(firebaseToken);
-    
+
     if (serverError || !accessToken) {
-      console.error('Failed to refresh access token:', serverError);
       return null;
     }
 
-    // Store new tokens
     await storeTokens(accessToken, refreshToken);
-    
     return accessToken;
   } catch (error) {
     console.error('Error refreshing access token:', error);
@@ -81,7 +74,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
 // Get stored refresh token
 export const getRefreshToken = async (): Promise<string | null> => {
   try {
-    return await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
   } catch (error) {
     console.error('Error getting refresh token:', error);
     return null;
@@ -91,7 +84,9 @@ export const getRefreshToken = async (): Promise<string | null> => {
 // Clear all tokens
 export const clearTokens = async () => {
   try {
-    await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY]);
+    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
   } catch (error) {
     console.error('Error clearing tokens:', error);
   }
@@ -99,7 +94,7 @@ export const clearTokens = async () => {
 
 export const getStoredUser = async () => {
   try {
-    const raw = await AsyncStorage.getItem(USER_KEY);
+    const raw = await SecureStore.getItemAsync(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (error) {
     console.error('Error reading user:', error);
@@ -143,7 +138,7 @@ export const login = async (email: string, password: string) => {
   try {
     // Step 1: Sign in with Firebase
     const { user: firebaseUser, error: firebaseError } = await firebaseSignIn(email, password);
-    
+
     if (firebaseError || !firebaseUser) {
       return {
         success: false,
@@ -154,7 +149,7 @@ export const login = async (email: string, password: string) => {
 
     // Step 2: Get Firebase ID token
     const { token: firebaseToken, error: tokenError } = await getIdToken();
-    
+
     if (tokenError || !firebaseToken) {
       return {
         success: false,
@@ -165,7 +160,7 @@ export const login = async (email: string, password: string) => {
 
     // Step 3: Exchange Firebase token for server access token and get comprehensive data
     const { accessToken, refreshToken, user, presetCategories, firstOrgData, syncedAt, syncPeriod, error: serverError } = await exchangeFirebaseToken(firebaseToken);
-    
+
     if (serverError || !accessToken) {
       return {
         success: false,
@@ -177,8 +172,7 @@ export const login = async (email: string, password: string) => {
     // Step 4: Store tokens and cache comprehensive data
     await storeTokens(accessToken, refreshToken);
     await storeUser(user);
-    
-    // Cache all organization data (only first org has detailed data)
+
     await cacheLoginData({
       user,
       presetCategories,
@@ -215,16 +209,31 @@ export const logout = async () => {
   }
 };
 
-// Check if user has valid session
-export const checkAuth = async (): Promise<boolean> => {
+// Check if user has a valid session by verifying with the server
+export const checkAuth = async (): Promise<{ valid: boolean; user: any | null }> => {
   const accessToken = await getAccessToken();
-  return !!accessToken;
+  if (!accessToken) {
+    return { valid: false, user: null };
+  }
+
+  try {
+    const response = await axios.get(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return { valid: true, user: response.data.user ?? response.data };
+  } catch (error: any) {
+    if (error.response?.status === 401) {
+      // Token is invalid or expired — clear it
+      await clearTokens();
+    }
+    return { valid: false, user: null };
+  }
 };
 
 // Create axios instance with auth headers
 export const createAuthenticatedAxios = async () => {
   const accessToken = await getAccessToken();
-  
+
   return axios.create({
     baseURL: API_URL,
     headers: {

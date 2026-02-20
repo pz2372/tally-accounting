@@ -1,12 +1,14 @@
 import { NextFunction, Response } from 'express';
-import type { DecodedIdToken } from 'firebase-admin/auth';
 import { Prisma } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-import { getAuth } from '../config/firebase';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
+const JWT_SECRET = process.env.JWT_SECRET;
+
 type UserWithMemberships = Prisma.UserGetPayload<{
   include: { memberships: { include: { org: true } } };
 }>;
@@ -25,137 +27,75 @@ const verifyToken = async (req: AuthenticatedRequest, res: Response, next: NextF
 
     const token = authHeader.split('Bearer ')[1];
 
+    let decoded: jwt.JwtPayload;
     try {
-      // First try to verify as JWT access token
-      const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload;
-      const decodedId = decoded?.id as string | undefined;
-
-      if (!decodedId) {
-        console.error('JWT verification failed: no id in payload');
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid token payload'
-        });
-      }
-
-      // Get user from database
-      const dbUser = await prisma.user.findUnique({
-        where: { id: decodedId },
-        include: {
-          memberships: {
-            include: {
-              org: true
-            }
-          }
-        }
-      }) as UserWithMemberships | null;
-
-      if (!dbUser) {
-        console.error('JWT verification failed: user not found', decodedId);
-        return res.status(401).json({
-          success: false,
-          error: 'User not found'
-        });
-      }
-
-      // Extract orgId from header or use first membership
-      const orgIdHeader = req.headers['x-org-id'] as string | undefined;
-      let currentOrg = null;
-
-      if (orgIdHeader) {
-        currentOrg = dbUser.memberships.find(m => m.orgId === orgIdHeader);
-      } else if (dbUser.memberships.length > 0) {
-        currentOrg = dbUser.memberships[0];
-      }
-
-      req.user = {
-        id: dbUser.id,
-        email: dbUser.email,
-        name: dbUser.name,
-        emailVerified: decoded.emailVerified || false,
-        orgId: currentOrg?.orgId || null,
-        role: currentOrg?.role || null,
-        permissions: currentOrg?.permissions || [],
-        memberships: dbUser.memberships.map(m => ({
-          orgId: m.orgId,
-          orgName: m.org.name,
-          role: m.role,
-          permissions: m.permissions
-        }))
-      };
-
-      next();
-    } catch (jwtError) {
-      // If JWT verification fails, try Firebase token (backward compatibility)
-      console.log('JWT verification failed, trying Firebase token. JWT Error:', jwtError.message);
-      try {
-        const decodedToken = await getAuth().verifyIdToken(token) as DecodedIdToken;
-
-        // Get user from database by Firebase UID
-        let dbUser = await prisma.user.findUnique({
-          where: { firebaseUid: decodedToken.uid },
-          include: {
-            memberships: {
-              include: {
-                org: true
-              }
-            }
-          }
-        }) as UserWithMemberships | null;
-
-        // If user doesn't exist in database, create them
-        if (!dbUser) {
-          dbUser = await prisma.user.create({
-            data: {
-              firebaseUid: decodedToken.uid,
-              email: decodedToken.email || '',
-              name: decodedToken.name
-            },
-            include: {
-              memberships: {
-                include: {
-                  org: true
-                }
-              }
-            }
-          }) as UserWithMemberships;
-        }
-
-        // Extract orgId from header or use first membership
-        const orgIdHeader = req.headers['x-org-id'] as string | undefined;
-        let currentOrg = null;
-
-        if (orgIdHeader) {
-          currentOrg = dbUser.memberships.find(m => m.orgId === orgIdHeader);
-        } else if (dbUser.memberships.length > 0) {
-          currentOrg = dbUser.memberships[0];
-        }
-
-        req.user = {
-          id: dbUser.id,
-          email: dbUser.email,
-          name: dbUser.name,
-          emailVerified: decodedToken.email_verified,
-          orgId: currentOrg?.orgId || null,
-          role: currentOrg?.role || null,
-          permissions: currentOrg?.permissions || [],
-          memberships: dbUser.memberships.map(m => ({
-            orgId: m.orgId,
-            orgName: m.org.name,
-            role: m.role,
-            permissions: m.permissions
-          }))
-        };
-
-        next();
-      } catch (firebaseError) {
-        console.error('Token verification error:', firebaseError);
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid or expired token'
-        });
-      }
+      decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload;
+    } catch {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid or expired token'
+      });
     }
+
+    const decodedId = decoded?.id as string | undefined;
+    if (!decodedId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid token payload'
+      });
+    }
+
+    const dbUser = await prisma.user.findUnique({
+      where: { id: decodedId },
+      include: {
+        memberships: {
+          include: {
+            org: true
+          }
+        }
+      }
+    }) as UserWithMemberships | null;
+
+    if (!dbUser) {
+      return res.status(401).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Extract orgId from header or use first membership
+    const orgIdHeader = req.headers['x-org-id'] as string | undefined;
+    let currentOrg = null;
+
+    if (orgIdHeader) {
+      currentOrg = dbUser.memberships.find(m => m.orgId === orgIdHeader) || null;
+      if (!currentOrg) {
+        return res.status(403).json({
+          success: false,
+          error: 'Organization not found or access denied'
+        });
+      }
+    } else if (dbUser.memberships.length > 0) {
+      currentOrg = dbUser.memberships[0];
+    }
+
+    req.user = {
+      id: dbUser.id,
+      email: dbUser.email,
+      name: dbUser.name,
+      emailVerified: decoded.emailVerified || false,
+      orgId: currentOrg?.orgId || null,
+      role: currentOrg?.role || null,
+      permissions: currentOrg?.permissions || [],
+      memberships: dbUser.memberships.map(m => ({
+        orgId: m.orgId,
+        orgName: m.org.name,
+        role: m.role,
+        permissions: m.permissions
+      }))
+    };
+
+    next();
   } catch (error) {
     console.error('Auth middleware error:', error);
     return res.status(500).json({
@@ -173,52 +113,50 @@ const optionalAuth = async (req: AuthenticatedRequest, res: Response, next: Next
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split('Bearer ')[1];
       try {
-        const decodedToken = await getAuth().verifyIdToken(token) as DecodedIdToken;
+        const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload;
+        const decodedId = decoded?.id as string | undefined;
 
-        if (!decodedToken.email) {
-          return next();
-        }
-
-        // Get user from database
-        const dbUser = await prisma.user.findUnique({
-          where: { email: decodedToken.email },
-          include: {
-            memberships: {
-              include: {
-                org: true
+        if (decodedId) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: decodedId },
+            include: {
+              memberships: {
+                include: {
+                  org: true
+                }
               }
             }
+          }) as UserWithMemberships | null;
+
+          if (dbUser) {
+            const orgIdHeader = req.headers['x-org-id'] as string | undefined;
+            let currentOrg = null;
+
+            if (orgIdHeader) {
+              currentOrg = dbUser.memberships.find(m => m.orgId === orgIdHeader) || null;
+            } else if (dbUser.memberships.length > 0) {
+              currentOrg = dbUser.memberships[0];
+            }
+
+            req.user = {
+              id: dbUser.id,
+              email: dbUser.email,
+              name: dbUser.name,
+              emailVerified: decoded.emailVerified || false,
+              orgId: currentOrg?.orgId || null,
+              role: currentOrg?.role || null,
+              permissions: currentOrg?.permissions || [],
+              memberships: dbUser.memberships.map(m => ({
+                orgId: m.orgId,
+                orgName: m.org.name,
+                role: m.role,
+                permissions: m.permissions
+              }))
+            };
           }
-        }) as UserWithMemberships | null;
-
-        if (dbUser) {
-          const orgIdHeader = req.headers['x-org-id'] as string | undefined;
-          let currentOrg = null;
-
-          if (orgIdHeader) {
-            currentOrg = dbUser.memberships.find(m => m.orgId === orgIdHeader);
-          } else if (dbUser.memberships.length > 0) {
-            currentOrg = dbUser.memberships[0];
-          }
-
-          req.user = {
-            id: dbUser.id,
-            email: dbUser.email,
-            name: dbUser.name,
-            emailVerified: decodedToken.email_verified,
-            orgId: currentOrg?.orgId || null,
-            role: currentOrg?.role || null,
-            permissions: currentOrg?.permissions || [],
-            memberships: dbUser.memberships.map(m => ({
-              orgId: m.orgId,
-              orgName: m.org.name,
-              role: m.role,
-              permissions: m.permissions
-            }))
-          };
         }
-      } catch (error) {
-        // Token invalid but continue anyway
+      } catch {
+        // Token invalid — continue as unauthenticated
         req.user = null;
       }
     }

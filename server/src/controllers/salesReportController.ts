@@ -86,9 +86,10 @@ export const uploadSalesReport: Handler = async (req, res) => {
       report
     });
   } catch (error) {
+    console.error('uploadSalesReport error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -142,9 +143,10 @@ export const getAllSalesReports: Handler = async (req, res) => {
       reports
     });
   } catch (error) {
+    console.error('getAllSalesReports error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -183,9 +185,10 @@ export const getSalesReportById: Handler = async (req, res) => {
       report
     });
   } catch (error) {
+    console.error('getSalesReportById error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -259,9 +262,10 @@ export const updateSalesReport: Handler = async (req, res) => {
       report
     });
   } catch (error) {
+    console.error('updateSalesReport error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -301,9 +305,10 @@ const report = await prisma.salesReport.findFirst({
       report: updatedReport
     });
   } catch (error) {
+    console.error('approveSalesReport error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -349,9 +354,10 @@ export const rejectSalesReport: Handler = async (req, res) => {
       report: updatedReport
     });
   } catch (error) {
+    console.error('rejectSalesReport error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -389,9 +395,10 @@ const report = await prisma.salesReport.findFirst({
       message: 'Sales report deleted successfully'
     });
   } catch (error) {
+    console.error('deleteSalesReport error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -474,9 +481,10 @@ export const getSalesAnalytics: Handler = async (req, res) => {
       analytics
     });
   } catch (error) {
+    console.error('getSalesAnalytics error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };

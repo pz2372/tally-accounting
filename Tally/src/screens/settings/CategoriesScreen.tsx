@@ -2,8 +2,8 @@ import React, { useState, useContext, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { getAccessToken } from '../../services/authService';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
@@ -76,7 +76,7 @@ export default function CategoriesScreen({ onBack }: CategoriesScreenProps) {
     setIsSaving(true);
     try {
       // Get access token
-      const accessToken = await AsyncStorage.getItem('@access_token');
+      const accessToken = await getAccessToken();
       if (!accessToken) {
         Alert.alert('Error', 'Please log in again');
         return;

@@ -1,7 +1,14 @@
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import 'dotenv/config';
 import { initializeFirebase } from './src/config/firebase';
+
+// Validate required environment variables before starting
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,14 +30,40 @@ import uploadRoutes from './src/routes/uploadRoutes';
 import supportRoutes from './src/routes/supportRoutes';
 import plaidRoutes from './src/routes/plaidRoutes';
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Security headers
+app.use(helmet());
+
+// CORS — restrict to known origins
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:5173'];
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+// Global rate limit: 100 requests per 15 minutes
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests, please try again later' }
+});
+app.use(globalLimiter);
+
+// Stricter rate limit for auth endpoints: 10 requests per 15 minutes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many authentication attempts, please try again later' }
+});
+
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Routes
 app.use('/', mainRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/statements', statementRoutes);
 app.use('/api/matches', matchRoutes);
@@ -42,18 +75,17 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/plaid', plaidRoutes);
 
-// Error handling middleware
+// Error handling middleware — never leak internal error details
 app.use((err: Error, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!',
-    message: err.message
+  res.status(500).json({
+    error: 'Internal server error'
   });
 });
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Route not found'
   });
 });

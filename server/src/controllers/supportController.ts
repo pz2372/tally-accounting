@@ -36,7 +36,7 @@ export const createTicket: Handler = async (req, res) => {
     console.error('Create support ticket error:', error);
     res.status(500).json({
       success: false,
-      error: error.message,
+      error: 'Internal server error',
     });
   }
 };
@@ -59,7 +59,7 @@ export const getTickets: Handler = async (req, res) => {
     console.error('Get support tickets error:', error);
     res.status(500).json({
       success: false,
-      error: error.message,
+      error: 'Internal server error',
     });
   }
 };

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CountryCode, Products } from 'plaid';
+import jwt from 'jsonwebtoken';
 import { plaidClient } from '../config/plaid';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
@@ -23,7 +24,7 @@ export const createLinkToken: Handler = async (req, res) => {
     return res.json({ success: true, link_token: response.data.link_token });
   } catch (error) {
     console.error('Plaid createLinkToken error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to create link token' });
   }
 };
 
@@ -76,7 +77,7 @@ export const exchangeToken: Handler = async (req, res) => {
     return res.status(201).json({ success: true, plaidItem });
   } catch (error) {
     console.error('Plaid exchangeToken error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: 'Failed to exchange token' });
   }
 };
 
@@ -97,13 +98,50 @@ export const getAccounts: Handler = async (req, res) => {
 
     return res.json({ success: true, items });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    console.error('Plaid getAccounts error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to fetch accounts' });
   }
 };
 
+// Verify a Plaid webhook JWT signature
+async function verifyPlaidWebhook(req: Request): Promise<boolean> {
+  const token = req.headers['plaid-verification'] as string | undefined;
+  if (!token) return false;
+
+  try {
+    // Decode header to get key_id without verifying first
+    const decoded = jwt.decode(token, { complete: true });
+    if (!decoded || typeof decoded === 'string') return false;
+
+    const keyId = (decoded.header as { kid?: string }).kid;
+    if (!keyId) return false;
+
+    // Fetch the verification key from Plaid
+    const keyResponse = await plaidClient.webhookVerificationKeyGet({ key_id: keyId });
+    const plaidKey = keyResponse.data.key;
+
+    // Build a PEM from the JWK — Plaid keys are EC P-256
+    const { createPublicKey } = await import('crypto');
+    const publicKey = createPublicKey({ key: plaidKey as unknown as import('crypto').JsonWebKey, format: 'jwk' });
+    const pem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
+
+    jwt.verify(token, pem, { algorithms: ['ES256'] });
+    return true;
+  } catch (err) {
+    console.error('Plaid webhook verification failed:', err);
+    return false;
+  }
+}
+
 // POST /api/plaid/webhook  (called by Plaid — no auth middleware)
 export const handleWebhook = async (req: Request, res: Response): Promise<void> => {
-  // Acknowledge immediately — Plaid expects a fast 200
+  const isValid = await verifyPlaidWebhook(req);
+  if (!isValid) {
+    res.sendStatus(400);
+    return;
+  }
+
+  // Acknowledge after verification — Plaid expects a fast 200
   res.sendStatus(200);
 
   const { webhook_type, webhook_code, item_id } = req.body;
@@ -249,6 +287,7 @@ export const removeItem: Handler = async (req, res) => {
 
     return res.json({ success: true, message: 'Account disconnected' });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    console.error('Plaid removeItem error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to disconnect account' });
   }
 };

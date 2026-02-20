@@ -125,9 +125,10 @@ export const runMatching: Handler = async (req, res) => {
       matches
     });
   } catch (error) {
+    console.error('runMatching error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -185,9 +186,10 @@ export const getAllMatches: Handler = async (req, res) => {
       matches
     });
   } catch (error) {
+    console.error('getAllMatches error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -239,9 +241,10 @@ export const approveMatch: Handler = async (req, res) => {
       match: updatedMatch
     });
   } catch (error) {
+    console.error('approveMatch error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -281,9 +284,10 @@ export const rejectMatch: Handler = async (req, res) => {
       match: updatedMatch
     });
   } catch (error) {
+    console.error('rejectMatch error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -321,9 +325,10 @@ export const deleteMatch: Handler = async (req, res) => {
       message: 'Match deleted'
     });
   } catch (error) {
+    console.error('deleteMatch error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };

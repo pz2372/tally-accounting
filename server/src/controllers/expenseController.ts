@@ -71,9 +71,10 @@ export const getAllExpenses: Handler = async (req, res) => {
       expenses
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('getAllExpenses error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -119,9 +120,10 @@ export const getExpenseById: Handler = async (req, res) => {
       expense
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('getExpenseById error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -215,9 +217,10 @@ export const createExpense: Handler = async (req, res) => {
       expense
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('createExpense error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -304,9 +307,10 @@ export const updateExpense: Handler = async (req, res) => {
       expense
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('updateExpense error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -339,9 +343,10 @@ export const deleteExpense: Handler = async (req, res) => {
       message: 'Expense deleted successfully'
     });
   } catch (error) {
-    res.status(500).json({ 
+    console.error('deleteExpense error:', error);
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: 'Internal server error'
     });
   }
 };
@@ -470,7 +475,7 @@ export const createExpenseWithReceipt: Handler = async (req, res) => {
     console.error('Create expense with receipt error:', error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create expense with receipt'
+      error: 'Internal server error'
     });
   }
 };

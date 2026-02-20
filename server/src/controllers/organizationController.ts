@@ -52,9 +52,10 @@ export const createOrganization: Handler = async (req, res) => {
       organization: org
     });
   } catch (error) {
+    console.error('createOrganization error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -101,9 +102,10 @@ export const getOrganization: Handler = async (req, res) => {
       organization: org
     });
   } catch (error) {
+    console.error('getOrganization error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -132,9 +134,10 @@ export const updateOrganization: Handler = async (req, res) => {
       organization: org
     });
   } catch (error) {
+    console.error('updateOrganization error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -208,9 +211,10 @@ export const inviteUser: Handler = async (req, res) => {
       membership
     });
   } catch (error) {
+    console.error('inviteUser error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -231,7 +235,7 @@ export const updateMember: Handler = async (req, res) => {
     }
     
     const membership = await prisma.orgUser.update({
-      where: { id: memberId },
+      where: { id: memberId, orgId },
       data: {
         role: newRole,
         permissions
@@ -253,9 +257,10 @@ export const updateMember: Handler = async (req, res) => {
         error: 'Member not found'
       });
     }
+    console.error('updateMember error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -289,9 +294,10 @@ export const removeMember: Handler = async (req, res) => {
         error: 'Member not found'
       });
     }
+    console.error('removeMember error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -323,9 +329,10 @@ export const getMembers: Handler = async (req, res) => {
       members
     });
   } catch (error) {
+    console.error('getMembers error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };

@@ -1,13 +1,13 @@
 // Firebase configuration for Tally mobile app
 // Using Firebase Auth REST API for React Native compatibility
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 const FIREBASE_API_KEY = 'AIzaSyDUAfgY-vHfcjvxeJo2DHVfE8pMbQhe1pk';
 const AUTH_BASE_URL = 'https://identitytoolkit.googleapis.com/v1';
 const TOKEN_REFRESH_URL = 'https://securetoken.googleapis.com/v1';
 
-const FIREBASE_USER_KEY = '@firebase_user';
+const FIREBASE_USER_KEY = 'firebase_user';
 
 export type User = {
   uid: string;
@@ -24,7 +24,7 @@ let currentUser: User | null = null;
 // Load persisted user on startup
 const loadPersistedUser = async () => {
   try {
-    const raw = await AsyncStorage.getItem(FIREBASE_USER_KEY);
+    const raw = await SecureStore.getItemAsync(FIREBASE_USER_KEY);
     if (raw) {
       currentUser = JSON.parse(raw);
     }
@@ -37,9 +37,9 @@ loadPersistedUser();
 const persistUser = async (user: User | null) => {
   try {
     if (user) {
-      await AsyncStorage.setItem(FIREBASE_USER_KEY, JSON.stringify(user));
+      await SecureStore.setItemAsync(FIREBASE_USER_KEY, JSON.stringify(user));
     } else {
-      await AsyncStorage.removeItem(FIREBASE_USER_KEY);
+      await SecureStore.deleteItemAsync(FIREBASE_USER_KEY);
     }
   } catch (error) {
     console.warn('Failed to persist firebase user:', error);

@@ -125,9 +125,10 @@ export const createRecurringCharge: Handler = async (req, res) => {
       charge
     });
   } catch (error) {
+    console.error('createRecurringCharge error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -179,9 +180,10 @@ export const getAllRecurringCharges: Handler = async (req, res) => {
       charges
     });
   } catch (error) {
+    console.error('getAllRecurringCharges error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -228,9 +230,10 @@ export const getRecurringChargeById: Handler = async (req, res) => {
       charge
     });
   } catch (error) {
+    console.error('getRecurringChargeById error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -340,9 +343,10 @@ export const updateRecurringCharge: Handler = async (req, res) => {
       charge
     });
   } catch (error) {
+    console.error('updateRecurringCharge error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -382,9 +386,10 @@ export const pauseRecurringCharge: Handler = async (req, res) => {
       charge: updatedCharge
     });
   } catch (error) {
+    console.error('pauseRecurringCharge error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -424,9 +429,10 @@ export const resumeRecurringCharge: Handler = async (req, res) => {
       charge: updatedCharge
     });
   } catch (error) {
+    console.error('resumeRecurringCharge error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -466,9 +472,10 @@ export const cancelRecurringCharge: Handler = async (req, res) => {
       charge: updatedCharge
     });
   } catch (error) {
+    console.error('cancelRecurringCharge error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -510,9 +517,10 @@ export const deleteRecurringCharge: Handler = async (req, res) => {
       message: 'Recurring charge deleted successfully'
     });
   } catch (error) {
+    console.error('deleteRecurringCharge error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -631,9 +639,10 @@ export const runScheduler: Handler = async (req, res) => {
       created
     });
   } catch (error) {
+    console.error('runScheduler error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };

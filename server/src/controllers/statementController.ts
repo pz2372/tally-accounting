@@ -62,9 +62,10 @@ export const uploadStatement: Handler = async (req, res) => {
       statement
     });
   } catch (error) {
+    console.error('uploadStatement error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -106,9 +107,10 @@ export const getAllStatements: Handler = async (req, res) => {
       statements
     });
   } catch (error) {
+    console.error('getAllStatements error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -158,9 +160,10 @@ export const getStatementById: Handler = async (req, res) => {
       statement
     });
   } catch (error) {
+    console.error('getStatementById error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -227,9 +230,10 @@ export const getStatementTransactions: Handler = async (req, res) => {
       transactions: filteredTransactions
     });
   } catch (error) {
+    console.error('getStatementTransactions error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };
@@ -284,9 +288,10 @@ export const deleteStatement: Handler = async (req, res) => {
       message: 'Statement deleted successfully'
     });
   } catch (error) {
+    console.error('deleteStatement error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Internal server error'
     });
   }
 };

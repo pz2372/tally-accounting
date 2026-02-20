@@ -37,7 +37,7 @@ export const sendCode: Handler = async (req, res) => {
     return res.json({ success: true, message: `Code sent to ${email}` });
   } catch (error) {
     console.error('sendCode error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
@@ -69,6 +69,7 @@ export const verifyCode: Handler = async (req, res) => {
     pendingCodes.delete(userId);
     return res.json({ success: true, message: 'Verified' });
   } catch (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    console.error('verifyCode error:', error);
+    return res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };

@@ -6,7 +6,10 @@ import { AuthenticatedRequest } from '../types/http';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
-const JWT_SECRET: Secret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
+const JWT_SECRET: Secret = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN: SignOptions['expiresIn'] = (process.env.JWT_EXPIRES_IN || '7d') as SignOptions['expiresIn'];
 
 // Register user - create Firebase user, create DB user, return access token
@@ -114,7 +117,7 @@ export const register: Handler = async (req, res) => {
     console.error('Register error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Registration failed'
     });
   }
 };
@@ -283,32 +286,36 @@ export const firebaseLogin: Handler = async (req, res) => {
     console.error('Firebase login error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Login failed'
     });
   }
 };
 
-// Create custom token
+// Create custom token — only for the currently authenticated user's own Firebase UID
 export const createCustomToken: Handler = async (req, res) => {
   try {
-    const { uid } = req.body;
-    
-    if (!uid) {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { firebaseUid: true }
+    });
+
+    if (!dbUser?.firebaseUid) {
       return res.status(400).json({
         success: false,
-        error: 'UID is required'
+        error: 'No Firebase account linked to this user'
       });
     }
-    
-    const customToken = await getAuth().createCustomToken(uid);
+
+    const customToken = await getAuth().createCustomToken(dbUser.firebaseUid);
     res.json({
       success: true,
       token: customToken
     });
   } catch (error) {
+    console.error('createCustomToken error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Failed to create token'
     });
   }
 };

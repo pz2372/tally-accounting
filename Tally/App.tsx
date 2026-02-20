@@ -60,11 +60,11 @@ export default function App() {
 
   const hasOrganization = !!currentUser?.organizations?.length;
 
-  // Check for existing auth session on app start
+  // Check for existing auth session on app start — validates against server
   useEffect(() => {
     const checkAuthStatus = async () => {
-      const isAuth = await checkAuth();
-      if (isAuth) {
+      const { valid } = await checkAuth();
+      if (valid) {
         setIsAuthenticated(true);
         const storedUser = await getStoredUser();
         setCurrentUser(storedUser);

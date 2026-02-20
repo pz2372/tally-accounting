@@ -54,7 +54,7 @@ export const uploadFile: Handler = async (req, res) => {
     console.error('Upload error:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to upload file',
+      error: 'Internal server error',
     });
   }
 };
@@ -115,7 +115,7 @@ export const uploadMultipleFiles: Handler = async (req, res) => {
     console.error('Multiple upload error:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to upload files',
+      error: 'Internal server error',
     });
   }
 };
@@ -164,7 +164,7 @@ export const deleteFile: Handler = async (req, res) => {
     console.error('Delete error:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete file',
+      error: 'Internal server error',
     });
   }
 };
@@ -221,7 +221,7 @@ export const deleteFileByUrl: Handler = async (req, res) => {
     console.error('Delete by URL error:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to delete file',
+      error: 'Internal server error',
     });
   }
 };
