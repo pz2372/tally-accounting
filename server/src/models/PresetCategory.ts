@@ -1,10 +1,3 @@
-import type { PresetCategory as PrismaPresetCategory } from '@prisma/client';
-import type OrgCategory from './OrgCategory';
-
-export interface PresetCategory extends PrismaPresetCategory {
-	orgLinks?: OrgCategory[];
-}
-
-export default PresetCategory;
-
-export type PrismaPresetCategoryType = PrismaPresetCategory;
+// PresetCategory is no longer a DB model.
+// The authoritative list lives in server/src/config/categories.ts
+export type { PresetCategoryDef as PresetCategory } from '../config/categories';

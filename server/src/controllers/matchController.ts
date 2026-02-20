@@ -163,15 +163,7 @@ export const getAllMatches: Handler = async (req, res) => {
     const matches = await prisma.receiptMatch.findMany({
       where,
       include: {
-        expense: {
-          include: {
-            orgCategory: {
-              include: {
-                preset: true
-              }
-            }
-          }
-        },
+        expense: true,
         cardTxn: {
           include: {
             statement: true

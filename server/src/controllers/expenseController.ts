@@ -3,79 +3,72 @@ import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
 import { uploadToS3 } from '../services/s3Service';
+import { PRESET_CATEGORIES, isValidCategoryName, getCategoryKey, getCategoryName } from '../config/categories';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
+
+// Resolve categoryKey + categoryNameSnapshot from a category name.
+// Returns null if the category name is invalid or disabled for this org.
+async function resolveCategory(
+  categoryName: string,
+  orgId: string
+): Promise<{ categoryKey: string; categoryNameSnapshot: string } | null> {
+  if (!isValidCategoryName(categoryName)) return null;
+
+  const key = getCategoryKey(categoryName)!;
+
+  // Check if org has explicitly disabled this category
+  const override = await prisma.orgCategory.findUnique({
+    where: { orgId_categoryKey: { orgId, categoryKey: key } },
+  });
+  if (override && !override.isEnabled) return null;
+
+  return { categoryKey: key, categoryNameSnapshot: categoryName };
+}
 
 // Get all expenses for the organization
 export const getAllExpenses: Handler = async (req, res) => {
   try {
     const { orgId } = req.user;
-    
+
     if (!orgId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Organization context required'
-      });
+      return res.status(403).json({ success: false, error: 'Organization context required' });
     }
-    
-    const { startDate, endDate, categoryId, minAmount, maxAmount } = req.query;
-    
+
+    const { startDate, endDate, categoryKey: categoryKeyFilter, minAmount, maxAmount } = req.query;
+
     const where: Prisma.ExpenseWhereInput = { orgId, deletedAt: null };
-    const startDateValue = typeof startDate === 'string' ? startDate : undefined;
-    const endDateValue = typeof endDate === 'string' ? endDate : undefined;
-    const categoryIdValue = typeof categoryId === 'string' ? categoryId : undefined;
-    const minAmountValue = typeof minAmount === 'string' ? minAmount : undefined;
-    const maxAmountValue = typeof maxAmount === 'string' ? maxAmount : undefined;
-    
-    if (startDateValue || endDateValue) {
+
+    if (typeof startDate === 'string' || typeof endDate === 'string') {
       where.expenseDate = {};
-      if (startDateValue) where.expenseDate.gte = new Date(startDateValue);
-      if (endDateValue) where.expenseDate.lte = new Date(endDateValue);
+      if (typeof startDate === 'string') where.expenseDate.gte = new Date(startDate);
+      if (typeof endDate   === 'string') where.expenseDate.lte = new Date(endDate);
     }
-    
-    if (categoryIdValue) {
-      where.orgCategoryId = categoryIdValue;
+
+    if (typeof categoryKeyFilter === 'string') {
+      where.categoryKey = categoryKeyFilter;
     }
-    
-    if (minAmountValue || maxAmountValue) {
+
+    if (typeof minAmount === 'string' || typeof maxAmount === 'string') {
       where.amountCents = {};
-      if (minAmountValue) where.amountCents.gte = Number.parseInt(minAmountValue, 10);
-      if (maxAmountValue) where.amountCents.lte = Number.parseInt(maxAmountValue, 10);
+      if (typeof minAmount === 'string') where.amountCents.gte = Number.parseInt(minAmount, 10);
+      if (typeof maxAmount === 'string') where.amountCents.lte = Number.parseInt(maxAmount, 10);
     }
-    
+
     const expenses = await prisma.expense.findMany({
       where,
       include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
-        },
         matches: {
-          include: {
-            cardTxn: {
-              include: {
-                statement: true
-              }
-            }
-          }
+          include: { cardTxn: { include: { statement: true } } }
         }
       },
-      orderBy: {
-        expenseDate: 'desc'
-      }
+      orderBy: { expenseDate: 'desc' }
     });
-    
-    res.json({ 
-      success: true,
-      expenses
-    });
+
+    res.json({ success: true, expenses });
   } catch (error) {
     console.error('getAllExpenses error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
@@ -84,144 +77,68 @@ export const getExpenseById: Handler = async (req, res) => {
   try {
     const { id } = req.params;
     const { orgId } = req.user;
-    
+
     const expense = await prisma.expense.findFirst({
-      where: { 
-        id,
-        orgId
-      },
+      where: { id, orgId },
       include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
-        },
         matches: {
-          include: {
-            cardTxn: {
-              include: {
-                statement: true
-              }
-            }
-          }
+          include: { cardTxn: { include: { statement: true } } }
         }
       }
     });
-    
+
     if (!expense) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Expense not found'
-      });
+      return res.status(404).json({ success: false, error: 'Expense not found' });
     }
-    
-    res.json({ 
-      success: true,
-      expense
-    });
+
+    res.json({ success: true, expense });
   } catch (error) {
     console.error('getExpenseById error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
 // Create new expense
 export const createExpense: Handler = async (req, res) => {
   try {
-    const { merchant, amountCents, paymentMethod, orgCategoryId, presetCategoryId, expenseDate, notes } = req.body;
+    const { merchant, amountCents, paymentMethod, categoryName, expenseDate, notes } = req.body;
     const { orgId } = req.user;
-    
+
     if (!orgId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Organization context required'
-      });
+      return res.status(403).json({ success: false, error: 'Organization context required' });
     }
-    
-    // Validate required fields
-    if (!amountCents || (!orgCategoryId && !presetCategoryId) || !expenseDate) {
-      return res.status(400).json({
-        success: false,
-        error: 'Amount, category (orgCategoryId or presetCategoryId), and expense date are required'
-      });
+
+    if (!amountCents || !categoryName || !expenseDate) {
+      return res.status(400).json({ success: false, error: 'Amount, category, and expense date are required' });
     }
-    
-    let categoryName: string;
-    let finalOrgCategoryId: string | null = null;
-    
-    // Handle category selection - prefer orgCategoryId, fallback to presetCategoryId
-    if (orgCategoryId) {
-      // Verify org category belongs to org and get name snapshot
-      const orgCategory = await prisma.orgCategory.findFirst({
-        where: { id: orgCategoryId, orgId, isEnabled: true },
-        include: { preset: true }
-      });
-      
-      if (!orgCategory) {
-        return res.status(404).json({
-          success: false,
-          error: 'Organization category not found or not enabled'
-        });
-      }
-      
-      categoryName = orgCategory.customName || orgCategory.preset.name;
-      finalOrgCategoryId = orgCategoryId;
-    } else if (presetCategoryId) {
-      // Use preset category directly
-      const presetCategory = await prisma.presetCategory.findFirst({
-        where: { id: presetCategoryId, isActive: true }
-      });
-      
-      if (!presetCategory) {
-        return res.status(404).json({
-          success: false,
-          error: 'Preset category not found or not active'
-        });
-      }
-      
-      categoryName = presetCategory.name;
-      finalOrgCategoryId = null;
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: 'Either orgCategoryId or presetCategoryId is required'
-      });
+
+    const resolved = await resolveCategory(categoryName, orgId);
+    if (!resolved) {
+      return res.status(404).json({ success: false, error: `Category "${categoryName}" not found or disabled` });
     }
-    
+
     const expense = await prisma.expense.create({
       data: {
         orgId,
         merchant,
         amountCents: Number.parseInt(String(amountCents), 10),
         paymentMethod: paymentMethod || 'CREDIT_CARD',
-        orgCategoryId: finalOrgCategoryId,
-        categoryNameSnapshot: categoryName,
+        categoryKey: resolved.categoryKey,
+        categoryNameSnapshot: resolved.categoryNameSnapshot,
         expenseDate: new Date(String(expenseDate)),
-        notes
+        notes,
       },
       include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
+        matches: {
+          include: { cardTxn: { include: { statement: true } } }
         }
       }
     });
-    
-    res.status(201).json({ 
-      success: true,
-      message: 'Expense created successfully',
-      expense
-    });
+
+    res.status(201).json({ success: true, message: 'Expense created successfully', expense });
   } catch (error) {
     console.error('createExpense error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
@@ -230,124 +147,63 @@ export const updateExpense: Handler = async (req, res) => {
   try {
     const { id } = req.params;
     const { orgId } = req.user;
-    const { merchant, amountCents, paymentMethod, orgCategoryId, presetCategoryId, expenseDate, notes } = req.body;
-    
-    // Check if expense exists and belongs to org
-    const existing = await prisma.expense.findFirst({
-      where: { id, orgId }
-    });
-    
+    const { merchant, amountCents, paymentMethod, categoryName, expenseDate, notes } = req.body;
+
+    const existing = await prisma.expense.findFirst({ where: { id, orgId } });
     if (!existing) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Expense not found'
-      });
+      return res.status(404).json({ success: false, error: 'Expense not found' });
     }
-    
+
     const updateData: Prisma.ExpenseUncheckedUpdateInput = {};
-    if (merchant !== undefined) updateData.merchant = merchant;
-    if (amountCents !== undefined) {
-      updateData.amountCents = Number.parseInt(String(amountCents), 10);
-    }
+    if (merchant      !== undefined) updateData.merchant      = merchant;
+    if (amountCents   !== undefined) updateData.amountCents   = Number.parseInt(String(amountCents), 10);
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
-    if (expenseDate) updateData.expenseDate = new Date(String(expenseDate));
-    if (notes !== undefined) updateData.notes = notes;
-    
-    // If category is being changed, verify and update snapshot
-    if (orgCategoryId !== undefined || presetCategoryId !== undefined) {
-      if (orgCategoryId) {
-        // Use org category
-        const orgCategory = await prisma.orgCategory.findFirst({
-          where: { id: orgCategoryId, orgId, isEnabled: true },
-          include: { preset: true }
-        });
-        
-        if (!orgCategory) {
-          return res.status(404).json({
-            success: false,
-            error: 'Organization category not found or not enabled'
-          });
-        }
-        
-        updateData.orgCategoryId = orgCategoryId;
-        updateData.categoryNameSnapshot = orgCategory.customName || orgCategory.preset.name;
-      } else if (presetCategoryId) {
-        // Use preset category directly
-        const presetCategory = await prisma.presetCategory.findFirst({
-          where: { id: presetCategoryId, isActive: true }
-        });
-        
-        if (!presetCategory) {
-          return res.status(404).json({
-            success: false,
-            error: 'Preset category not found or not active'
-          });
-        }
-        
-        updateData.orgCategoryId = null;
-        updateData.categoryNameSnapshot = presetCategory.name;
+    if (expenseDate)                 updateData.expenseDate   = new Date(String(expenseDate));
+    if (notes         !== undefined) updateData.notes         = notes;
+
+    if (categoryName !== undefined) {
+      const resolved = await resolveCategory(categoryName, orgId);
+      if (!resolved) {
+        return res.status(404).json({ success: false, error: `Category "${categoryName}" not found or disabled` });
       }
+      updateData.categoryKey          = resolved.categoryKey;
+      updateData.categoryNameSnapshot = resolved.categoryNameSnapshot;
     }
-    
+
     const expense = await prisma.expense.update({
       where: { id },
       data: updateData,
       include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
+        matches: {
+          include: { cardTxn: { include: { statement: true } } }
         }
       }
     });
-    
-    res.json({ 
-      success: true,
-      message: 'Expense updated successfully',
-      expense
-    });
+
+    res.json({ success: true, message: 'Expense updated successfully', expense });
   } catch (error) {
     console.error('updateExpense error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
-// Delete expense
+// Delete expense (soft delete)
 export const deleteExpense: Handler = async (req, res) => {
   try {
     const { id } = req.params;
     const { orgId } = req.user;
-    
-    // Check if expense exists and belongs to org
-    const existing = await prisma.expense.findFirst({
-      where: { id, orgId }
-    });
-    
+
+    const existing = await prisma.expense.findFirst({ where: { id, orgId } });
     if (!existing) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Expense not found'
-      });
+      return res.status(404).json({ success: false, error: 'Expense not found' });
     }
-    
-    await prisma.expense.update({
-      where: { id },
-      data: { deletedAt: new Date() }
-    });
-    
-    res.json({ 
-      success: true,
-      message: 'Expense deleted successfully'
-    });
+
+    await prisma.expense.update({ where: { id }, data: { deletedAt: new Date() } });
+
+    res.json({ success: true, message: 'Expense deleted successfully' });
   } catch (error) {
     console.error('deleteExpense error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
@@ -355,86 +211,26 @@ export const deleteExpense: Handler = async (req, res) => {
 export const createExpenseWithReceipt: Handler = async (req, res) => {
   try {
     const { orgId } = req.user;
-    
+
     if (!orgId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Organization context required'
-      });
+      return res.status(403).json({ success: false, error: 'Organization context required' });
     }
 
-    // Check for uploaded file
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'Receipt image is required'
-      });
+      return res.status(400).json({ success: false, error: 'Receipt image is required' });
     }
 
-    // Extract expense data from request body
-    const { 
-      merchant, 
-      amountCents,
-      paymentMethod, 
-      orgCategoryId,
-      presetCategoryId, 
-      expenseDate, 
-      notes,
-      ocrText,
-      confidence
-    } = req.body;
+    const { merchant, amountCents, paymentMethod, categoryName, expenseDate, notes, ocrText, confidence } = req.body;
 
-    // Validate required fields
-    if (!amountCents || (!orgCategoryId && !presetCategoryId) || !expenseDate) {
-      return res.status(400).json({
-        success: false,
-        error: 'Amount, category (orgCategoryId or presetCategoryId), and expense date are required'
-      });
+    if (!amountCents || !categoryName || !expenseDate) {
+      return res.status(400).json({ success: false, error: 'Amount, category, and expense date are required' });
     }
 
-    let categoryName: string;
-    let finalOrgCategoryId: string | null = null;
-    
-    // Handle category selection - prefer orgCategoryId, fallback to presetCategoryId
-    if (orgCategoryId) {
-      // Verify org category belongs to org and get name snapshot
-      const orgCategory = await prisma.orgCategory.findFirst({
-        where: { id: orgCategoryId, orgId, isEnabled: true },
-        include: { preset: true }
-      });
-      
-      if (!orgCategory) {
-        return res.status(404).json({
-          success: false,
-          error: 'Organization category not found or not enabled'
-        });
-      }
-      
-      categoryName = orgCategory.customName || orgCategory.preset.name;
-      finalOrgCategoryId = orgCategoryId;
-    } else if (presetCategoryId) {
-      // Use preset category directly
-      const presetCategory = await prisma.presetCategory.findFirst({
-        where: { id: presetCategoryId, isActive: true }
-      });
-      
-      if (!presetCategory) {
-        return res.status(404).json({
-          success: false,
-          error: 'Preset category not found or not active'
-        });
-      }
-      
-      categoryName = presetCategory.name;
-      finalOrgCategoryId = null;
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: 'Either orgCategoryId or presetCategoryId is required'
-      });
+    const resolved = await resolveCategory(categoryName, orgId);
+    if (!resolved) {
+      return res.status(404).json({ success: false, error: `Category "${categoryName}" not found or disabled` });
     }
 
-    // Upload image to S3
     const s3Result = await uploadToS3(
       req.file.buffer,
       req.file.originalname,
@@ -442,7 +238,6 @@ export const createExpenseWithReceipt: Handler = async (req, res) => {
       `${orgId}/receipts`
     );
 
-    // Create expense with receipt URL directly in expense record
     const expense = await prisma.expense.create({
       data: {
         orgId,
@@ -452,30 +247,21 @@ export const createExpenseWithReceipt: Handler = async (req, res) => {
         merchant,
         amountCents: Number.parseInt(String(amountCents), 10),
         paymentMethod: paymentMethod || 'CREDIT_CARD',
-        orgCategoryId: finalOrgCategoryId,
-        categoryNameSnapshot: categoryName,
+        categoryKey: resolved.categoryKey,
+        categoryNameSnapshot: resolved.categoryNameSnapshot,
         expenseDate: new Date(String(expenseDate)),
-        notes
+        notes,
       },
       include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
+        matches: {
+          include: { cardTxn: { include: { statement: true } } }
         }
       }
     });
 
-    res.status(201).json({
-      success: true,
-      message: 'Expense created successfully',
-      expense
-    });
+    res.status(201).json({ success: true, message: 'Expense created successfully', expense });
   } catch (error) {
-    console.error('Create expense with receipt error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    console.error('createExpenseWithReceipt error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };

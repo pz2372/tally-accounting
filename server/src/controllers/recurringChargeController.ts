@@ -2,6 +2,7 @@ import { Prisma, RecurringChargeStatus } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
+import { isValidCategoryName, getCategoryKey, getCategoryName } from '../config/categories';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
@@ -14,28 +15,27 @@ export const createRecurringCharge: Handler = async (req, res) => {
       merchant,
       amountCents,
       currency,
-      orgCategoryId,
-      presetCategoryId,
+      categoryName,
       dayOfMonth,
       useLastDay,
       startDate,
       endDate
     } = req.body;
-    
+
     if (!orgId) {
       return res.status(403).json({
         success: false,
         error: 'Organization context required'
       });
     }
-    
+
     if (!name || !amountCents || !dayOfMonth || !startDate) {
       return res.status(400).json({
         success: false,
         error: 'Name, amount, day of month, and start date are required'
       });
     }
-    
+
     // Validate day of month
     if (dayOfMonth < 1 || dayOfMonth > 31) {
       return res.status(400).json({
@@ -43,34 +43,14 @@ export const createRecurringCharge: Handler = async (req, res) => {
         error: 'Day of month must be between 1 and 31'
       });
     }
-    
-    // Validate category if provided - prefer orgCategoryId
-    let finalOrgCategoryId: string | null = null;
-    if (orgCategoryId) {
-      const category = await prisma.orgCategory.findFirst({
-        where: { id: orgCategoryId, orgId, isEnabled: true }
-      });
-      
-      if (!category) {
-        return res.status(404).json({
-          success: false,
-          error: 'Organization category not found or not enabled'
-        });
+
+    // Validate category if provided
+    let resolvedCategoryKey: string | null = null;
+    if (categoryName) {
+      if (!isValidCategoryName(categoryName)) {
+        return res.status(404).json({ success: false, error: `Category "${categoryName}" not found` });
       }
-      finalOrgCategoryId = orgCategoryId;
-    } else if (presetCategoryId) {
-      const preset = await prisma.presetCategory.findFirst({
-        where: { id: presetCategoryId, isActive: true }
-      });
-      
-      if (!preset) {
-        return res.status(404).json({
-          success: false,
-          error: 'Preset category not found or not active'
-        });
-      }
-      // For recurring charges with preset category, store null and will use preset name when creating expenses
-      finalOrgCategoryId = null;
+      resolvedCategoryKey = getCategoryKey(categoryName)!;
     }
     
     // Calculate next run date
@@ -102,20 +82,13 @@ export const createRecurringCharge: Handler = async (req, res) => {
         merchant,
         amountCents: parseInt(amountCents),
         currency: currency || 'USD',
-        orgCategoryId: finalOrgCategoryId,
+        categoryKey: resolvedCategoryKey,
         dayOfMonth: parseInt(dayOfMonth),
         useLastDay: useLastDay || false,
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         nextRunAt,
         status: 'ACTIVE'
-      },
-      include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
-        }
       }
     });
     
@@ -163,14 +136,7 @@ export const getAllRecurringCharges: Handler = async (req, res) => {
     const charges = await prisma.recurringCharge.findMany({
       where,
       include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
-        },
-        _count: {
-          select: { instances: true }
-        }
+        _count: { select: { instances: true } }
       },
       orderBy: { nextRunAt: 'asc' }
     });
@@ -204,15 +170,8 @@ export const getRecurringChargeById: Handler = async (req, res) => {
     const charge = await prisma.recurringCharge.findFirst({
       where: { id, orgId },
       include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
-        },
         instances: {
-          include: {
-            expense: true
-          },
+          include: { expense: true },
           orderBy: { runDate: 'desc' }
         }
       }
@@ -247,8 +206,7 @@ export const updateRecurringCharge: Handler = async (req, res) => {
       name,
       merchant,
       amountCents,
-      orgCategoryId,
-      presetCategoryId,
+      categoryName,
       dayOfMonth,
       useLastDay,
       endDate
@@ -279,33 +237,14 @@ export const updateRecurringCharge: Handler = async (req, res) => {
       updateData.amountCents = Number.parseInt(String(amountCents), 10);
     }
     
-    // Handle category update - prefer orgCategoryId
-    if (orgCategoryId !== undefined || presetCategoryId !== undefined) {
-      if (orgCategoryId) {
-        const category = await prisma.orgCategory.findFirst({
-          where: { id: orgCategoryId, orgId, isEnabled: true }
-        });
-        
-        if (!category) {
-          return res.status(404).json({
-            success: false,
-            error: 'Organization category not found or not enabled'
-          });
+    if (categoryName !== undefined) {
+      if (categoryName === null || categoryName === '') {
+        updateData.categoryKey = null;
+      } else {
+        if (!isValidCategoryName(categoryName)) {
+          return res.status(404).json({ success: false, error: `Category "${categoryName}" not found` });
         }
-        updateData.orgCategoryId = orgCategoryId;
-      } else if (presetCategoryId) {
-        const preset = await prisma.presetCategory.findFirst({
-          where: { id: presetCategoryId, isActive: true }
-        });
-        
-        if (!preset) {
-          return res.status(404).json({
-            success: false,
-            error: 'Preset category not found or not active'
-          });
-        }
-        // For recurring charges with preset category, store null
-        updateData.orgCategoryId = null;
+        updateData.categoryKey = getCategoryKey(categoryName)!;
       }
     }
     
@@ -328,13 +267,6 @@ export const updateRecurringCharge: Handler = async (req, res) => {
     const charge = await prisma.recurringCharge.update({
       where: { id },
       data: updateData,
-      include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
-        }
-      }
     });
     
     res.json({
@@ -553,15 +485,8 @@ export const runScheduler: Handler = async (req, res) => {
           { endDate: { gte: now } }
         ]
       },
-      include: {
-        orgCategory: {
-          include: {
-            preset: true
-          }
-        }
-      }
     });
-    
+
     const created = [];
     
     for (const charge of dueCharges) {
@@ -586,8 +511,8 @@ export const runScheduler: Handler = async (req, res) => {
             merchant: charge.merchant,
             amountCents: charge.amountCents,
             currency: charge.currency,
-            orgCategoryId: charge.orgCategoryId,
-            categoryNameSnapshot: charge.orgCategory?.customName || charge.orgCategory?.preset?.name,
+            categoryKey: charge.categoryKey,
+            categoryNameSnapshot: charge.categoryKey ? getCategoryName(charge.categoryKey) : null,
             expenseDate: charge.nextRunAt,
             notes: `Auto-generated from recurring charge: ${charge.name}`
           }

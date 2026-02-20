@@ -85,6 +85,7 @@ enum PaymentMethod {
   CREDIT_CARD
   DEBIT_CARD
   CASH
+  CHECK
 }
 
 model User {
@@ -117,7 +118,7 @@ model Organization {
   members      OrgUser[]
   subscription OrganizationSubscription?
 
-  // Categories enabled for this org (from the preset list)
+  // Per-org category overrides (only exists when a category is disabled or hidden)
   orgCategories OrgCategory[]
 
   expenses    Expense[]
@@ -172,48 +173,24 @@ model OrganizationSubscription {
 }
 
 //
-// ✅ Global preset list (system-owned)
+// ✅ Per-org category overrides.
+// A row only exists here if the org has disabled a category or hidden it from employees.
+// The full category list lives in server/src/config/categories.ts as constants.
 //
-model PresetCategory {
-  id        String   @id @default(cuid())
-  key       String   @unique  // "food", "supplies", "labor"
-  name      String           // "Food", "Supplies"
-  color     String?
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
+model OrgCategory {
+  id          String  @id @default(cuid())
+  orgId       String
+  categoryKey String  // matches PresetCategoryDef.key e.g. "labor"
+
+  isEnabled          Boolean @default(true)
+  visibleToEmployees Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orgLinks  OrgCategory[]
-}
+  org Organization @relation(fields: [orgId], references: [id])
 
-//
-// ✅ Which preset categories are enabled for a given org
-// One row = one enabled preset category (or disabled w/ isEnabled=false)
-//
-model OrgCategory {
-  id               String @id @default(cuid())
-  orgId            String
-  presetCategoryId String
-
-  isEnabled        Boolean @default(true)
-  customName       String?
-  sortOrder        Int     @default(0)
-
-  // ✅ visibility control
-  visibleToEmployees Boolean @default(true)
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  org              Organization   @relation(fields: [orgId], references: [id])
-  preset           PresetCategory @relation(fields: [presetCategoryId], references: [id])
-
-  expenses         Expense[]
-  recurringCharges RecurringCharge[]
-
-  @@unique([orgId, presetCategoryId])
+  @@unique([orgId, categoryKey])
   @@index([orgId, isEnabled])
   @@index([orgId, visibleToEmployees])
 }
@@ -232,10 +209,8 @@ model Expense {
   currency    String   @default("USD")
   paymentMethod PaymentMethod @default(CREDIT_CARD)
 
-  orgCategoryId String?
-  orgCategory   OrgCategory? @relation(fields: [orgCategoryId], references: [id])
-
-  categoryNameSnapshot String?
+  categoryKey          String?  // e.g. "labor" — matches PresetCategoryDef.key
+  categoryNameSnapshot String?  // snapshot of name at time of save
 
   expenseDate DateTime
   notes       String?
@@ -256,7 +231,7 @@ model Expense {
 
   @@index([orgId, expenseDate])
   @@index([orgId, deletedAt])
-  @@index([orgId, orgCategoryId])
+  @@index([orgId, categoryKey])
 }
 
 model Statement {
@@ -372,8 +347,7 @@ model RecurringCharge {
   amountCents   Int
   currency      String @default("USD")
 
-  orgCategoryId String?
-  orgCategory   OrgCategory? @relation(fields: [orgCategoryId], references: [id])
+  categoryKey   String?  // e.g. "labor"
 
   status        RecurringChargeStatus @default(ACTIVE)
 

@@ -1,342 +1,83 @@
-import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
+import { PRESET_CATEGORIES, isValidCategoryName } from '../config/categories';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
-// Get all preset categories (system-wide)
-export const getAllPresetCategories: Handler = async (req, res) => {
-  try {
-    const presets = await prisma.presetCategory.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' }
-    });
-    
-    res.json({ 
-      success: true,
-      categories: presets
-    });
-  } catch (error) {
-    console.error('getAllPresetCategories error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
+// Get all preset categories (from constants — no DB needed)
+export const getAllPresetCategories: Handler = async (_req, res) => {
+  res.json({ success: true, categories: PRESET_CATEGORIES });
 };
 
-// Get organization's enabled categories
+// Get the org's category settings.
+// Returns all preset categories merged with any per-org overrides.
+// Categories with no override row are on by default.
 export const getOrgCategories: Handler = async (req, res) => {
   try {
     const { orgId } = req.user;
-    
+
     if (!orgId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Organization context required'
-      });
+      return res.status(403).json({ success: false, error: 'Organization context required' });
     }
-    
-    const orgCategories = await prisma.orgCategory.findMany({
-      where: { 
-        orgId,
-        isEnabled: true
-      },
-      include: {
-        preset: true
-      },
-      orderBy: { sortOrder: 'asc' }
+
+    // Fetch only overrides (rows only exist for customised categories)
+    const overrides = await prisma.orgCategory.findMany({ where: { orgId } });
+    const overrideMap = new Map(overrides.map(o => [o.categoryKey, o]));
+
+    const categories = PRESET_CATEGORIES.map(preset => {
+      const override = overrideMap.get(preset.key);
+      return {
+        key:               preset.key,
+        name:              preset.name,
+        color:             preset.color,
+        sortOrder:         preset.sortOrder,
+        isEnabled:         override ? override.isEnabled          : true,
+        visibleToEmployees: override ? override.visibleToEmployees : true,
+      };
     });
-    
-    res.json({ 
-      success: true,
-      categories: orgCategories.map(oc => ({
-        id: oc.id,
-        key: oc.preset.key,
-        name: oc.customName || oc.preset.name,
-        color: oc.preset.color,
-        sortOrder: oc.sortOrder,
-        presetId: oc.presetCategoryId
-      }))
-    });
+
+    res.json({ success: true, categories });
   } catch (error) {
     console.error('getOrgCategories error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
-// Enable a preset category for the organization
-export const enableCategory: Handler = async (req, res) => {
+// Update one or more category overrides for the org.
+// Body: { categories: Array<{ key, isEnabled?, visibleToEmployees? }> }
+export const updateOrgCategories: Handler = async (req, res) => {
   try {
     const { orgId, role } = req.user;
-    const { presetCategoryId, customName, sortOrder } = req.body;
-    
-    if (role !== 'ADMIN') {
-      return res.status(403).json({
-        success: false,
-        error: 'Admin access required'
-      });
-    }
-    
-    if (!presetCategoryId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Preset category ID is required'
-      });
-    }
-    
-    // Check if preset exists
-    const preset = await prisma.presetCategory.findUnique({
-      where: { id: presetCategoryId }
-    });
-    
-    if (!preset) {
-      return res.status(404).json({
-        success: false,
-        error: 'Preset category not found'
-      });
-    }
-    
-    // Create or update org category
-    const orgCategory = await prisma.orgCategory.upsert({
-      where: {
-        orgId_presetCategoryId: {
-          orgId,
-          presetCategoryId
-        }
-      },
-      update: {
-        isEnabled: true,
-        customName,
-        sortOrder: sortOrder || 0
-      },
-      create: {
-        orgId,
-        presetCategoryId,
-        isEnabled: true,
-        customName,
-        sortOrder: sortOrder || 0
-      },
-      include: {
-        preset: true
-      }
-    });
-    
-    res.status(201).json({ 
-      success: true,
-      message: 'Category enabled successfully',
-      category: orgCategory
-    });
-  } catch (error) {
-    console.error('enableCategory error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
+    const { categories } = req.body;
 
-// Update organization category (custom name, sort order)
-export const updateOrgCategory: Handler = async (req, res) => {
-  try {
-    const { orgId, role } = req.user;
-    const { id } = req.params;
-    const { customName, sortOrder, isEnabled } = req.body;
-    
     if (role !== 'ADMIN') {
-      return res.status(403).json({
-        success: false,
-        error: 'Admin access required'
-      });
+      return res.status(403).json({ success: false, error: 'Admin access required' });
     }
-    
-    const updateData: Prisma.OrgCategoryUpdateInput = {};
-    if (customName !== undefined) updateData.customName = customName;
-    if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
-    if (isEnabled !== undefined) updateData.isEnabled = isEnabled;
-    
-    const orgCategory = await prisma.orgCategory.update({
-      where: { id },
-      data: updateData,
-      include: {
-        preset: true
-      }
-    });
-    
-    res.json({ 
-      success: true,
-      message: 'Category updated successfully',
-      category: orgCategory
-    });
-  } catch (error) {
-    if (error.code === 'P2025') {
-      return res.status(404).json({
-        success: false,
-        error: 'Category not found'
-      });
-    }
-    console.error('updateOrgCategory error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
 
-// Disable a category for the organization
-export const disableCategory: Handler = async (req, res) => {
-  try {
-    const { orgId, role } = req.user;
-    const { id } = req.params;
-    
-    if (role !== 'ADMIN') {
-      return res.status(403).json({
-        success: false,
-        error: 'Admin access required'
-      });
-    }
-    
-    await prisma.orgCategory.update({
-      where: { id },
-      data: { isEnabled: false }
-    });
-    
-    res.json({ 
-      success: true,
-      message: 'Category disabled successfully'
-    });
-  } catch (error) {
-    if (error.code === 'P2025') {
-      return res.status(404).json({
-        success: false,
-        error: 'Category not found'
-      });
-    }
-    console.error('disableCategory error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
-
-// Seed default preset categories (system admin only - run once)
-export const seedPresetCategories: Handler = async (req, res) => {
-  try {
-    const defaultPresets = [
-      { key: 'miscellaneous', name: 'Miscellaneous', color: '#6B7280', sortOrder: 1 },
-      { key: 'labor', name: 'Labor', color: '#9333EA', sortOrder: 2 },
-      { key: 'inventory', name: 'Inventory', color: '#10B981', sortOrder: 3 },
-      { key: 'operations', name: 'Operations', color: '#F59E0B', sortOrder: 4 },
-      { key: 'tax', name: 'Tax', color: '#EF4444', sortOrder: 5 },
-      { key: 'transportation', name: 'Transportation', color: '#3B82F6', sortOrder: 6 }
-    ];
-    
-    const created = [];
-    for (const preset of defaultPresets) {
-      try {
-        const category = await prisma.presetCategory.create({
-          data: preset
-        });
-        created.push(category);
-      } catch (error) {
-        // Skip if already exists
-        if (error.code !== 'P2002') throw error;
-      }
-    }
-    
-    res.json({ 
-      success: true,
-      message: `Seeded ${created.length} preset categories`,
-      categories: created
-    });
-  } catch (error) {
-    console.error('seedPresetCategories error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
-
-// Batch update organization categories (enable/disable multiple at once)
-export const batchUpdateCategories: Handler = async (req, res) => {
-  try {
-    const { orgId, role } = req.user;
-    const { categories } = req.body; // Array of { presetCategoryId, isEnabled, visibleToEmployees }
-    
-    if (role !== 'ADMIN') {
-      return res.status(403).json({
-        success: false,
-        error: 'Admin access required'
-      });
-    }
-    
     if (!Array.isArray(categories)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Categories array is required'
+      return res.status(400).json({ success: false, error: 'categories array is required' });
+    }
+
+    for (const cat of categories) {
+      if (!isValidCategoryName(cat.key) && !PRESET_CATEGORIES.find(p => p.key === cat.key)) {
+        return res.status(400).json({ success: false, error: `Unknown category key: ${cat.key}` });
+      }
+
+      const data: { isEnabled?: boolean; visibleToEmployees?: boolean } = {};
+      if (cat.isEnabled          !== undefined) data.isEnabled          = cat.isEnabled;
+      if (cat.visibleToEmployees !== undefined) data.visibleToEmployees = cat.visibleToEmployees;
+
+      await prisma.orgCategory.upsert({
+        where:  { orgId_categoryKey: { orgId, categoryKey: cat.key } },
+        update: data,
+        create: { orgId, categoryKey: cat.key, ...data },
       });
     }
-    
-    // Update each category
-    const updatePromises = categories.map(async (cat) => {
-      const { presetCategoryId, isEnabled, visibleToEmployees } = cat;
-      
-      return await prisma.orgCategory.upsert({
-        where: {
-          orgId_presetCategoryId: {
-            orgId,
-            presetCategoryId
-          }
-        },
-        update: {
-          isEnabled,
-          ...(visibleToEmployees !== undefined && { visibleToEmployees })
-        },
-        create: {
-          orgId,
-          presetCategoryId,
-          isEnabled,
-          visibleToEmployees: visibleToEmployees ?? true
-        }
-      });
-    });
-    
-    await Promise.all(updatePromises);
-    
-    // Fetch updated categories
-    const updatedCategories = await prisma.orgCategory.findMany({
-      where: { orgId },
-      include: {
-        preset: true
-      },
-      orderBy: { sortOrder: 'asc' }
-    });
-    
-    res.json({ 
-      success: true,
-      message: 'Categories updated successfully',
-      categories: updatedCategories.map(oc => ({
-        id: oc.id,
-        key: oc.preset.key,
-        name: oc.customName || oc.preset.name,
-        color: oc.preset.color,
-        sortOrder: oc.sortOrder,
-        presetId: oc.presetCategoryId,
-        isEnabled: oc.isEnabled
-      }))
-    });
+
+    res.json({ success: true, message: 'Categories updated' });
   } catch (error) {
-    console.error('batchUpdateCategories error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    console.error('updateOrgCategories error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
-

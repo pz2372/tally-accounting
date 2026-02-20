@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import jwt, { SignOptions, Secret } from 'jsonwebtoken';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types/http';
+import { PRESET_CATEGORIES } from '../config/categories';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
@@ -198,32 +199,15 @@ export const firebaseLogin: Handler = async (req, res) => {
       firstOrgData = await prisma.organization.findUnique({
         where: { id: firstOrgId },
         include: {
-          orgCategories: {
-            include: {
-              preset: true
-            }
-          },
+          orgCategories: true,
           expenses: {
             where: {
-              expenseDate: {
-                gte: startOfMonth,
-                lte: endOfMonth
-              }
-            },
-            include: {
-              orgCategory: {
-                include: {
-                  preset: true
-                }
-              }
+              expenseDate: { gte: startOfMonth, lte: endOfMonth }
             }
           },
           matches: {
             where: {
-              createdAt: {
-                gte: startOfMonth,
-                lte: endOfMonth
-              }
+              createdAt: { gte: startOfMonth, lte: endOfMonth }
             },
             include: {
               expense: true,
@@ -233,12 +217,6 @@ export const firebaseLogin: Handler = async (req, res) => {
         }
       });
     }
-    
-    // Fetch all preset categories
-    const presetCategories = await prisma.presetCategory.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' }
-    });
     
     // Generate access token
     const accessToken = jwt.sign(
@@ -269,10 +247,10 @@ export const firebaseLogin: Handler = async (req, res) => {
           subscription: m.org.subscription
         }))
       },
-      presetCategories,
+      presetCategories: PRESET_CATEGORIES,
       firstOrgData: firstOrgData ? {
         orgId: firstOrgData.id,
-        categories: firstOrgData.orgCategories,
+        categoryOverrides: firstOrgData.orgCategories,
         expenses: firstOrgData.expenses,
         matches: firstOrgData.matches
       } : null,
