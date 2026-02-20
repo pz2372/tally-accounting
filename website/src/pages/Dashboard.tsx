@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -6,7 +6,6 @@ import {
   Building2,
   ChevronRight,
   Settings,
-  CreditCard,
   Link2,
   Plus,
   Loader2,
@@ -74,7 +73,6 @@ interface PlaidItemData {
 const navItems = [
   { id: 'connect', label: 'Connect Cards', icon: <Link2 size={18} /> },
   { id: 'roles', label: 'Roles', icon: <Users size={18} /> },
-  { id: 'billing', label: 'Billing', icon: <CreditCard size={18} /> },
 ];
 
 export default function Dashboard() {
@@ -83,24 +81,44 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState('connect');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (!stored) {
-      navigate('/login');
-      return;
-    }
-    try {
-      setUser(JSON.parse(stored));
-    } catch {
-      navigate('/login');
-    }
-  }, [navigate]);
-
-  const handleLogout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     navigate('/login');
-  };
+  }, [navigate]);
+
+  // Validate session against server on load
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          logout();
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (!data) return;
+        // Merge server user with stored org info (server /me may not include org)
+        const stored = localStorage.getItem('user');
+        const storedUser = stored ? JSON.parse(stored) : {};
+        setUser({ ...storedUser, ...data.user });
+      })
+      .catch(() => {
+        // Network error — fall back to stored user rather than logging out
+        const stored = localStorage.getItem('user');
+        if (!stored) { navigate('/login'); return; }
+        try { setUser(JSON.parse(stored)); } catch { navigate('/login'); }
+      });
+  }, [navigate, logout]);
 
   const orgName = user?.organizations?.[0]?.name || 'Your Organization';
   const initials = user?.name
@@ -147,7 +165,7 @@ export default function Dashboard() {
             <Settings size={18} />
             {!sidebarCollapsed && <span>Settings</span>}
           </button>
-          <button className="dash-nav-item logout" onClick={handleLogout}>
+          <button className="dash-nav-item logout" onClick={logout}>
             <LogOut size={18} />
             {!sidebarCollapsed && <span>Log Out</span>}
           </button>
@@ -175,7 +193,6 @@ export default function Dashboard() {
         <div className="dash-content">
           {activeSection === 'connect' && <ConnectCardsSection />}
           {activeSection === 'roles' && <RolesSection />}
-          {activeSection === 'billing' && <BillingSection />}
           {activeSection === 'settings' && (
             <div className="dash-placeholder">
               <div className="dash-placeholder-icon"><Settings size={40} /></div>
@@ -458,66 +475,6 @@ function RolesSection() {
             ))}
           </div>
         )}
-      </div>
-    </>
-  );
-}
-
-/* ── Billing ── */
-function BillingSection() {
-  return (
-    <>
-      <div className="dash-section-header">
-        <div>
-          <h2>Subscription &amp; Billing</h2>
-          <p className="dash-section-sub">Manage your plan and payment details.</p>
-        </div>
-      </div>
-
-      <div className="dash-grid-2col">
-        <div className="dash-card">
-          <div className="dash-plan-header">
-            <div>
-              <span className="dash-plan-badge">Current Plan</span>
-              <h3 className="dash-plan-name">Tally Pro</h3>
-            </div>
-            <div className="dash-plan-price">
-              <span className="dash-plan-amount">$49</span>
-              <span className="dash-plan-period">/month</span>
-            </div>
-          </div>
-          <div className="dash-plan-features">
-            <div className="dash-plan-feature">Unlimited expense tracking</div>
-            <div className="dash-plan-feature">AI receipt scanning</div>
-            <div className="dash-plan-feature">Statement matching</div>
-            <div className="dash-plan-feature">Team management</div>
-            <div className="dash-plan-feature">Priority support</div>
-          </div>
-          <button className="dash-btn-outline full-width">Manage Plan</button>
-        </div>
-
-        <div className="dash-card">
-          <h3 className="dash-card-title">Payment Method</h3>
-          <div className="dash-payment-card">
-            <CreditCard size={20} />
-            <div>
-              <div className="dash-payment-name">Visa ending in 4821</div>
-              <div className="dash-payment-exp">Expires 08/2027</div>
-            </div>
-          </div>
-
-          <h3 className="dash-card-title" style={{ marginTop: 24 }}>Next Invoice</h3>
-          <div className="dash-invoice-row">
-            <div>
-              <div className="dash-invoice-date">March 1, 2026</div>
-              <div className="dash-invoice-desc">Monthly subscription</div>
-            </div>
-            <span className="dash-invoice-amount">$49.00</span>
-          </div>
-          <button className="dash-btn-outline full-width" style={{ marginTop: 16 }}>
-            Billing History
-          </button>
-        </div>
       </div>
     </>
   );
