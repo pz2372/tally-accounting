@@ -1,5 +1,5 @@
-import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
+import { secureGet, secureSet, secureDelete } from '../utils/secureStorage';
 import { signInWithEmail as firebaseSignIn, signOut as firebaseSignOut, getIdToken } from '../config/firebase';
 import { cacheLoginData, clearCache } from './cacheService';
 
@@ -13,9 +13,9 @@ const USER_KEY = 'current_user';
 // Store tokens securely
 export const storeTokens = async (accessToken: string, refreshToken?: string) => {
   try {
-    await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+    await secureSet(ACCESS_TOKEN_KEY, accessToken);
     if (refreshToken) {
-      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken);
+      await secureSet(REFRESH_TOKEN_KEY, refreshToken);
     }
   } catch (error) {
     console.error('Error storing tokens:', error);
@@ -24,7 +24,7 @@ export const storeTokens = async (accessToken: string, refreshToken?: string) =>
 
 export const storeUser = async (user: unknown) => {
   try {
-    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+    await secureSet(USER_KEY, JSON.stringify(user));
   } catch (error) {
     console.error('Error storing user:', error);
   }
@@ -33,7 +33,7 @@ export const storeUser = async (user: unknown) => {
 // Get stored access token
 export const getAccessToken = async (): Promise<string | null> => {
   try {
-    const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+    const token = await secureGet(ACCESS_TOKEN_KEY);
 
     // If no token, try to refresh using Firebase
     if (!token) {
@@ -74,7 +74,7 @@ export const refreshAccessToken = async (): Promise<string | null> => {
 // Get stored refresh token
 export const getRefreshToken = async (): Promise<string | null> => {
   try {
-    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    return await secureGet(REFRESH_TOKEN_KEY);
   } catch (error) {
     console.error('Error getting refresh token:', error);
     return null;
@@ -84,9 +84,9 @@ export const getRefreshToken = async (): Promise<string | null> => {
 // Clear all tokens
 export const clearTokens = async () => {
   try {
-    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(USER_KEY);
+    await secureDelete(ACCESS_TOKEN_KEY);
+    await secureDelete(REFRESH_TOKEN_KEY);
+    await secureDelete(USER_KEY);
   } catch (error) {
     console.error('Error clearing tokens:', error);
   }
@@ -94,7 +94,7 @@ export const clearTokens = async () => {
 
 export const getStoredUser = async () => {
   try {
-    const raw = await SecureStore.getItemAsync(USER_KEY);
+    const raw = await secureGet(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (error) {
     console.error('Error reading user:', error);
