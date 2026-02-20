@@ -19,7 +19,7 @@ import {
 import { usePlaidLink } from 'react-plaid-link';
 import './Dashboard.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/api\/?$/, '').replace(/\/$/, '') + '/api';
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('accessToken');

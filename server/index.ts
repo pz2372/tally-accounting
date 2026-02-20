@@ -35,8 +35,11 @@ app.use(helmet());
 
 // CORS — restrict to known origins
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:5173'];
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : [
+      'http://localhost:5173',
+      'https://tally-accounting.netlify.app',
+    ];
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 
 // Global rate limit: 100 requests per 15 minutes
