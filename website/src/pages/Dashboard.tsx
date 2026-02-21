@@ -14,7 +14,6 @@ import {
   Landmark,
   ShieldCheck,
   X,
-  Check,
 } from 'lucide-react';
 import { usePlaidLink } from 'react-plaid-link';
 import './Dashboard.css';
@@ -41,16 +40,6 @@ interface User {
   organizations?: { id: string; name: string; role: string }[];
 }
 
-interface Member {
-  id: string;
-  role: string;
-  permissions: string[];
-  user: {
-    id: string;
-    name: string | null;
-    email: string;
-  };
-}
 
 interface PlaidAccountData {
   id: string;
