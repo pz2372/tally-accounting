@@ -49,10 +49,10 @@ export const cacheLoginData = async (data: any) => {
 
     // Save detailed data for first organization only
     if (firstOrgData) {
-      const { orgId, categories, expenses, matches } = firstOrgData;
+      const { orgId, categoryOverrides, expenses, matches } = firstOrgData;
 
       await AsyncStorage.multiSet([
-        [`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`, JSON.stringify(categories)],
+        [`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`, JSON.stringify(categoryOverrides || [])],
         [`${CACHE_KEYS.ORG_EXPENSES}${orgId}`, JSON.stringify(expenses)],
         [`${CACHE_KEYS.ORG_RECEIPT_MATCHES}${orgId}`, JSON.stringify(matches)],
       ]);

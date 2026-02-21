@@ -22,6 +22,7 @@ import { extractReceiptData } from '../services/aiService';
 interface ReviewScanScreenProps {
   imageUri: string;
   onBack: () => void;
+  isSaving?: boolean;
   onSave: (data: {
     merchant: string;
     amount: string;
@@ -33,7 +34,7 @@ interface ReviewScanScreenProps {
   }) => void;
 }
 
-export default function ReviewScanScreen({ imageUri, onBack, onSave }: ReviewScanScreenProps) {
+export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = false }: ReviewScanScreenProps) {
   const { t } = useContext(LanguageContext);
   const [isExtracting, setIsExtracting] = useState(true);
   const [merchant, setMerchant] = useState('');
@@ -363,12 +364,24 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave }: ReviewSca
         {!isExtracting && (
           <View style={styles.footer}>
             <View style={styles.buttonContainer}>
-              <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+              <TouchableOpacity
+                style={[styles.cancelButton, isSaving && styles.cancelButtonDisabled]}
+                onPress={handleCancel}
+                disabled={isSaving}
+              >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                <Text style={styles.saveButtonText}>Save</Text>
+              <TouchableOpacity
+                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+                onPress={handleSave}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color={colors.surface} size="small" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -615,5 +628,11 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
+  },
+  cancelButtonDisabled: {
+    opacity: 0.5,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
 });

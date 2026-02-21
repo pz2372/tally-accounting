@@ -1,5 +1,5 @@
 // AI Service for Receipt Data Extraction
-// import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import { getAccessToken } from './authService';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -19,31 +19,20 @@ export interface ExtractedReceiptData {
  */
 export const extractReceiptData = async (imageUri: string): Promise<ExtractedReceiptData> => {
   try {
-    // TODO: Implement actual AI extraction endpoint on backend
-    // For now, return mock data after a delay to simulate processing
-    
-    // Simulate AI processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log('Extracting receipt data with Claude Vision...');
 
-    // Mock extracted data
-    return {
-      merchant: 'Sample Merchant',
-      amount: '0.00',
-      date: new Date(),
-      category: 'Select Category',
-      notes: '',
-    };
-
-    /* 
-    // Future implementation with actual backend endpoint:
-    // Uncomment and install expo-file-system when implementing
-    
+    // Read image as base64
     const base64Image = await FileSystem.readAsStringAsync(imageUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
 
+    // Get auth token
     const token = await getAccessToken();
-    
+    if (!token) {
+      throw new Error('No authentication token available');
+    }
+
+    // Call backend extraction endpoint
     const response = await fetch(`${API_URL}/api/receipts/extract`, {
       method: 'POST',
       headers: {
@@ -56,27 +45,29 @@ export const extractReceiptData = async (imageUri: string): Promise<ExtractedRec
     });
 
     if (!response.ok) {
-      throw new Error('Failed to extract receipt data');
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to extract receipt data');
     }
 
     const data = await response.json();
+
+    console.log('Receipt extraction successful:', data);
 
     return {
       merchant: data.merchant || '',
       amount: data.amount || '',
       date: data.date ? new Date(data.date) : new Date(),
-      category: data.category || 'Select Category',
+      category: data.category || '',
       notes: data.notes || '',
     };
-    */
-  } catch (error) {
-    console.error('Error extracting receipt data:', error);
+  } catch (error: any) {
+    console.error('Error extracting receipt data:', error?.message || error);
     // Return empty data on error so user can enter manually
     return {
       merchant: '',
       amount: '',
       date: new Date(),
-      category: 'Select Category',
+      category: '',
       notes: '',
     };
   }

@@ -120,6 +120,7 @@ const exchangeFirebaseToken = async (firebaseToken: string) => {
       error: null,
     };
   } catch (error: any) {
+    console.error('exchangeFirebaseToken error:', error?.message, error?.response?.status, error?.response?.data);
     return {
       accessToken: null,
       refreshToken: null,

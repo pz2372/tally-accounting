@@ -24,7 +24,7 @@ interface ExpenseGroup {
   expenses: Expense[];
 }
 
-export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (expense: Expense) => void }) {
+export default function ExpensesScreen({ onExpensePress, dataVersion = 0 }: { onExpensePress?: (expense: Expense) => void; dataVersion?: number }) {
   const { t } = useContext(LanguageContext);
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -39,7 +39,7 @@ export default function ExpensesScreen({ onExpensePress }: { onExpensePress?: (e
 
   useEffect(() => {
     loadExpenses();
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     filterExpenses();

@@ -38,6 +38,7 @@ interface HomeScreenProps {
   onOverlayChange?: (hasOverlay: boolean) => void;
   hasOrganization: boolean;
   onCreateOrganization?: () => void;
+  onDataChanged?: () => void;
   currentUser?: {
     name?: string;
     email?: string;
@@ -50,6 +51,7 @@ export default function HomeScreen({
   onOverlayChange,
   hasOrganization,
   onCreateOrganization,
+  onDataChanged,
   currentUser
 }: HomeScreenProps) {
   const { t } = useContext(LanguageContext);
@@ -235,7 +237,7 @@ export default function HomeScreen({
     let ScreenComponent;
     switch (activeScreen) {
       case 'newExpense':
-        ScreenComponent = <NewExpenseScreen onBack={handleBack} />;
+        ScreenComponent = <NewExpenseScreen onBack={() => { onDataChanged?.(); handleBack(); }} />;
         break;
       case 'uploadStatement':
         ScreenComponent = <UploadStatementScreen onBack={handleBack} />;

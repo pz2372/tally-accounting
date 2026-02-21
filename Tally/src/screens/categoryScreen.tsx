@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
-import { getCachedData, getOrgCachedData } from '../services/cacheService';
+import { getOrgCachedData } from '../services/cacheService';
 import { CATEGORIES, CATEGORY_CONFIG } from '../components/categories';
 
 interface ExpenseItem {
@@ -25,8 +25,8 @@ interface ExpenseItem {
   vendor: string;
   description: string;
   amount: number;
-  paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH';
-  orgCategoryId?: string;
+  paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK';
+  categoryKey?: string;
   notes?: string;
 }
 
@@ -40,21 +40,11 @@ interface CategoryData {
 
 interface CategoryScreenProps {
   onExpensePress?: (expense: any) => void;
+  dataVersion?: number;
 }
 
-// Transform CATEGORY_CONFIG to preset format for fallback
-const getDefaultPresetCategories = () => {
-  return Object.entries(CATEGORY_CONFIG).map(([name, config], index) => ({
-    id: `preset_${config.key}`,
-    key: config.key,
-    name: config.name,
-    color: config.color,
-    sortOrder: index + 1,
-    isActive: true,
-  }));
-};
 
-export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) {
+export default function CategoryScreen({ onExpensePress, dataVersion = 0 }: CategoryScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
@@ -71,19 +61,19 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
 
   useEffect(() => {
     loadCategoryData();
-  }, [selectedMonth]);
+  }, [selectedMonth, dataVersion]);
 
   const loadCategoryData = async () => {
     try {
       setIsLoading(true);
-      
+
       // Get user to find first org ID
       const userStr = await AsyncStorage.getItem('@current_user');
       if (!userStr) {
         console.log('No user found in cache');
         return;
       }
-      
+
       const user = JSON.parse(userStr);
       const firstOrgId = user.organizations?.[0]?.id;
       if (!firstOrgId) {
@@ -91,59 +81,45 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
         return;
       }
 
-      // Load preset categories and org data from cache
-      const [cachedPresets, orgData] = await Promise.all([
-        getCachedData('@preset_categories'),
-        getOrgCachedData(firstOrgId)
-      ]);
+      // Load org data from cache (categories here = org overrides only)
+      const orgData = await getOrgCachedData(firstOrgId);
+      const { categories: orgOverrides, expenses } = orgData || {};
 
-      // Use cached presets or fallback to defaults
-      const presetCategories = cachedPresets && cachedPresets.length > 0 
-        ? cachedPresets 
-        : getDefaultPresetCategories();
-
-      const { categories: orgCategories, expenses } = orgData || {};
-
-      // Build category data structure
+      // Build category data from constants, filtered by org overrides
       const categoryMap = new Map<string, CategoryData>();
 
-      // Initialize categories from presets and org settings
-      presetCategories
-        .filter((preset: any) => preset.isActive !== false)
-        .forEach((preset: any) => {
-          const orgCat = orgCategories?.find((oc: any) => oc.presetCategoryId === preset.id);
-          
-          // Include if: 1) no org setting exists (default enabled), OR 2) org setting exists and isEnabled=true
-          const shouldInclude = !orgCat || orgCat.isEnabled !== false;
-          
-          if (shouldInclude) {
-            categoryMap.set(preset.id, {
-              name: orgCat?.customName || preset.name,
-              color: preset.color || '#6B7280',
-              amount: 0,
-              expenseCount: 0,
-              expenses: []
-            });
-          }
-        });
+      CATEGORIES.forEach((name) => {
+        const config = CATEGORY_CONFIG[name];
+        if (!config) return;
+
+        // Check if org has disabled this category
+        const override = orgOverrides?.find((oc: any) => oc.categoryKey === config.key);
+        const isEnabled = !override || override.isEnabled !== false;
+
+        if (isEnabled) {
+          categoryMap.set(config.key, {
+            name: config.name,
+            color: config.color,
+            amount: 0,
+            expenseCount: 0,
+            expenses: [],
+          });
+        }
+      });
 
       // Organize expenses by category (filtered by selected month)
       if (expenses && Array.isArray(expenses)) {
         expenses.forEach((expense: any) => {
-          if (!expense.orgCategoryId || expense.deletedAt) return;
+          if (!expense.categoryKey || expense.deletedAt) return;
 
           // Filter by selected month
           const expenseDate = new Date(expense.expenseDate);
-          if (expenseDate.getMonth() !== selectedMonth.getMonth() || 
+          if (expenseDate.getMonth() !== selectedMonth.getMonth() ||
               expenseDate.getFullYear() !== selectedMonth.getFullYear()) {
             return;
           }
 
-          // Find the preset ID for this org category
-          const orgCat = orgCategories?.find((oc: any) => oc.id === expense.orgCategoryId);
-          if (!orgCat) return;
-
-          const categoryData = categoryMap.get(orgCat.presetCategoryId);
+          const categoryData = categoryMap.get(expense.categoryKey);
           if (!categoryData) return;
 
           const amountDollars = expense.amountCents / 100;
@@ -156,7 +132,7 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
             description: expense.notes || expense.categoryNameSnapshot || '',
             amount: amountDollars,
             paymentMethod: expense.paymentMethod,
-            orgCategoryId: expense.orgCategoryId,
+            categoryKey: expense.categoryKey,
             notes: expense.notes,
           });
 
@@ -330,7 +306,7 @@ export default function CategoryScreen({ onExpensePress }: CategoryScreenProps) 
                             status: 'Approved' as const,
                             amount: expense.amount,
                             paymentMethod: expense.paymentMethod,
-                            orgCategoryId: expense.orgCategoryId,
+                            categoryKey: expense.categoryKey,
                             notes: expense.notes,
                           })}
                         >

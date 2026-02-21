@@ -73,6 +73,7 @@ interface PlaidItemData {
 const navItems = [
   { id: 'connect', label: 'Connect Cards', icon: <Link2 size={18} /> },
   { id: 'roles', label: 'Roles', icon: <Users size={18} /> },
+  { id: 'organizations', label: 'Organizations', icon: <Building2 size={18} /> },
 ];
 
 export default function Dashboard() {
@@ -193,6 +194,7 @@ export default function Dashboard() {
         <div className="dash-content">
           {activeSection === 'connect' && <ConnectCardsSection />}
           {activeSection === 'roles' && <RolesSection />}
+          {activeSection === 'organizations' && <OrganizationsSection user={user} setUser={setUser} />}
           {activeSection === 'settings' && (
             <div className="dash-placeholder">
               <div className="dash-placeholder-icon"><Settings size={40} /></div>
@@ -387,6 +389,144 @@ function ConnectCardsSection() {
             {isConnecting ? <Loader2 size={24} className="dash-spinner" /> : <Plus size={24} />}
             <span>{isConnecting ? 'Opening Plaid…' : 'Add Account'}</span>
           </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ── Organizations ── */
+function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User) => void }) {
+  const [creating, setCreating] = useState(false);
+  const [orgName, setOrgName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const orgs = user.organizations || [];
+
+  const handleCreate = async () => {
+    if (!orgName.trim()) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/organizations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ name: orgName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create organization');
+
+      const newOrg = data.organization;
+      const updatedOrgs = [...orgs, { id: newOrg.id, name: newOrg.name, role: 'ADMIN' }];
+      const updatedUser = { ...user, organizations: updatedOrgs };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setOrgName('');
+      setCreating(false);
+      setSuccess(`"${newOrg.name}" created successfully`);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create organization');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="dash-section-header">
+        <div>
+          <h2>Organizations</h2>
+          <p className="dash-section-sub">
+            Manage your organizations or create a new one.
+          </p>
+        </div>
+        {!creating && (
+          <button className="dash-btn-primary" onClick={() => { setCreating(true); setError(''); setSuccess(''); }}>
+            <Plus size={14} /> New Organization
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div className="dash-roles-state error" style={{ justifyContent: 'flex-start', marginBottom: 16, padding: '12px 16px' }}>
+          <AlertCircle size={16} />{error}
+        </div>
+      )}
+
+      {success && (
+        <div className="dash-org-success">
+          <CheckCircle2 size={16} />{success}
+        </div>
+      )}
+
+      {creating && (
+        <div className="dash-card" style={{ marginBottom: 20 }}>
+          <h3 className="dash-card-title">Create Organization</h3>
+          <div className="dash-org-form">
+            <input
+              type="text"
+              className="dash-org-input"
+              placeholder="Organization name"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              autoFocus
+              disabled={submitting}
+            />
+            <div className="dash-org-form-actions">
+              <button
+                className="dash-btn-outline"
+                onClick={() => { setCreating(false); setOrgName(''); setError(''); }}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="dash-btn-primary"
+                onClick={handleCreate}
+                disabled={submitting || !orgName.trim()}
+              >
+                {submitting ? <><Loader2 size={14} className="dash-spinner" /> Creating…</> : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {orgs.length === 0 ? (
+        <div className="dash-connect-empty">
+          <div className="dash-connect-empty-icon"><Building2 size={40} /></div>
+          <h3>No organizations yet</h3>
+          <p>Create an organization to start managing expenses, team members, and more.</p>
+          {!creating && (
+            <button className="dash-btn-primary" onClick={() => setCreating(true)}>
+              <Plus size={14} /> Create Organization
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="dash-org-list">
+          {orgs.map((org, i) => (
+            <div key={org.id} className="dash-org-card">
+              <div className="dash-org-card-left">
+                <div className="dash-org-card-icon" style={{ background: ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][i % 6] }}>
+                  <Building2 size={18} />
+                </div>
+                <div>
+                  <div className="dash-org-card-name">{org.name}</div>
+                  <div className="dash-org-card-id">ID: {org.id.slice(0, 8)}…</div>
+                </div>
+              </div>
+              <span className={`dash-role-badge ${org.role.toLowerCase()}`}>{org.role}</span>
+            </div>
+          ))}
         </div>
       )}
     </>

@@ -38,7 +38,10 @@ export default function App() {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [homeHasOverlay, setHomeHasOverlay] = useState(false);
+  const [dataVersion, setDataVersion] = useState(0);
   const settingsSlideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+
+  const handleDataChanged = () => setDataVersion(v => v + 1);
   
   const handleLandingFinish = () => {
     console.log('Landing finished, moving to login');
@@ -139,24 +142,26 @@ export default function App() {
                 onOverlayChange={setHomeHasOverlay}
                 hasOrganization={hasOrganization}
                 currentUser={currentUser}
+                onDataChanged={handleDataChanged}
               />
             </View>
             <View style={{ flex: 1, display: activeTab === 'expenses' ? 'flex' : 'none' }}>
-              <ExpensesScreen onExpensePress={setSelectedExpense} />
+              <ExpensesScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} />
             </View>
             {activeTab === 'capture' && (
               <View style={{ flex: 1 }}>
-                <ScanScreen 
+                <ScanScreen
                   onCancel={handleCaptureCancel}
                   showReviewScreen={true}
                   onExpenseSaved={() => {
+                    handleDataChanged();
                     setActiveTab(previousTab);
                   }}
                 />
               </View>
             )}
             <View style={{ flex: 1, display: activeTab === 'category' ? 'flex' : 'none' }}>
-              <CategoryScreen onExpensePress={setSelectedExpense} />
+              <CategoryScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} />
             </View>
             {!homeHasOverlay && activeTab !== 'capture' && (
               <BottomNavigation

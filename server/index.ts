@@ -29,6 +29,7 @@ import recurringChargeRoutes from './src/routes/recurringChargeRoutes';
 import uploadRoutes from './src/routes/uploadRoutes';
 import supportRoutes from './src/routes/supportRoutes';
 import plaidRoutes from './src/routes/plaidRoutes';
+import receiptRoutes from './src/routes/receiptRoutes';
 
 // Security headers
 app.use(helmet());
@@ -77,6 +78,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/plaid', plaidRoutes);
+app.use('/api/receipts', receiptRoutes);
 
 // Error handling middleware — never leak internal error details
 app.use((err: Error, req, res, next) => {

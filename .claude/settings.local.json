@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 npx expo run:ios:*)"
+    ]
+  }
+}
