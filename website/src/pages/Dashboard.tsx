@@ -14,6 +14,7 @@ import {
   Landmark,
   ShieldCheck,
   X,
+  Check,
 } from 'lucide-react';
 import { usePlaidLink } from 'react-plaid-link';
 import './Dashboard.css';
@@ -193,7 +194,7 @@ export default function Dashboard() {
         {/* Content */}
         <div className="dash-content">
           {activeSection === 'connect' && <ConnectCardsSection />}
-          {activeSection === 'roles' && <RolesSection />}
+          {activeSection === 'roles' && <RolesSection user={user} />}
           {activeSection === 'organizations' && <OrganizationsSection user={user} setUser={setUser} />}
           {activeSection === 'settings' && (
             <div className="dash-placeholder">
@@ -534,28 +535,145 @@ function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User
 }
 
 /* ── Roles ── */
-function RolesSection() {
-  const [members, setMembers] = useState<Member[]>([]);
+interface RoleUser {
+  user: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+  id: string;
+  role: string;
+  permissions: string[];
+  orgId?: string;
+}
+
+interface OrgWithMembers {
+  id: string;
+  name: string;
+  members: RoleUser[];
+}
+
+function RolesSection({ user }: { user: User }) {
+  const [orgMembers, setOrgMembers] = useState<OrgWithMembers[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [inviting, setInviting] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('EMPLOYEE');
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [editRole, setEditRole] = useState('EMPLOYEE');
+  const [saving, setSaving] = useState(false);
+
+  const userOrgs = user?.organizations || [];
 
   useEffect(() => {
-    const fetchMembers = async () => {
+    const fetchOrgMembers = async () => {
       try {
-        const res = await fetch(`${API_BASE}/organizations/members`, {
-          headers: getAuthHeaders(),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load members');
-        setMembers(data.members);
+        setLoading(true);
+        const orgData: OrgWithMembers[] = [];
+
+        for (const org of userOrgs) {
+          const res = await fetch(`${API_BASE}/organizations/members`, {
+            headers: {
+              ...getAuthHeaders(),
+              'x-org-id': org.id,
+            },
+          });
+          const data = await res.json();
+          if (res.ok) {
+            orgData.push({
+              id: org.id,
+              name: org.name,
+              members: data.members || [],
+            });
+          }
+        }
+
+        setOrgMembers(orgData);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load members');
       } finally {
         setLoading(false);
       }
     };
-    fetchMembers();
-  }, []);
+
+    if (userOrgs.length > 0) {
+      fetchOrgMembers();
+    } else {
+      setLoading(false);
+    }
+  }, [userOrgs]);
+
+  const handleInvite = async (orgId: string) => {
+    if (!inviteEmail.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/organizations/invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+          'x-org-id': orgId,
+        },
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          role: inviteRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to invite member');
+
+      setOrgMembers(prev =>
+        prev.map(org =>
+          org.id === orgId
+            ? { ...org, members: [...org.members, data.membership] }
+            : org
+        )
+      );
+      setInviting(null);
+      setInviteEmail('');
+      setInviteRole('EMPLOYEE');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to invite member');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditRole = async (orgId: string, memberId: string) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/organizations/members/${memberId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+          'x-org-id': orgId,
+        },
+        body: JSON.stringify({ role: editRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update member');
+
+      setOrgMembers(prev =>
+        prev.map(org =>
+          org.id === orgId
+            ? {
+                ...org,
+                members: org.members.map(m =>
+                  m.id === memberId ? { ...m, role: editRole } : m
+                ),
+              }
+            : org
+        )
+      );
+      setEditingMemberId(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update member');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const avatarColors = ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
@@ -570,52 +688,165 @@ function RolesSection() {
         <div>
           <h2>Roles</h2>
           <p className="dash-section-sub">
-            Manage who has access to your organization and their permissions.
+            Manage team members and their roles across your organizations.
           </p>
         </div>
-        <button className="dash-btn-primary"><Plus size={14} /> Invite Member</button>
       </div>
 
-      <div className="dash-card">
-        {loading ? (
-          <div className="dash-roles-state">
-            <Loader2 size={20} className="dash-spinner" />
-            <span>Loading members…</span>
-          </div>
-        ) : error ? (
-          <div className="dash-roles-state error">
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-        ) : members.length === 0 ? (
-          <div className="dash-roles-state">
-            <span>No members found.</span>
-          </div>
-        ) : (
-          <div className="dash-team-list">
-            {members.map((m, i) => (
-              <div key={m.id} className="dash-team-row">
-                <div className="dash-team-left">
-                  <div
-                    className="dash-team-avatar"
-                    style={{ background: avatarColors[i % avatarColors.length] }}
+      {error && (
+        <div className="dash-roles-state error" style={{ justifyContent: 'flex-start', marginBottom: 16, padding: '12px 16px' }}>
+          <AlertCircle size={16} />{error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="dash-roles-state">
+          <Loader2 size={20} className="dash-spinner" />
+          <span>Loading team members…</span>
+        </div>
+      ) : userOrgs.length === 0 ? (
+        <div className="dash-roles-state">
+          <span>No organizations yet. Create one to manage team members.</span>
+        </div>
+      ) : orgMembers.length === 0 ? (
+        <div className="dash-roles-state">
+          <span>No organizations with members found.</span>
+        </div>
+      ) : (
+        <div className="dash-orgs-roles-grid">
+          {orgMembers.map((org) => (
+            <div key={org.id} className="dash-org-members-card">
+              <div className="dash-org-members-header">
+                <h3>{org.name}</h3>
+                {inviting !== org.id && (
+                  <button
+                    className="dash-btn-primary"
+                    onClick={() => {
+                      setInviting(org.id);
+                      setInviteEmail('');
+                      setInviteRole('EMPLOYEE');
+                    }}
+                    style={{ padding: '8px 14px' }}
                   >
-                    {getInitials(m.user.name, m.user.email)}
-                  </div>
-                  <div>
-                    <div className="dash-team-name">{m.user.name || m.user.email}</div>
-                    <div className="dash-team-email">{m.user.email}</div>
-                  </div>
-                </div>
-                <div className="dash-team-right">
-                  <span className={`dash-role-badge ${m.role.toLowerCase()}`}>{m.role}</span>
-                  <button className="dash-icon-btn small"><Settings size={14} /></button>
-                </div>
+                    <Plus size={12} /> Add Role
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              {inviting === org.id && (
+                <div className="dash-invite-form">
+                  <input
+                    type="email"
+                    className="dash-org-input"
+                    placeholder="Email address"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    disabled={saving}
+                  />
+                  <select
+                    className="dash-org-input"
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    disabled={saving}
+                  >
+                    <option value="EMPLOYEE">Employee</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                  <div className="dash-invite-actions">
+                    <button
+                      className="dash-btn-outline"
+                      onClick={() => setInviting(null)}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="dash-btn-primary"
+                      onClick={() => handleInvite(org.id)}
+                      disabled={saving || !inviteEmail.trim()}
+                    >
+                      {saving ? <Loader2 size={12} className="dash-spinner" style={{ marginRight: 4 }} /> : null}
+                      Invite
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {org.members.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-light)', fontSize: '0.85rem' }}>
+                  No members yet
+                </div>
+              ) : (
+                <div className="dash-team-list">
+                  {org.members.map((m, i) => (
+                    <div key={m.id} className="dash-team-row">
+                      <div className="dash-team-left">
+                        <div
+                          className="dash-team-avatar"
+                          style={{ background: avatarColors[i % avatarColors.length] }}
+                        >
+                          {getInitials(m.user.name, m.user.email)}
+                        </div>
+                        <div>
+                          <div className="dash-team-name">{m.user.name || m.user.email}</div>
+                          <div className="dash-team-email">{m.user.email}</div>
+                        </div>
+                      </div>
+                      <div className="dash-team-right">
+                        {editingMemberId === m.id ? (
+                          <>
+                            <select
+                              className="dash-role-select"
+                              value={editRole}
+                              onChange={(e) => setEditRole(e.target.value)}
+                              disabled={saving}
+                            >
+                              <option value="EMPLOYEE">Employee</option>
+                              <option value="MANAGER">Manager</option>
+                              <option value="ADMIN">Admin</option>
+                            </select>
+                            <button
+                              className="dash-icon-btn small"
+                              onClick={() => handleEditRole(org.id, m.id)}
+                              disabled={saving}
+                              title="Save"
+                            >
+                              {saving ? <Loader2 size={14} className="dash-spinner" /> : <CheckCircle2 size={14} />}
+                            </button>
+                            <button
+                              className="dash-icon-btn small"
+                              onClick={() => setEditingMemberId(null)}
+                              disabled={saving}
+                              title="Cancel"
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className={`dash-role-badge ${m.role.toLowerCase()}`}>{m.role}</span>
+                            <button
+                              className="dash-icon-btn small"
+                              onClick={() => {
+                                setEditingMemberId(m.id);
+                                setEditRole(m.role);
+                              }}
+                              title="Edit role"
+                            >
+                              <Settings size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
