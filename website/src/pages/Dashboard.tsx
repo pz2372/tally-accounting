@@ -389,6 +389,8 @@ function ConnectCardsSection() {
 function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User) => void }) {
   const [creating, setCreating] = useState(false);
   const [orgName, setOrgName] = useState('');
+  const [orgDBA, setOrgDBA] = useState('');
+  const [orgEIN, setOrgEIN] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -407,7 +409,11 @@ function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ name: orgName.trim() }),
+        body: JSON.stringify({
+          name: orgName.trim(),
+          dba: orgDBA.trim() || undefined,
+          ein: orgEIN.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create organization');
@@ -418,6 +424,8 @@ function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setOrgName('');
+      setOrgDBA('');
+      setOrgEIN('');
       setCreating(false);
       setSuccess(`"${newOrg.name}" created successfully`);
       setTimeout(() => setSuccess(''), 3000);
@@ -463,17 +471,33 @@ function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User
             <input
               type="text"
               className="dash-org-input"
-              placeholder="Organization name"
+              placeholder="Organization name (required)"
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               autoFocus
               disabled={submitting}
             />
+            <input
+              type="text"
+              className="dash-org-input"
+              placeholder="DBA (optional)"
+              value={orgDBA}
+              onChange={(e) => setOrgDBA(e.target.value)}
+              disabled={submitting}
+            />
+            <input
+              type="text"
+              className="dash-org-input"
+              placeholder="EIN (optional)"
+              value={orgEIN}
+              onChange={(e) => setOrgEIN(e.target.value)}
+              disabled={submitting}
+            />
             <div className="dash-org-form-actions">
               <button
                 className="dash-btn-outline"
-                onClick={() => { setCreating(false); setOrgName(''); setError(''); }}
+                onClick={() => { setCreating(false); setOrgName(''); setOrgDBA(''); setOrgEIN(''); setError(''); }}
                 disabled={submitting}
               >
                 Cancel
@@ -509,8 +533,10 @@ function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User
                 <div className="dash-org-card-icon" style={{ background: ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][i % 6] }}>
                   <Building2 size={18} />
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div className="dash-org-card-name">{org.name}</div>
+                  {(org as any).dba && <div className="dash-org-card-detail">DBA: {(org as any).dba}</div>}
+                  {(org as any).ein && <div className="dash-org-card-detail">EIN: {(org as any).ein}</div>}
                   <div className="dash-org-card-id">ID: {org.id.slice(0, 8)}…</div>
                 </div>
               </div>

@@ -7,20 +7,22 @@ type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | 
 // Create new organization
 export const createOrganization: Handler = async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, dba, ein } = req.body;
     const userId = req.user.id;
-    
+
     if (!name || name.trim() === '') {
       return res.status(400).json({
         success: false,
         error: 'Organization name is required'
       });
     }
-    
+
     // Create organization with creator as admin
     const org = await prisma.organization.create({
       data: {
         name: name.trim(),
+        dba: dba?.trim() || null,
+        ein: ein?.trim() || null,
         billingOwnerId: userId,
         members: {
           create: {
@@ -45,7 +47,7 @@ export const createOrganization: Handler = async (req, res) => {
         subscription: true
       }
     });
-    
+
     res.status(201).json({
       success: true,
       message: 'Organization created successfully',

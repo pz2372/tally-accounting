@@ -1229,10 +1229,16 @@
   color: var(--text);
 }
 
+.dash-org-card-detail {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-top: 2px;
+}
+
 .dash-org-card-id {
   font-size: 0.75rem;
   color: var(--text-light);
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* ─── Spinner ─── */
