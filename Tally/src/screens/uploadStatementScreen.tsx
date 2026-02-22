@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { createAuthenticatedAxios } from '../services/authService';
 import DatePickerModal from '../components/DatePickerModal';
 import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
@@ -13,8 +15,11 @@ interface UploadStatementScreenProps {
   onBack: () => void;
 }
 
+type UploadType = 'dailySales' | 'monthlyStatement';
+
 export default function UploadStatementScreen({ onBack }: UploadStatementScreenProps) {
   const { t } = useContext(LanguageContext);
+  const [uploadType, setUploadType] = useState<UploadType>('dailySales');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [statementName, setStatementName] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -23,6 +28,17 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
   const [isUploading, setIsUploading] = useState(false);
   const [showScanScreen, setShowScanScreen] = useState(false);
   const isPickingFileRef = useRef(false);
+
+  const getOrgId = async (): Promise<string | null> => {
+    try {
+      const userStr = await AsyncStorage.getItem('@current_user');
+      if (!userStr) return null;
+      const user = JSON.parse(userStr);
+      return user.organizations?.[0]?.id || null;
+    } catch {
+      return null;
+    }
+  };
 
   const handleFilePick = async () => {
     if (isPickingFileRef.current) {
@@ -86,31 +102,82 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
     setShowScanScreen(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedFile) {
       Alert.alert(t('uploadStatement.noFileSelected'), t('uploadStatement.pleaseSelectFile'));
       return;
     }
 
-    if (!statementName.trim()) {
+    if (uploadType === 'monthlyStatement' && !statementName.trim()) {
       Alert.alert(t('common.validationError'), t('uploadStatement.pleaseEnterName'));
       return;
     }
 
     setIsUploading(true);
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setUploadProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
+    setUploadProgress(0);
+
+    try {
+      const orgId = await getOrgId();
+      if (!orgId) {
+        Alert.alert(t('uploadStatement.error'), 'No organization found');
         setIsUploading(false);
-        Alert.alert(t('common.success'), t('uploadStatement.uploadSuccess'), [
-          { text: t('common.ok'), onPress: onBack }
-        ]);
+        return;
       }
-    }, 200);
+
+      const api = await createAuthenticatedAxios();
+
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress += 20;
+        if (progress <= 80) setUploadProgress(progress);
+      }, 150);
+
+      if (uploadType === 'dailySales') {
+        await api.post('/api/sales-reports', {
+          businessDate: selectedDate.toISOString(),
+          source: 'POS_UPLOAD',
+          fileUrl: selectedFile.uri,
+          fileType: selectedFile.mimeType || 'unknown',
+        }, {
+          headers: { 'x-org-id': orgId },
+        });
+
+        clearInterval(progressInterval);
+        setUploadProgress(100);
+
+        setTimeout(() => {
+          setIsUploading(false);
+          Alert.alert(t('common.success'), t('uploadStatement.dailySalesSuccess'), [
+            { text: t('common.ok'), onPress: onBack }
+          ]);
+        }, 300);
+      } else {
+        const statementMonth = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
+        await api.post('/api/statements', {
+          provider: statementName.trim(),
+          statementMonth,
+          sourceType: selectedFile.mimeType?.includes('pdf') ? 'pdf' : 'csv',
+          transactions: [],
+        }, {
+          headers: { 'x-org-id': orgId },
+        });
+
+        clearInterval(progressInterval);
+        setUploadProgress(100);
+
+        setTimeout(() => {
+          setIsUploading(false);
+          Alert.alert(t('common.success'), t('uploadStatement.statementSuccess'), [
+            { text: t('common.ok'), onPress: onBack }
+          ]);
+        }, 300);
+      }
+    } catch (error: any) {
+      setIsUploading(false);
+      setUploadProgress(0);
+      const errorMessage = error?.response?.data?.error || t('uploadStatement.errorMessage');
+      Alert.alert(t('uploadStatement.error'), errorMessage);
+    }
   };
 
   const handleCancel = () => {
@@ -132,21 +199,60 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Name Field */}
+          {/* Upload Type Selector */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('uploadStatement.statementName')}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder={t('uploadStatement.enterStatementName')}
-              placeholderTextColor={colors.textSecondary}
-              value={statementName}
-              onChangeText={setStatementName}
-            />
+            <Text style={styles.label}>{t('uploadStatement.uploadType')}</Text>
+            <View style={styles.typeSelectorContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.typeSelectorButton,
+                  uploadType === 'dailySales' && styles.typeSelectorButtonActive,
+                ]}
+                onPress={() => setUploadType('dailySales')}
+              >
+                <Text style={[
+                  styles.typeSelectorText,
+                  uploadType === 'dailySales' && styles.typeSelectorTextActive,
+                ]}>
+                  {t('uploadStatement.dailySales')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.typeSelectorButton,
+                  uploadType === 'monthlyStatement' && styles.typeSelectorButtonActive,
+                ]}
+                onPress={() => setUploadType('monthlyStatement')}
+              >
+                <Text style={[
+                  styles.typeSelectorText,
+                  uploadType === 'monthlyStatement' && styles.typeSelectorTextActive,
+                ]}>
+                  {t('uploadStatement.monthlyStatement')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {/* Name Field (Monthly Statement only) */}
+          {uploadType === 'monthlyStatement' && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t('uploadStatement.statementName')}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t('uploadStatement.enterStatementName')}
+                placeholderTextColor={colors.textSecondary}
+                value={statementName}
+                onChangeText={setStatementName}
+              />
+            </View>
+          )}
 
           {/* Date Field */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('common.date')}</Text>
+            <Text style={styles.label}>
+              {uploadType === 'dailySales' ? t('uploadStatement.businessDate') : t('common.date')}
+            </Text>
             <TouchableOpacity
               style={styles.dateButton}
               onPress={() => setShowDatePicker(true)}
@@ -415,6 +521,32 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  typeSelectorContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  typeSelectorButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+  },
+  typeSelectorButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  typeSelectorText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  typeSelectorTextActive: {
+    color: colors.surface,
   },
   inputGroup: {
     marginBottom: spacing.xl,

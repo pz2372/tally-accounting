@@ -62,21 +62,9 @@ export default function ContactSupportScreen({ onBack }: ContactSupportScreenPro
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Quick Contact Options */}
-          <View style={styles.quickContact}>
-            <TouchableOpacity style={styles.quickContactItem}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="mail" size={24} color={colors.primary} />
-              </View>
-              <Text style={styles.quickContactLabel}>{t('contactSupport.email')}</Text>
-              <Text style={styles.quickContactValue}>support@acme.com</Text>
-            </TouchableOpacity>
-          </View>
 
           {/* Contact Form */}
           <View style={styles.form}>
-            <Text style={styles.formTitle}>{t('contactSupport.sendMessage')}</Text>
-            
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>{t('contactSupport.subject')}</Text>
               <TextInput

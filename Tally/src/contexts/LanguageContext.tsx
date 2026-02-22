@@ -80,8 +80,8 @@ const translations: Record<string, Record<string, string>> = {
     'home.recentActivity': 'Recent Activity',
     'home.viewAll': 'View All',
     'home.receiptTracking': 'Receipt Tracking',
-    'home.matched': 'Matched',
-    'home.unmatchedLabel': 'Missing Receipt',
+    'home.matched': 'Statements and Expenses Match',
+    'home.unmatchedLabel': 'Expenses Missing Receipt',
     
     // Settings
     'settings.title': 'Settings',
@@ -152,6 +152,7 @@ const translations: Record<string, Record<string, string>> = {
     'details.creditCard': 'Credit Card',
     'details.debitCard': 'Debit Card',
     'details.cash': 'Cash',
+    'details.check': 'Check',
     'details.deleteSuccess': 'Expense deleted successfully',
     'details.deleteError': 'Failed to delete expense',
     'details.editSuccess': 'Expense updated successfully',
@@ -236,7 +237,13 @@ const translations: Record<string, Record<string, string>> = {
     'uploadStatement.successMessage': 'Statement uploaded successfully',
     'uploadStatement.error': 'Error',
     'uploadStatement.errorMessage': 'Failed to pick file',
-    
+    'uploadStatement.uploadType': 'Upload Type',
+    'uploadStatement.dailySales': 'Daily Sales',
+    'uploadStatement.monthlyStatement': 'Monthly Statement',
+    'uploadStatement.businessDate': 'Business Date',
+    'uploadStatement.dailySalesSuccess': 'Daily sales report uploaded successfully',
+    'uploadStatement.statementSuccess': 'Statement uploaded successfully',
+
     // Needs Attention Screen
     'needsAttention.title': 'Needs Attention',
     'needsAttention.subtitle': 'Items requiring review',
@@ -474,8 +481,8 @@ const translations: Record<string, Record<string, string>> = {
     'home.recentActivity': 'Actividad Reciente',
     'home.viewAll': 'Ver Todo',
     'home.receiptTracking': 'Seguimiento de Recibos',
-    'home.matched': 'Coincidentes',
-    'home.unmatchedLabel': 'Recibo Faltante',
+    'home.matched': 'Estados y Gastos Coinciden',
+    'home.unmatchedLabel': 'Gastos Sin Recibo',
     
     // Settings
     'settings.title': 'Configuración',
@@ -546,6 +553,7 @@ const translations: Record<string, Record<string, string>> = {
     'details.creditCard': 'Tarjeta de Crédito',
     'details.debitCard': 'Tarjeta de Débito',
     'details.cash': 'Efectivo',
+    'details.check': 'Cheque',
     'details.deleteSuccess': 'Gasto eliminado exitosamente',
     'details.deleteError': 'Error al eliminar el gasto',
     'details.editSuccess': 'Gasto actualizado exitosamente',
@@ -630,7 +638,13 @@ const translations: Record<string, Record<string, string>> = {
     'uploadStatement.successMessage': 'Estado subido exitosamente',
     'uploadStatement.error': 'Error',
     'uploadStatement.errorMessage': 'Error al seleccionar archivo',
-    
+    'uploadStatement.uploadType': 'Tipo de Carga',
+    'uploadStatement.dailySales': 'Ventas Diarias',
+    'uploadStatement.monthlyStatement': 'Estado Mensual',
+    'uploadStatement.businessDate': 'Fecha del Negocio',
+    'uploadStatement.dailySalesSuccess': 'Informe de ventas diario subido exitosamente',
+    'uploadStatement.statementSuccess': 'Estado subido exitosamente',
+
     // Needs Attention Screen
     'needsAttention.title': 'Requiere Atención',
     'needsAttention.subtitle': 'Elementos que requieren revisión',
@@ -793,8 +807,8 @@ const translations: Record<string, Record<string, string>> = {
     'home.recentActivity': '最近活动',
     'home.viewAll': '查看全部',
     'home.receiptTracking': '收据跟踪',
-    'home.matched': '已匹配',
-    'home.unmatchedLabel': '缺少收据',
+    'home.matched': '报表和费用匹配',
+    'home.unmatchedLabel': '费用缺少收据',
     
     // Settings
     'settings.title': '设置',
@@ -862,6 +876,7 @@ const translations: Record<string, Record<string, string>> = {
     'details.creditCard': '信用卡',
     'details.debitCard': '借记卡',
     'details.cash': '现金',
+    'details.check': '支票',
     'details.deleteSuccess': '支出已成功删除',
     'details.deleteError': '删除支出失败',
     'details.editSuccess': '支出已成功更新',
@@ -944,7 +959,13 @@ const translations: Record<string, Record<string, string>> = {
     'uploadStatement.successMessage': '报表上传成功',
     'uploadStatement.error': '错误',
     'uploadStatement.errorMessage': '文件选择失败',
-    
+    'uploadStatement.uploadType': '上传类型',
+    'uploadStatement.dailySales': '每日销售',
+    'uploadStatement.monthlyStatement': '月度报表',
+    'uploadStatement.businessDate': '营业日期',
+    'uploadStatement.dailySalesSuccess': '每日销售报告上传成功',
+    'uploadStatement.statementSuccess': '报表上传成功',
+
     // Needs Attention Screen
     'needsAttention.title': '需要关注',
     'needsAttention.subtitle': '需要审核的项目',

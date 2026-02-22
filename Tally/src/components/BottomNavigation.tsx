@@ -18,7 +18,7 @@ export default function BottomNavigation({ activeTab, onTabPress, hasOrganizatio
     <View style={styles.bottomNav}>
       <TouchableOpacity style={styles.navItem} onPress={() => onTabPress('home')}>
         <View style={[styles.iconContainer, activeTab === 'home' && styles.activeIconContainer]}>
-          <Ionicons name="home-outline" size={24} color={activeTab === 'home' ? '#3B82F6' : '#9CA3AF'} />
+          <Ionicons name="home-outline" size={24} color={activeTab === 'home' ? '#6366f1' : '#9CA3AF'} />
         </View>
         <Text style={activeTab === 'home' ? styles.navLabelActive : styles.navLabelInactive}>
           {t('nav.home')}
@@ -34,7 +34,7 @@ export default function BottomNavigation({ activeTab, onTabPress, hasOrganizatio
           <Ionicons
             name="folder"
             size={24}
-            color={activeTab === 'category' ? '#3B82F6' : '#9CA3AF'}
+            color={activeTab === 'category' ? '#6366f1' : '#9CA3AF'}
           />
         </View>
         <Text style={activeTab === 'category' ? styles.navLabelActive : styles.navLabelInactive}>
@@ -51,7 +51,7 @@ export default function BottomNavigation({ activeTab, onTabPress, hasOrganizatio
           <Ionicons
             name="camera-outline"
             size={24}
-            color={activeTab === 'capture' ? '#3B82F6' : '#9CA3AF'}
+            color={activeTab === 'capture' ? '#6366f1' : '#9CA3AF'}
           />
         </View>
         <Text style={activeTab === 'capture' ? styles.navLabelActive : styles.navLabelInactive}>
@@ -68,7 +68,7 @@ export default function BottomNavigation({ activeTab, onTabPress, hasOrganizatio
           <Ionicons
             name="list-outline"
             size={24}
-            color={activeTab === 'expenses' ? '#3B82F6' : '#9CA3AF'}
+            color={activeTab === 'expenses' ? '#6366f1' : '#9CA3AF'}
           />
         </View>
         <Text style={activeTab === 'expenses' ? styles.navLabelActive : styles.navLabelInactive}>
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   navItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 5,
     gap: 4,
   },
   navItemDisabled: {
@@ -99,16 +99,16 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     borderRadius: 10,
-    padding: 4,
+    padding: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeIconContainer: {
-    backgroundColor: '#e9f4ff',
+    backgroundColor: '#f1efff',
   },
   navLabelActive: {
     fontSize: 10,
-    color: '#3B82F6',
+    color: '#6371f1ec',
     fontWeight: '600',
   },
   navLabelInactive: {

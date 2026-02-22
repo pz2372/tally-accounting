@@ -422,29 +422,40 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
               <Text style={styles.emptySubtext}>Try selecting a different filter or month.</Text>
             </View>
           ) : (
-            <View style={styles.statementsGrid}>
-              {filteredStatements.map((statement) => (
-              <TouchableOpacity key={statement.id} style={styles.statementCard}>
-                {/* Statement Image/Preview */}
-                <View style={styles.statementImageContainer}>
-                  <Ionicons 
-                    name={getFileIcon(statement.type) as any} 
-                    size={48} 
-                    color={colors.primary} 
-                  />
-                  <View style={styles.fileTypeBadge}>
-                    <Text style={styles.fileTypeText}>{statement.type === 'statement' ? 'STATEMENT' : 'SALES'}</Text>
+            <View style={styles.statementsList}>
+              {filteredStatements
+                .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
+                .map((statement) => (
+                <TouchableOpacity
+                  key={statement.id}
+                  style={styles.statementCard}
+                  onPress={() => {
+                    // TODO: Open document viewer or detail screen for the statement
+                    console.log('Opening statement:', statement);
+                  }}
+                >
+                  <View style={styles.statementIconContainer}>
+                    <Ionicons
+                      name={getFileIcon(statement.type) as any}
+                      size={28}
+                      color={colors.primary}
+                    />
                   </View>
-                </View>
-                
-                {/* Statement Name */}
-                <Text style={styles.statementName}>{statement.name}</Text>
-                
-                {/* Statement Info */}
-                <Text style={styles.statementInfo}>
-                  {statement.matchedTransactions}/{statement.totalTransactions} matched
-                </Text>
-              </TouchableOpacity>
+                  <View style={styles.statementContent}>
+                    <Text style={styles.statementName}>{statement.name}</Text>
+                    <Text style={styles.statementDate}>{statement.uploadDate}</Text>
+                  </View>
+                  <View style={styles.statementRight}>
+                    <View style={styles.fileTypeBadge}>
+                      <Text style={styles.fileTypeText}>{statement.type === 'statement' ? 'STATEMENT' : 'SALES'}</Text>
+                    </View>
+                    {statement.type === 'statement' && (
+                      <Text style={styles.statementInfo}>
+                        {statement.matchedTransactions}/{statement.totalTransactions} matched
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}
@@ -549,38 +560,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
   },
-  statementsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.lg,
+  statementsList: {
+    gap: spacing.md,
     paddingBottom: spacing.xl,
   },
   statementCard: {
-    width: '47%',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.xl,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
-    alignItems: 'center',
+    gap: spacing.md,
   },
-  statementImageContainer: {
-    width: '100%',
-    aspectRatio: 1,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.lg,
+  statementIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
-    position: 'relative',
+  },
+  statementContent: {
+    flex: 1,
+  },
+  statementRight: {
+    alignItems: 'flex-end',
+    gap: spacing.sm,
   },
   fileTypeBadge: {
-    position: 'absolute',
-    top: spacing.sm,
-    right: spacing.sm,
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: borderRadius.sm,
   },
   fileTypeText: {
@@ -589,16 +601,19 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   statementName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: 2,
+  },
+  statementDate: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
   statementInfo: {
     fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    color: colors.textTertiary,
   },
   loadingContainer: {
     flex: 1,

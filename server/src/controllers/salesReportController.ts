@@ -21,7 +21,10 @@ export const uploadSalesReport: Handler = async (req, res) => {
       refundsCents,
       currency,
       notes,
-      parsedPayload
+      parsedPayload,
+      fileUrl,
+      fileType,
+      fileHash,
     } = req.body;
     
     if (!orgId) {
@@ -66,6 +69,9 @@ export const uploadSalesReport: Handler = async (req, res) => {
         businessDate: new Date(businessDate),
         source: sourceValue && isSalesReportSource(sourceValue) ? sourceValue : 'MANUAL_ENTRY',
         uploadedById: userId,
+        fileUrl: fileUrl || null,
+        fileType: fileType || null,
+        fileHash: fileHash || null,
         grossSalesCents: grossSalesCents ? Number.parseInt(String(grossSalesCents), 10) : null,
         netSalesCents: netSalesCents ? Number.parseInt(String(netSalesCents), 10) : null,
         cashCents: cashCents ? Number.parseInt(String(cashCents), 10) : null,
@@ -400,6 +406,110 @@ const report = await prisma.salesReport.findFirst({
       success: false,
       error: 'Internal server error'
     });
+  }
+};
+
+// Get monthly summary (aggregated sales reports + expenses for a month)
+export const getMonthlySummary: Handler = async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    const { month } = req.query; // format: "2026-02"
+
+    if (!orgId) {
+      return res.status(403).json({ success: false, error: 'Organization context required' });
+    }
+
+    const monthStr = typeof month === 'string' ? month : undefined;
+    if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) {
+      return res.status(400).json({ success: false, error: 'Month is required in YYYY-MM format' });
+    }
+
+    const [year, mon] = monthStr.split('-').map(Number);
+    const startDate = new Date(year, mon - 1, 1);
+    const endDate = new Date(year, mon, 0, 23, 59, 59, 999); // last moment of last day
+
+    // 1. Aggregate all sales reports for the month
+    const salesReports = await prisma.salesReport.findMany({
+      where: {
+        orgId,
+        businessDate: { gte: startDate, lte: endDate },
+      },
+    });
+
+    let grossSalesCents = 0;
+    let netSalesCents = 0;
+    let cashCents = 0;
+    let tipsCents = 0;
+    let taxCents = 0;
+    let discountsCents = 0;
+    let refundsCents = 0;
+
+    for (const r of salesReports) {
+      grossSalesCents += r.grossSalesCents || 0;
+      netSalesCents += r.netSalesCents || 0;
+      cashCents += r.cashCents || 0;
+      tipsCents += r.tipsCents || 0;
+      taxCents += r.taxCents || 0;
+      discountsCents += r.discountsCents || 0;
+      refundsCents += r.refundsCents || 0;
+    }
+
+    // 2. Aggregate all expenses for the month (non-deleted)
+    const expenses = await prisma.expense.findMany({
+      where: {
+        orgId,
+        deletedAt: null,
+        expenseDate: { gte: startDate, lte: endDate },
+      },
+    });
+
+    let totalExpensesCents = 0;
+    let cashExpensesCents = 0;
+    const categoryTotals: Record<string, number> = {};
+
+    for (const e of expenses) {
+      totalExpensesCents += e.amountCents;
+      if (e.paymentMethod === 'CASH') {
+        cashExpensesCents += e.amountCents;
+      }
+      const catKey = e.categoryNameSnapshot || e.categoryKey || 'Other';
+      categoryTotals[catKey] = (categoryTotals[catKey] || 0) + e.amountCents;
+    }
+
+    const expenseCategories = Object.entries(categoryTotals).map(([name, amountCents]) => ({
+      name,
+      amountCents,
+    }));
+    expenseCategories.sort((a, b) => b.amountCents - a.amountCents);
+
+    // 3. Computed values
+    // Cash after expenses = cash revenue - cash expenses
+    const cashAfterExpensesCents = cashCents - cashExpensesCents;
+    // Net profit = net sales - total expenses
+    const netProfitCents = netSalesCents - totalExpensesCents;
+
+    res.json({
+      success: true,
+      summary: {
+        month: monthStr,
+        grossSalesCents,
+        netSalesCents,
+        cashCents,
+        tipsCents,
+        taxCents,
+        discountsCents,
+        refundsCents,
+        totalExpensesCents,
+        cashExpensesCents,
+        cashAfterExpensesCents,
+        netProfitCents,
+        expenseCategories,
+        salesReportCount: salesReports.length,
+      },
+    });
+  } catch (error) {
+    console.error('getMonthlySummary error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,9 +11,15 @@ const ORG_MEMBERS_KEY = '@org_members';
 
 interface RolesScreenProps {
   onBack: () => void;
+  currentUser?: {
+    name?: string;
+    email?: string;
+    phoneNumber?: string;
+    organizations?: Array<{ id: string; name: string; role?: string }>;
+  } | null;
 }
 
-export default function RolesScreen({ onBack }: RolesScreenProps) {
+export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
   const { t } = useContext(LanguageContext);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -24,6 +30,11 @@ export default function RolesScreen({ onBack }: RolesScreenProps) {
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'Admin' | 'Employee'>('Employee');
+  const [editCurrentUser, setEditCurrentUser] = useState(false);
+  const [currentUserEditName, setCurrentUserEditName] = useState(currentUser?.name || '');
+  const [currentUserEditRole, setCurrentUserEditRole] = useState<'Admin' | 'Employee'>(
+    currentUser?.organizations?.[0]?.role === 'ADMIN' ? 'Admin' : 'Employee'
+  );
   const [members, setMembers] = useState<Array<{
     id: number;
     name: string;
@@ -121,6 +132,29 @@ export default function RolesScreen({ onBack }: RolesScreenProps) {
     setNewMemberRole('Employee');
   };
 
+  const handleCloseEditCurrentUser = () => {
+    setEditCurrentUser(false);
+    setCurrentUserEditName(currentUser?.name || '');
+    setCurrentUserEditRole(currentUser?.organizations?.[0]?.role === 'ADMIN' ? 'Admin' : 'Employee');
+  };
+
+  const handleSaveEditCurrentUser = async () => {
+    const nextName = currentUserEditName.trim();
+    if (!nextName) return;
+
+    try {
+      // Note: In a real app, you would send this to the server to update the user's profile
+      console.log('Saving current user changes:', { name: nextName, role: currentUserEditRole });
+
+      // For now, just show success and close
+      Alert.alert('Success', 'Profile updated successfully');
+      handleCloseEditCurrentUser();
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      Alert.alert('Error', 'Failed to update profile');
+    }
+  };
+
   const handleAddMember = () => {
     const name = newMemberName.trim();
     const email = newMemberEmail.trim();
@@ -173,21 +207,39 @@ export default function RolesScreen({ onBack }: RolesScreenProps) {
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
-          style={styles.content} 
-          contentContainerStyle={members.length === 0 ? styles.emptyContainer : undefined}
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={members.length === 0 && !currentUser ? styles.emptyContainer : undefined}
           showsVerticalScrollIndicator={false}
         >
-          {members.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={32} color={colors.textSecondary} style={{ marginBottom: spacing.md }} />
-              <Text style={styles.emptyTitle}>{t('roles.noMembersYet')}</Text>
-              <Text style={styles.emptySubtitle}>
-                {t('roles.emptySubtitle')}
-              </Text>
-            </View>
-          ) : (
+          {(currentUser || members.length > 0) && (
             <View style={styles.memberList}>
+              {/* Current User Card */}
+              {currentUser && (
+                <View style={styles.memberCard}>
+                  <View style={[styles.roleBadge, currentUser.organizations?.[0]?.role === 'ADMIN' ? styles.roleBadgeAdmin : styles.roleBadgeEmployee]}>
+                    <Text style={[styles.roleBadgeText, currentUser.organizations?.[0]?.role === 'ADMIN' ? styles.roleBadgeTextAdmin : styles.roleBadgeTextEmployee]}>
+                      {currentUser.organizations?.[0]?.role === 'ADMIN' ? t('roles.admin') : t('roles.employee')}
+                    </Text>
+                  </View>
+                  <View style={styles.memberActions}>
+                    <TouchableOpacity
+                      style={styles.iconButton}
+                      onPress={() => {
+                        setCurrentUserEditName(currentUser.name || '');
+                        setCurrentUserEditRole(currentUser.organizations?.[0]?.role === 'ADMIN' ? 'Admin' : 'Employee');
+                        setEditCurrentUser(true);
+                      }}
+                    >
+                      <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.memberName}>{currentUser.name || 'User'}</Text>
+                  <Text style={styles.memberMeta}>{currentUser.email}</Text>
+                </View>
+              )}
+
+              {/* Other Members */}
               {members.map((member) => (
                 <View key={member.id} style={styles.memberCard}>
                   <View style={[styles.roleBadge, member.role === 'Admin' ? styles.roleBadgeAdmin : styles.roleBadgeEmployee]}>
@@ -218,6 +270,16 @@ export default function RolesScreen({ onBack }: RolesScreenProps) {
               ))}
             </View>
           )}
+
+          {members.length === 0 && !currentUser ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={32} color={colors.textSecondary} style={{ marginBottom: spacing.md }} />
+              <Text style={styles.emptyTitle}>{t('roles.noMembersYet')}</Text>
+              <Text style={styles.emptySubtitle}>
+                {t('roles.emptySubtitle')}
+              </Text>
+            </View>
+          ) : null}
         </ScrollView>
       </View>
 
@@ -378,6 +440,73 @@ export default function RolesScreen({ onBack }: RolesScreenProps) {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={editCurrentUser}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseEditCurrentUser}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('roles.editEmployee')}</Text>
+              <TouchableOpacity onPress={handleCloseEditCurrentUser}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('roles.name')}</Text>
+                <TextInput
+                  value={currentUserEditName}
+                  onChangeText={setCurrentUserEditName}
+                  placeholder={t('roles.employeeNamePlaceholder')}
+                  placeholderTextColor={colors.textSecondary}
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('roles.role')}</Text>
+                <View style={styles.rolePicker}>
+                  {(['Admin', 'Employee'] as const).map((role) => (
+                    <TouchableOpacity
+                      key={role}
+                      style={[
+                        styles.roleOption,
+                        currentUserEditRole === role && styles.roleOptionActive,
+                      ]}
+                      onPress={() => setCurrentUserEditRole(role)}
+                    >
+                      <Text
+                        style={[
+                          styles.roleOptionText,
+                          currentUserEditRole === role && styles.roleOptionTextActive,
+                        ]}
+                      >
+                        {role === 'Admin' ? t('roles.admin') : t('roles.employee')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  !currentUserEditName.trim() && styles.saveButtonDisabled,
+                ]}
+                onPress={handleSaveEditCurrentUser}
+                disabled={!currentUserEditName.trim()}
+              >
+                <Text style={styles.saveButtonText}>{t('roles.save')}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -397,6 +526,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
+    marginBottom: spacing.lg,
   },
   backButton: {
     padding: spacing.xs,
@@ -476,7 +606,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: spacing.md,
     top: '50%',
-    transform: [{ translateY: -12 }],
+    transform: [{ translateY: -1 }],
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

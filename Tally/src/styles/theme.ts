@@ -18,7 +18,7 @@ export const colors = {
   borderLight: '#F3F4F6',
   
   // Accent Colors
-  primary: '#3B82F6',
+  primary: '#6378f1f1',
   primaryLight: '#DBEAFE',
   
   // Category Colors

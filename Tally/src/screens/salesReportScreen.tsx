@@ -1,9 +1,11 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
+import { createAuthenticatedAxios } from '../services/authService';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface SalesReportScreenProps {
@@ -12,28 +14,41 @@ interface SalesReportScreenProps {
 
 interface ExpenseCategory {
   name: string;
-  amount: number;
+  amountCents: number;
 }
 
-interface MonthlyReport {
-  month: string; // "2026-02"
-  netSales: number;
-  grossSales: number;
-  cash: number;
-  tips: number;
-  tax: number;
-  discounts: number;
-  refunds: number;
-  expenses: number;
+interface MonthlySummary {
+  month: string;
+  grossSalesCents: number;
+  netSalesCents: number;
+  cashCents: number;
+  tipsCents: number;
+  taxCents: number;
+  discountsCents: number;
+  refundsCents: number;
+  totalExpensesCents: number;
+  cashExpensesCents: number;
+  cashAfterExpensesCents: number;
+  netProfitCents: number;
   expenseCategories: ExpenseCategory[];
+  salesReportCount: number;
 }
+
+const centsToDollars = (cents: number) => cents / 100;
+
+const formatDollars = (cents: number) => {
+  const dollars = centsToDollars(cents);
+  return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+};
 
 export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
   const { t, language } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [expensesExpanded, setExpensesExpanded] = useState(false);
-  
-  // Map language to locale for date formatting
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const getLocale = () => {
     switch (language) {
       case 'es': return 'es-ES';
@@ -41,83 +56,70 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
       default: return 'en-US';
     }
   };
-  
-  // Check if selected month is current month or later
+
   const isCurrentOrFutureMonth = () => {
     const now = new Date();
-    return selectedMonth.getFullYear() > now.getFullYear() || 
-           (selectedMonth.getFullYear() === now.getFullYear() && 
-            selectedMonth.getMonth() >= now.getMonth());
+    return selectedMonth.getFullYear() > now.getFullYear() ||
+      (selectedMonth.getFullYear() === now.getFullYear() &&
+        selectedMonth.getMonth() >= now.getMonth());
   };
 
-  // Mock data for different months
-  const monthlyReports: { [key: string]: MonthlyReport } = {
-    '2026-02': {
-      month: '2026-02',
-      grossSales: 45000.00,
-      netSales: 37245.50,
-      cash: 13500.00,
-      tips: 3756.50,
-      tax: 3375.00,
-      discounts: 2250.00,
-      refunds: 1500.00,
-      expenses: 9810.00,
-      expenseCategories: [
-        { name: t('salesReport.labor'), amount: 4200.00 },
-        { name: t('salesReport.rent'), amount: 2500.00 },
-        { name: t('salesReport.supplies'), amount: 1800.00 },
-        { name: t('salesReport.utilities'), amount: 810.00 },
-        { name: t('salesReport.other'), amount: 500.00 },
-      ],
-    },
-    '2026-01': {
-      month: '2026-01',
-      grossSales: 52000.00,
-      netSales: 43567.80,
-      cash: 18620.00,
-      tips: 4256.20,
-      tax: 3900.00,
-      discounts: 2700.00,
-      refunds: 1200.00,
-      expenses: 12345.00,
-      expenseCategories: [
-        { name: t('salesReport.labor'), amount: 5200.00 },
-        { name: t('salesReport.rent'), amount: 2500.00 },
-        { name: t('salesReport.supplies'), amount: 2400.00 },
-        { name: t('salesReport.utilities'), amount: 1245.00 },
-        { name: t('salesReport.other'), amount: 1000.00 },
-      ],
-    },
-    '2025-12': {
-      month: '2025-12',
-      grossSales: 48000.00,
-      netSales: 39987.25,
-      cash: 16340.00,
-      tips: 3987.25,
-      tax: 3600.00,
-      discounts: 2400.00,
-      refunds: 900.00,
-      expenses: 11234.00,
-      expenseCategories: [
-        { name: t('salesReport.labor'), amount: 4800.00 },
-        { name: t('salesReport.rent'), amount: 2500.00 },
-        { name: t('salesReport.supplies'), amount: 2100.00 },
-        { name: t('salesReport.utilities'), amount: 1034.00 },
-        { name: t('salesReport.other'), amount: 800.00 },
-      ],
-    },
-  };
-
-  // Get current month key
   const getMonthKey = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     return `${year}-${month}`;
   };
 
-  const currentMonthData = monthlyReports[getMonthKey(selectedMonth)];
+  const getOrgId = async (): Promise<string | null> => {
+    try {
+      const userStr = await AsyncStorage.getItem('@current_user');
+      if (!userStr) return null;
+      const user = JSON.parse(userStr);
+      return user.organizations?.[0]?.id || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchMonthlySummary = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    setSummary(null);
+
+    try {
+      const orgId = await getOrgId();
+      if (!orgId) {
+        setError('No organization found');
+        return;
+      }
+
+      const api = await createAuthenticatedAxios();
+      const monthKey = getMonthKey(selectedMonth);
+      const response = await api.get('/api/sales-reports/monthly-summary', {
+        params: { month: monthKey },
+        headers: { 'x-org-id': orgId },
+      });
+
+      if (response.data.success) {
+        setSummary(response.data.summary);
+      } else {
+        setError(response.data.error || 'Failed to load data');
+      }
+    } catch (err) {
+      console.error('fetchMonthlySummary error:', err);
+      setError('Failed to load sales report');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedMonth]);
+
+  useEffect(() => {
+    fetchMonthlySummary();
+  }, [fetchMonthlySummary]);
 
   const swipeHandlers = useSwipeBack(onBack);
+
+  const hasData = summary && (summary.salesReportCount > 0 || summary.totalExpensesCents > 0);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -133,7 +135,7 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
 
         {/* Month Toggle */}
         <View style={styles.monthSelector}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.navButton}
             onPress={() => {
               const newDate = new Date(selectedMonth);
@@ -143,14 +145,14 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
           >
             <Text style={styles.navButtonText}>‹</Text>
           </TouchableOpacity>
-          
+
           <View style={styles.monthInfo}>
             <Text style={styles.monthText}>
               {selectedMonth.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' })}
             </Text>
           </View>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.navButton}
             onPress={() => {
               const newDate = new Date(selectedMonth);
@@ -164,18 +166,24 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {currentMonthData ? (
+          {isLoading ? (
+            <View style={styles.noDataContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : hasData && summary ? (
             <View style={styles.monthlyReport}>
               {/* Net Profit Card */}
               <View style={styles.netProfitCard}>
                 <View style={styles.netProfitContent}>
                   <Text style={styles.netProfitLabel}>{t('salesReport.netProfit')}</Text>
                   <Text style={styles.netProfitValue}>
-                    ${(currentMonthData.netSales - currentMonthData.expenses).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatDollars(summary.netProfitCents)}
                   </Text>
-                  <Text style={styles.netProfitPercentage}>
-                    {(((currentMonthData.netSales - currentMonthData.expenses) / currentMonthData.netSales) * 100).toFixed(1)}%
-                  </Text>
+                  {summary.netSalesCents > 0 && (
+                    <Text style={styles.netProfitPercentage}>
+                      {((summary.netProfitCents / summary.netSalesCents) * 100).toFixed(1)}%
+                    </Text>
+                  )}
                 </View>
               </View>
 
@@ -185,13 +193,13 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.grossSales')}</Text>
                     <Text style={styles.sectionValue}>
-                      ${currentMonthData.grossSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.grossSalesCents)}
                     </Text>
                   </View>
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.netSales')}</Text>
-                    <Text style={[styles.sectionValue]}>
-                      ${currentMonthData.netSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    <Text style={styles.sectionValue}>
+                      {formatDollars(summary.netSalesCents)}
                     </Text>
                   </View>
                 </View>
@@ -209,7 +217,7 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
                   </View>
                   <View style={styles.expensesHeaderRight}>
                     <Text style={styles.sectionValue}>
-                      ${currentMonthData.expenses.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.totalExpensesCents)}
                     </Text>
                     <Ionicons
                       name={expensesExpanded ? "chevron-up" : "chevron-down"}
@@ -219,17 +227,19 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
                     />
                   </View>
                 </TouchableOpacity>
-                {expensesExpanded && (
+                {expensesExpanded && summary.expenseCategories.length > 0 && (
                   <View style={styles.categoryBreakdown}>
-                    {currentMonthData.expenseCategories.map((category, index) => {
-                      const percentage = (category.amount / currentMonthData.netSales) * 100;
+                    {summary.expenseCategories.map((category, index) => {
+                      const percentage = summary.netSalesCents > 0
+                        ? (category.amountCents / summary.netSalesCents) * 100
+                        : 0;
                       return (
                         <View key={index}>
                           <View style={styles.categoryRow}>
                             <Text style={styles.categoryName}>{category.name}</Text>
                             <View style={styles.categoryRight}>
                               <Text style={styles.categoryAmount}>
-                                ${category.amount.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+                                {formatDollars(category.amountCents)}
                               </Text>
                               <Text style={[styles.percentageText, styles.greenText]}>
                                 {percentage.toFixed(1)}%
@@ -249,13 +259,13 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.cashRevenue')}</Text>
                     <Text style={styles.sectionValue}>
-                      ${(currentMonthData.cash + currentMonthData.tips).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.cashCents)}
                     </Text>
                   </View>
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.cashAfterExpenses')}</Text>
                     <Text style={styles.sectionValue}>
-                      ${((currentMonthData.cash + currentMonthData.tips) - currentMonthData.expenses).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.cashAfterExpensesCents)}
                     </Text>
                   </View>
                 </View>
@@ -267,25 +277,25 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.tax')}</Text>
                     <Text style={styles.sectionValue}>
-                      ${currentMonthData.tax.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.taxCents)}
                     </Text>
                   </View>
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.tips')}</Text>
                     <Text style={styles.sectionValue}>
-                      ${currentMonthData.tips.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.tipsCents)}
                     </Text>
                   </View>
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.refunds')}</Text>
                     <Text style={styles.sectionValue}>
-                      ${currentMonthData.refunds.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.refundsCents)}
                     </Text>
                   </View>
                   <View style={styles.sectionRow}>
                     <Text style={styles.sectionLabel}>{t('salesReport.discounts')}</Text>
                     <Text style={styles.sectionValue}>
-                      ${currentMonthData.discounts.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatDollars(summary.discountsCents)}
                     </Text>
                   </View>
                 </View>
@@ -294,7 +304,9 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
           ) : (
             <View style={styles.noDataContainer}>
               <Ionicons name="analytics-outline" size={64} color={colors.textTertiary} />
-              <Text style={styles.noDataText}>{t('salesReport.noData')}</Text>
+              <Text style={styles.noDataText}>
+                {error || t('salesReport.noData')}
+              </Text>
             </View>
           )}
         </ScrollView>
@@ -490,7 +502,6 @@ const styles = StyleSheet.create({
   greenText: {
     color: '#31cc5f',
   },
-
   noDataContainer: {
     flex: 1,
     alignItems: 'center',

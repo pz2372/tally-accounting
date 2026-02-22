@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +21,7 @@ interface ExpenseDetailsScreenProps {
         category: string;
         status: 'Approved' | 'Pending';
         amount: number;
-        paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH';
+        paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK';
         orgCategoryId?: string;
         notes?: string;
     };
@@ -56,17 +56,17 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPaymentPicker, setShowPaymentPicker] = useState(false);
     const [editCategory, setEditCategory] = useState(expense.category);
-    const [editPaymentMethod, setEditPaymentMethod] = useState<'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'>(expense.paymentMethod || 'CREDIT_CARD');
+    const [editPaymentMethod, setEditPaymentMethod] = useState<'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK'>(expense.paymentMethod || 'CREDIT_CARD');
     const [editDescription, setEditDescription] = useState(expense.notes || '');
-    const [showReceiptModal, setShowReceiptModal] = useState(false);
+    const savedValues = useRef({ category: expense.category, paymentMethod: expense.paymentMethod || 'CREDIT_CARD', notes: expense.notes || '' });
     const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
     const [showScanScreen, setShowScanScreen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
-    const hasChanges = editCategory !== expense.category ||
-        editPaymentMethod !== (expense.paymentMethod || 'CREDIT_CARD') ||
-        editDescription !== (expense.notes || '');
+    const hasChanges = editCategory !== savedValues.current.category ||
+        editPaymentMethod !== savedValues.current.paymentMethod ||
+        editDescription !== savedValues.current.notes;
 
     const formatDate = (dateStr: string, day: number): string => {
         const monthKeys = ['january', 'february', 'march', 'april', 'may', 'june',
@@ -76,7 +76,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
         return `${t('month.' + monthKeys[monthIndex])} ${day}, ${date.getFullYear()}`;
     };
 
-    const getPaymentMethodDisplay = (method: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | undefined): { label: string; icon: string } => {
+    const getPaymentMethodDisplay = (method: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK' | undefined): { label: string; icon: string } => {
         switch (method) {
             case 'CREDIT_CARD':
                 return { label: t('details.creditCard'), icon: 'card-outline' };
@@ -84,6 +84,8 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                 return { label: t('details.debitCard'), icon: 'card-outline' };
             case 'CASH':
                 return { label: t('details.cash'), icon: 'cash-outline' };
+            case 'CHECK':
+                return { label: t('details.check'), icon: 'document-text-outline' };
             default:
                 return { label: t('details.creditCard'), icon: 'card-outline' };
         }
@@ -188,6 +190,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                 );
             }
 
+            savedValues.current = { category: editCategory, paymentMethod: editPaymentMethod, notes: editDescription };
             setShowEditModal(false);
             setShowCategoryPicker(false);
             setShowPaymentPicker(false);
@@ -202,7 +205,6 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
     };
 
     const handleTakePhoto = () => {
-        setShowReceiptModal(false);
         setShowScanScreen(true);
     };
     
@@ -212,8 +214,6 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
     };
     
     const handleChooseFromLibrary = async () => {
-        setShowReceiptModal(false);
-        
         const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
         
         if (permissionResult.granted === false) {
@@ -232,16 +232,16 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
         }
     };
 
+    const swipeHandlers = useSwipeBack(onBack);
+
     if (showScanScreen) {
         return (
-            <ScanScreen 
+            <ScanScreen
                 onCancel={() => setShowScanScreen(false)}
                 onSave={(imageUri) => handleCaptureComplete(imageUri)}
             />
         );
     }
-
-    const swipeHandlers = useSwipeBack(onBack);
 
     return (
         <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -262,11 +262,11 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                     {/* Details Card */}
                     <View style={styles.detailsCard}>
                                                 <View style={styles.tagsContainer}>
-                            <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(expense.category) }]}>
+                            <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(editCategory) }]}>
                                 <Text style={styles.categoryTagText}>
-                                    {CATEGORIES.includes(expense.category)
-                                        ? t('categories.' + expense.category.toLowerCase())
-                                        : expense.category}
+                                    {CATEGORIES.includes(editCategory)
+                                        ? t('categories.' + editCategory.toLowerCase())
+                                        : editCategory}
                                 </Text>
                             </View>
                         </View>
@@ -275,19 +275,19 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
 
                         {/* Payment Method */}
                         <View style={styles.paymentMethodRow}>
-                            <Ionicons 
-                                name={getPaymentMethodDisplay(expense.paymentMethod).icon as any} 
-                                size={16} 
+                            <Ionicons
+                                name={getPaymentMethodDisplay(editPaymentMethod).icon as any}
+                                size={16}
                                 color={colors.textSecondary}
                                 style={{ marginRight: spacing.xs }}
                             />
                             <Text style={styles.paymentMethodText}>
-                                {getPaymentMethodDisplay(expense.paymentMethod).label}
+                                {getPaymentMethodDisplay(editPaymentMethod).label}
                             </Text>
                         </View>
 
-                        
-                        <Text style={styles.description}>{expense.notes || ''}</Text>
+
+                        <Text style={styles.description}>{editDescription}</Text>
                                                 <Text style={styles.expenseDate}>{formatDate(expense.date, expense.day)}</Text>
                     </View>
 
@@ -295,7 +295,18 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                     <View style={styles.receiptSection}>
                         <Ionicons name="document-outline" size={64} color={colors.textTertiary} />
                         <Text style={styles.receiptText}>{t('details.noReceipt')}</Text>
-                        <TouchableOpacity style={styles.uploadButton} onPress={() => setShowReceiptModal(true)}>
+                        <TouchableOpacity style={styles.uploadButton} onPress={() => {
+                            Alert.alert(
+                                t('details.uploadReceipt'),
+                                '',
+                                [
+                                    { text: t('newExpense.takePhoto'), onPress: handleTakePhoto },
+                                    { text: t('newExpense.chooseFromLibrary'), onPress: handleChooseFromLibrary },
+                                    { text: t('common.cancel'), style: 'cancel' },
+                                ],
+                                { cancelable: true }
+                            );
+                        }}>
                             <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
                             <Text style={styles.uploadButtonText}>{t('details.uploadReceipt')}</Text>
                         </TouchableOpacity>
@@ -521,6 +532,27 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                                                 <Ionicons name="checkmark" size={18} color={colors.primary} />
                                             )}
                                         </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.categoryDropdownItem,
+                                                editPaymentMethod === 'CHECK' && styles.categoryDropdownItemSelected
+                                            ]}
+                                            onPress={() => {
+                                                setEditPaymentMethod('CHECK');
+                                                setShowPaymentPicker(false);
+                                            }}
+                                        >
+                                            <View style={styles.categoryDropdownItemContent}>
+                                                <Ionicons name="document-text-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                                                <Text style={[
+                                                    styles.categoryDropdownItemText,
+                                                    editPaymentMethod === 'CHECK' && styles.categoryDropdownItemTextSelected
+                                                ]}>{t('details.check')}</Text>
+                                            </View>
+                                            {editPaymentMethod === 'CHECK' && (
+                                                <Ionicons name="checkmark" size={18} color={colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
                                     </Pressable>
                                 )}
                             </View>
@@ -546,52 +578,6 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                     </View>
                 </Modal>
 
-                {/* Receipt Options Modal */}
-                <Modal
-                    visible={showReceiptModal}
-                    transparent={true}
-                    animationType="fade"
-                    onRequestClose={() => setShowReceiptModal(false)}
-                >
-                    <TouchableOpacity 
-                        style={styles.modalOverlay}
-                        activeOpacity={1}
-                        onPress={() => setShowReceiptModal(false)}
-                    >
-                        <View style={styles.receiptModalContent} onStartShouldSetResponder={() => true}>
-                            <Text style={styles.receiptModalTitle}>{t('details.uploadReceipt')}</Text>
-                            
-                            <TouchableOpacity 
-                                style={styles.receiptOption}
-                                onPress={handleTakePhoto}
-                            >
-                                <View style={styles.receiptOptionIcon}>
-                                    <Ionicons name="camera" size={24} color={colors.primary} />
-                                </View>
-                                <Text style={styles.receiptOptionText}>{t('newExpense.takePhoto')}</Text>
-                                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                            
-                            <TouchableOpacity 
-                                style={styles.receiptOption}
-                                onPress={handleChooseFromLibrary}
-                            >
-                                <View style={styles.receiptOptionIcon}>
-                                    <Ionicons name="images" size={24} color={colors.primary} />
-                                </View>
-                                <Text style={styles.receiptOptionText}>{t('newExpense.chooseFromLibrary')}</Text>
-                                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                            
-                            <TouchableOpacity 
-                                style={styles.cancelButton}
-                                onPress={() => setShowReceiptModal(false)}
-                            >
-                                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </TouchableOpacity>
-                </Modal>
             </View>
         </SafeAreaView>
     );
@@ -955,56 +941,5 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: colors.surface,
-    },
-    receiptModalContent: {
-        backgroundColor: colors.surface,
-        borderRadius: borderRadius.xl,
-        padding: spacing.xl,
-        width: '100%',
-        maxWidth: 400,
-    },
-    receiptModalTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: colors.textPrimary,
-        marginBottom: spacing.xl,
-        textAlign: 'center',
-    },
-    receiptOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.background,
-        padding: spacing.lg,
-        borderRadius: borderRadius.lg,
-        marginBottom: spacing.md,
-        gap: spacing.md,
-    },
-    receiptOptionIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: borderRadius.md,
-        backgroundColor: colors.primaryLight,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    receiptOptionText: {
-        flex: 1,
-        fontSize: 16,
-        fontWeight: '600',
-        color: colors.textPrimary,
-    },
-    cancelButton: {
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.border,
-        paddingVertical: spacing.lg,
-        borderRadius: borderRadius.lg,
-        marginTop: spacing.md,
-        alignItems: 'center',
-    },
-    cancelButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: colors.textPrimary,
     },
 });

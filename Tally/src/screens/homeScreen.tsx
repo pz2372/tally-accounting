@@ -6,20 +6,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { getOrgCachedData } from '../services/cacheService';
+import { createAuthenticatedAxios } from '../services/authService';
 import NewExpenseScreen from './newExpenseScreen';
 import UploadStatementScreen from './uploadStatementScreen';
 import NeedsAttentionScreen from './needsAttentionScreen';
 import StatementsScreen from './statementsScreen';
 import RecurringScreen from './recurringScreen';
 import SalesReportScreen from './salesReportScreen';
+import MissingReceiptsScreen from './missingReceiptsScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const HOME_METRICS_KEY = '@home_metrics';
+const SELECTED_BUSINESS_KEY = '@selected_business_id';
 
 interface HomeMetrics {
   totalSpent: number;
-  totalSales: number;
+  grossSales: number;
+  netSales: number;
   capturedReceipts: number;
   totalTransactions: number;
   unmatchedItems: number;
@@ -27,7 +31,8 @@ interface HomeMetrics {
 
 const defaultMetrics: HomeMetrics = {
   totalSpent: 0,
-  totalSales: 0,
+  grossSales: 0,
+  netSales: 0,
   capturedReceipts: 0,
   totalTransactions: 0,
   unmatchedItems: 0
@@ -57,8 +62,9 @@ export default function HomeScreen({
   const { t } = useContext(LanguageContext);
   const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
-  const [activeScreen, setActiveScreen] = useState<'home' | 'newExpense' | 'uploadStatement' | 'needsAttention' | 'statements' | 'recurring' | 'salesReport' | 'sales'>('home');
+  const [activeScreen, setActiveScreen] = useState<'home' | 'newExpense' | 'uploadStatement' | 'needsAttention' | 'statements' | 'recurring' | 'salesReport' | 'sales' | 'missingReceipts'>('home');
   const [metrics, setMetrics] = useState<HomeMetrics>(defaultMetrics);
+  const [missingReceiptExpenses, setMissingReceiptExpenses] = useState<any[]>([]);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   useEffect(() => {
@@ -78,6 +84,30 @@ export default function HomeScreen({
       slideAnim.setValue(SCREEN_WIDTH);
     }
   }, [activeScreen]);
+
+  // Load saved business ID on app start
+  useEffect(() => {
+    const loadSelectedBusiness = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(SELECTED_BUSINESS_KEY);
+        if (saved) {
+          setSelectedBusinessId(saved);
+        }
+      } catch (error) {
+        console.warn('Failed to load selected business:', error);
+      }
+    };
+    loadSelectedBusiness();
+  }, []);
+
+  // Save business ID whenever it changes
+  useEffect(() => {
+    if (selectedBusinessId) {
+      AsyncStorage.setItem(SELECTED_BUSINESS_KEY, selectedBusinessId).catch(error => {
+        console.warn('Failed to save selected business:', error);
+      });
+    }
+  }, [selectedBusinessId]);
 
   const handleBack = () => {
     // Slide out to right
@@ -122,29 +152,63 @@ export default function HomeScreen({
           };
         }
 
-        // Compute totalSpent from cached expenses (same source as category screen)
+        // Compute totalSpent from all cached expenses for current month
         if (selectedBusinessId) {
           const orgData = await getOrgCachedData(selectedBusinessId);
           if (orgData?.expenses && Array.isArray(orgData.expenses)) {
             const now = new Date();
             const currentMonth = now.getMonth();
             const currentYear = now.getFullYear();
-            const orgCategories = orgData.categories;
 
             const expenseTotal = orgData.expenses.reduce((sum: number, expense: any) => {
-              if (!expense.orgCategoryId || expense.deletedAt) return sum;
+              if (expense.deletedAt) return sum;
               const expenseDate = new Date(expense.expenseDate);
               if (expenseDate.getMonth() !== currentMonth || expenseDate.getFullYear() !== currentYear) {
                 return sum;
               }
-              // Only count if expense belongs to a valid, enabled category
-              if (orgCategories && Array.isArray(orgCategories)) {
-                const orgCat = orgCategories.find((oc: any) => oc.id === expense.orgCategoryId);
-                if (!orgCat) return sum;
-              }
               return sum + (expense.amountCents / 100);
             }, 0);
             nextMetrics.totalSpent = expenseTotal;
+
+            // Calculate count of expenses missing receipts for current month
+            const receiptMatches = orgData.receiptMatches || [];
+            const expensesWithReceipts = new Set(receiptMatches.map((m: any) => m.expenseId));
+
+            const missingReceiptsData: any[] = [];
+            const missingReceiptCount = orgData.expenses.reduce((count: number, expense: any) => {
+              if (expense.deletedAt) return count;
+              const expenseDate = new Date(expense.expenseDate);
+              if (expenseDate.getMonth() !== currentMonth || expenseDate.getFullYear() !== currentYear) {
+                return count;
+              }
+              // Only count if expense doesn't have a receipt match
+              if (!expensesWithReceipts.has(expense.id)) {
+                missingReceiptsData.push(expense);
+                return count + 1;
+              }
+              return count;
+            }, 0);
+            nextMetrics.unmatchedItems = missingReceiptCount;
+
+            if (isActive) {
+              setMissingReceiptExpenses(missingReceiptsData);
+            }
+          }
+
+          // Fetch gross/net sales from monthly-summary API
+          try {
+            const api = await createAuthenticatedAxios();
+            const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+            const response = await api.get('/api/sales-reports/monthly-summary', {
+              params: { month: monthKey },
+              headers: { 'x-org-id': selectedBusinessId },
+            });
+            if (response.data.success && response.data.summary) {
+              nextMetrics.grossSales = response.data.summary.grossSalesCents / 100;
+              nextMetrics.netSales = response.data.summary.netSalesCents / 100;
+            }
+          } catch (err) {
+            console.warn('Failed to fetch sales summary for home:', err);
           }
         }
 
@@ -168,9 +232,8 @@ export default function HomeScreen({
   const businessLegalName = selectedBusiness?.dba ? selectedBusiness.name : null;
   const isEmployee = selectedBusiness?.role === 'EMPLOYEE';
   const totalSpent = metrics.totalSpent;
-  const totalSales = metrics.totalSales;
-  const netProfit = totalSales - totalSpent;
-  const profitMargin = ((netProfit / totalSales) * 100).toFixed(1);
+  const grossSales = metrics.grossSales;
+  const netSales = metrics.netSales;
   const thisMonthExpenses = totalSpent;
   const capturedReceipts = metrics.capturedReceipts;
   const totalTransactions = metrics.totalTransactions;
@@ -225,12 +288,6 @@ export default function HomeScreen({
     );
   }
 
-  // Action alerts - only show when there are issues
-  const alerts = [
-    { id: 1, message: '5 statement charges missing receipts', icon: 'receipt-outline' },
-    { id: 2, message: '2 receipts not matched to a charge', icon: 'link-outline' },
-  ];
-
   // Render overlay screen
   const renderOverlayScreen = () => {
     if (activeScreen === 'home') return null;
@@ -257,6 +314,9 @@ export default function HomeScreen({
         break;
       case 'sales':
         ScreenComponent = <SalesReportScreen onBack={handleBack} />;
+        break;
+      case 'missingReceipts':
+        ScreenComponent = <MissingReceiptsScreen expenses={missingReceiptExpenses} onBack={handleBack} />;
         break;
       default:
         return null;
@@ -349,13 +409,13 @@ export default function HomeScreen({
             <View style={styles.overviewHeader}>
               <Text style={styles.overviewLabel}>{t('home.netSales')}</Text>
             </View>
-            <Text style={styles.overviewValue}>${netProfit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+            <Text style={styles.overviewValue}>${netSales.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
             <Text style={styles.overviewPeriod}>{currentMonthLabel}</Text>
 
             <View style={styles.overviewStatsGrid}>
               <View style={styles.overviewStatLeft}>
                 <Text style={styles.overviewStatLabel}>{t('home.grossSales')}</Text>
-                <Text style={styles.overviewStatValueLarge}>${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
+                <Text style={styles.overviewStatValueLarge}>${grossSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Text>
               </View>
               <View style={styles.overviewDivider} />
               <View style={styles.overviewStatRight}>
@@ -402,8 +462,13 @@ export default function HomeScreen({
           {/* Receipt Tracking Card */}
           <View style={styles.trackingCard}>
             <View style={styles.trackingHeader}>
-              <Ionicons name="document-text" size={22} color={colors.textSecondary} />
-              <Text style={styles.trackingTitle}>{t('home.receiptTracking')}</Text>
+              <Text style={styles.trackingTitle}>
+                <Text>
+                {t('home.receiptTracking')}
+                </Text>
+                <Text style={styles.trackingByText}>  with</Text>
+              </Text>
+              <Image source={require('../../assets/ai-logo.png')} style={styles.trackingAiLogo} />
             </View>
 
             <View style={styles.trackingRow}>
@@ -412,10 +477,18 @@ export default function HomeScreen({
                 <Text style={styles.trackingLabel}>{t('home.matched')}</Text>
               </View>
               <View style={styles.trackingDivider} />
-              <View style={styles.trackingStat}>
+              <TouchableOpacity
+                style={styles.trackingStat}
+                onPress={() => {
+                  if (unmatchedItems > 0) {
+                    setActiveScreen('missingReceipts');
+                  }
+                }}
+                disabled={unmatchedItems === 0}
+              >
                 <Text style={[styles.trackingValue, unmatchedItems > 0 && styles.trackingValueWarning]}>{unmatchedItems}</Text>
                 <Text style={styles.trackingLabel}>{t('home.unmatchedLabel')}</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -717,20 +790,31 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.xxl,
     marginBottom: spacing.xl,
     borderRadius: borderRadius.xl,
-    padding: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    paddingTop: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
   },
   trackingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
     marginBottom: spacing.lg,
   },
   trackingTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  trackingByText: {
+    fontWeight: '500',
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  trackingAiLogo: {
+    width: 65,
+    height: 30,
   },
   trackingRow: {
     flexDirection: 'row',
@@ -754,6 +838,7 @@ const styles = StyleSheet.create({
   trackingLabel: {
     fontSize: 12,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   trackingDivider: {
     width: 1,

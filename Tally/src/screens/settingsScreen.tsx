@@ -10,10 +10,9 @@ import AccountInfoScreen from './settings/AccountInfoScreen';
 import BusinessDetailsScreen from './settings/BusinessDetailsScreen';
 import LanguageScreen from './settings/LanguageScreen';
 import ContactSupportScreen from './settings/ContactSupportScreen';
-import RateAppScreen from './settings/RateAppScreen';
 import CategoriesScreen from './settings/CategoriesScreen';
 import ExportDataScreen from './settings/ExportDataScreen';
-import RolesScreen from './settings/rolesScreen';
+import RolesScreen from './settings/RolesScreen';
 import PrivacyPolicyScreen from './settings/PrivacyPolicyScreen';
 import TermsConditionsScreen from './settings/TermsConditionsScreen';
 import { Image } from 'react-native';
@@ -88,13 +87,10 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
         SubScreenComponent = <ExportDataScreen onBack={handleSubScreenBack} />;
         break;
       case 'roles':
-        SubScreenComponent = <RolesScreen onBack={handleSubScreenBack} />;
+        SubScreenComponent = <RolesScreen onBack={handleSubScreenBack} currentUser={currentUser} />;
         break;
       case 'contact':
         SubScreenComponent = <ContactSupportScreen onBack={handleSubScreenBack} />;
-        break;
-      case 'rate':
-        SubScreenComponent = <RateAppScreen onBack={handleSubScreenBack} />;
         break;
       case 'privacy':
         SubScreenComponent = <PrivacyPolicyScreen onBack={handleSubScreenBack} />;
@@ -222,16 +218,6 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('rate')}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: '#FCE7F3' }]}>
-                  <Ionicons name="star-outline" size={22} color="#DB2777" />
-                </View>
-                <Text style={styles.settingLabel}>{t('settings.rateApp')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
           </View>
 
           {/* Legal Section */}
@@ -274,7 +260,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               resizeMode="contain"
             />
             <Text style={styles.footerText}>Version 1.0.0</Text>
-            <Text style={styles.footerText}>© 2026 Z&Z Creative</Text>
+            <Text style={styles.footerText}>© 2026 StrataLumen Labs</Text>
           </View>
         </ScrollView>
       </View>
