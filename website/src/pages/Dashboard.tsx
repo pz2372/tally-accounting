@@ -14,22 +14,30 @@ import {
   Landmark,
   ShieldCheck,
   X,
+  CreditCard,
 } from 'lucide-react';
 import { usePlaidLink } from 'react-plaid-link';
+import logo from '../assets/logo.png';
 import './Dashboard.css';
+
+const FAVICON_URL = '/favicon.png';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/api\/?$/, '').replace(/\/$/, '') + '/api';
 
-function getAuthHeaders(): Record<string, string> {
+function getAuthHeaders(orgId?: string): Record<string, string> {
   const token = localStorage.getItem('accessToken');
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
   };
-  try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const orgId = user?.organizations?.[0]?.id;
-    if (orgId) headers['x-org-id'] = orgId;
-  } catch { /* ignore */ }
+  if (orgId) {
+    headers['x-org-id'] = orgId;
+  } else {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const firstOrgId = user?.organizations?.[0]?.id;
+      if (firstOrgId) headers['x-org-id'] = firstOrgId;
+    } catch { /* ignore */ }
+  }
   return headers;
 }
 
@@ -37,9 +45,16 @@ interface User {
   id: string;
   name: string;
   email: string;
-  organizations?: { id: string; name: string; role: string }[];
+  organizations?: OrgInfo[];
 }
 
+interface OrgInfo {
+  id: string;
+  name: string;
+  role: string;
+  dba?: string;
+  ein?: string;
+}
 
 interface PlaidAccountData {
   id: string;
@@ -60,16 +75,16 @@ interface PlaidItemData {
   accounts: PlaidAccountData[];
 }
 
-const navItems = [
-  { id: 'connect', label: 'Connect Cards', icon: <Link2 size={18} /> },
-  { id: 'roles', label: 'Roles', icon: <Users size={18} /> },
-  { id: 'organizations', label: 'Organizations', icon: <Building2 size={18} /> },
-];
+type OrgTab = 'cards' | 'roles';
+
+const ORG_COLORS = ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
-  const [activeSection, setActiveSection] = useState('connect');
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<OrgTab>('cards');
+  const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const logout = useCallback(() => {
@@ -98,23 +113,43 @@ export default function Dashboard() {
       })
       .then((data) => {
         if (!data) return;
-        // Merge server user with stored org info (server /me may not include org)
         const stored = localStorage.getItem('user');
         const storedUser = stored ? JSON.parse(stored) : {};
-        setUser({ ...storedUser, ...data.user });
+        const merged = { ...storedUser, ...data.user };
+        setUser(merged);
+        // Auto-select first org
+        if (merged.organizations?.length && !selectedOrgId) {
+          setSelectedOrgId(merged.organizations[0].id);
+        }
       })
       .catch(() => {
-        // Network error — fall back to stored user rather than logging out
         const stored = localStorage.getItem('user');
         if (!stored) { navigate('/login'); return; }
-        try { setUser(JSON.parse(stored)); } catch { navigate('/login'); }
+        try {
+          const parsed = JSON.parse(stored);
+          setUser(parsed);
+          if (parsed.organizations?.length && !selectedOrgId) {
+            setSelectedOrgId(parsed.organizations[0].id);
+          }
+        } catch { navigate('/login'); }
       });
   }, [navigate, logout]);
 
-  const orgName = user?.organizations?.[0]?.name || 'Your Organization';
+  const orgs = user?.organizations || [];
+  const selectedOrg = orgs.find(o => o.id === selectedOrgId);
   const initials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
+
+  const handleOrgCreated = (newOrg: OrgInfo) => {
+    const updatedOrgs = [...orgs, newOrg];
+    const updatedUser = { ...user!, organizations: updatedOrgs };
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    setSelectedOrgId(newOrg.id);
+    setShowCreateOrg(false);
+    setActiveTab('cards');
+  };
 
   if (!user) return null;
 
@@ -123,9 +158,12 @@ export default function Dashboard() {
       {/* Sidebar */}
       <aside className={`dash-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
         <div className="dash-sidebar-top">
-          <div className="dash-org-badge">
-            <div className="dash-org-icon"><Building2 size={16} /></div>
-            {!sidebarCollapsed && <span className="dash-org-name">{orgName}</span>}
+          <div className="dash-logo-container">
+            {sidebarCollapsed ? (
+              <img src={FAVICON_URL} alt="Tally" className="dash-favicon" />
+            ) : (
+              <img src={logo} alt="Tally" className="dash-logo" />
+            )}
           </div>
           <button
             className="dash-collapse-btn"
@@ -135,24 +173,38 @@ export default function Dashboard() {
           </button>
         </div>
 
+        {!sidebarCollapsed && (
+          <div className="dash-sidebar-label">Organizations</div>
+        )}
+
         <nav className="dash-nav">
-          {navItems.map((item) => (
+          {orgs.map((org, i) => (
             <button
-              key={item.id}
-              className={`dash-nav-item${activeSection === item.id ? ' active' : ''}`}
-              onClick={() => setActiveSection(item.id)}
+              key={org.id}
+              className={`dash-nav-item${selectedOrgId === org.id && !showCreateOrg ? ' active' : ''}`}
+              onClick={() => { setSelectedOrgId(org.id); setShowCreateOrg(false); }}
+              title={sidebarCollapsed ? org.name : undefined}
             >
-              {item.icon}
-              {!sidebarCollapsed && <span>{item.label}</span>}
+              <div
+                className="dash-nav-org-dot"
+                style={{ background: ORG_COLORS[i % ORG_COLORS.length] }}
+              >
+                {org.name[0].toUpperCase()}
+              </div>
+              {!sidebarCollapsed && <span>{org.name}</span>}
             </button>
           ))}
+          <button
+            className={`dash-nav-item dash-nav-add${showCreateOrg ? ' active' : ''}`}
+            onClick={() => setShowCreateOrg(true)}
+          >
+            <Plus size={18} />
+            {!sidebarCollapsed && <span>Add Organization</span>}
+          </button>
         </nav>
 
         <div className="dash-sidebar-bottom">
-          <button
-            className={`dash-nav-item${activeSection === 'settings' ? ' active' : ''}`}
-            onClick={() => setActiveSection('settings')}
-          >
+          <button className="dash-nav-item" onClick={() => { /* settings placeholder */ }}>
             <Settings size={18} />
             {!sidebarCollapsed && <span>Settings</span>}
           </button>
@@ -169,7 +221,10 @@ export default function Dashboard() {
         <header className="dash-topbar">
           <div className="dash-topbar-left">
             <h1 className="dash-page-title">
-              {navItems.find(n => n.id === activeSection)?.label || 'Settings'}
+              {showCreateOrg
+                ? 'New Organization'
+                : selectedOrg?.name || 'Dashboard'
+              }
             </h1>
           </div>
           <div className="dash-topbar-right">
@@ -182,47 +237,179 @@ export default function Dashboard() {
 
         {/* Content */}
         <div className="dash-content">
-          {activeSection === 'connect' && <ConnectCardsSection />}
-          {activeSection === 'roles' && <RolesSection user={user} />}
-          {activeSection === 'organizations' && <OrganizationsSection user={user} setUser={setUser} />}
-          {activeSection === 'settings' && (
-            <div className="dash-placeholder">
-              <div className="dash-placeholder-icon"><Settings size={40} /></div>
-              <h2>Settings</h2>
-              <p>Manage organization settings and preferences.</p>
+          {showCreateOrg ? (
+            <CreateOrgForm
+              onCreated={handleOrgCreated}
+              onCancel={() => {
+                setShowCreateOrg(false);
+                if (!selectedOrgId && orgs.length) setSelectedOrgId(orgs[0].id);
+              }}
+            />
+          ) : selectedOrg ? (
+            <>
+              {/* Org sub-tabs */}
+              <div className="dash-org-tabs">
+                <button
+                  className={`dash-org-tab${activeTab === 'cards' ? ' active' : ''}`}
+                  onClick={() => setActiveTab('cards')}
+                >
+                  <CreditCard size={16} />
+                  Cards & Accounts
+                </button>
+                <button
+                  className={`dash-org-tab${activeTab === 'roles' ? ' active' : ''}`}
+                  onClick={() => setActiveTab('roles')}
+                >
+                  <Users size={16} />
+                  Team & Roles
+                </button>
+              </div>
+
+              {activeTab === 'cards' && (
+                <ConnectCardsSection orgId={selectedOrg.id} />
+              )}
+              {activeTab === 'roles' && (
+                <RolesSection orgId={selectedOrg.id} orgName={selectedOrg.name} />
+              )}
+            </>
+          ) : orgs.length === 0 ? (
+            <div className="dash-connect-empty">
+              <div className="dash-connect-empty-icon"><Building2 size={40} /></div>
+              <h3>No organizations yet</h3>
+              <p>Create an organization to start managing expenses, team members, and card connections.</p>
+              <button className="dash-btn-primary" onClick={() => setShowCreateOrg(true)}>
+                <Plus size={14} /> Create Organization
+              </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
 
-/* ── Connect Cards (Plaid) ── */
-function ConnectCardsSection() {
+/* ── Create Organization Form ── */
+function CreateOrgForm({ onCreated, onCancel }: { onCreated: (org: OrgInfo) => void; onCancel: () => void }) {
+  const [orgName, setOrgName] = useState('');
+  const [orgDBA, setOrgDBA] = useState('');
+  const [orgEIN, setOrgEIN] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleCreate = async () => {
+    if (!orgName.trim()) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/organizations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          name: orgName.trim(),
+          dba: orgDBA.trim() || undefined,
+          ein: orgEIN.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create organization');
+
+      const newOrg = data.organization;
+      onCreated({ id: newOrg.id, name: newOrg.name, role: 'ADMIN', dba: newOrg.dba, ein: newOrg.ein });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create organization');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="dash-create-org-wrapper">
+      <div className="dash-card" style={{ maxWidth: 520 }}>
+        <h3 className="dash-card-title">Create Organization</h3>
+
+        {error && (
+          <div className="dash-roles-state error" style={{ justifyContent: 'flex-start', marginBottom: 16, padding: '12px 16px' }}>
+            <AlertCircle size={16} />{error}
+          </div>
+        )}
+
+        <div className="dash-org-form">
+          <input
+            type="text"
+            className="dash-org-input"
+            placeholder="Organization name (required)"
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            autoFocus
+            disabled={submitting}
+          />
+          <input
+            type="text"
+            className="dash-org-input"
+            placeholder="DBA — Doing Business As (optional)"
+            value={orgDBA}
+            onChange={(e) => setOrgDBA(e.target.value)}
+            disabled={submitting}
+          />
+          <input
+            type="text"
+            className="dash-org-input"
+            placeholder="EIN — Employer Identification Number (optional)"
+            value={orgEIN}
+            onChange={(e) => setOrgEIN(e.target.value)}
+            disabled={submitting}
+          />
+          <div className="dash-org-form-actions">
+            <button className="dash-btn-outline" onClick={onCancel} disabled={submitting}>
+              Cancel
+            </button>
+            <button
+              className="dash-btn-primary"
+              onClick={handleCreate}
+              disabled={submitting || !orgName.trim()}
+            >
+              {submitting ? <><Loader2 size={14} className="dash-spinner" /> Creating…</> : 'Create'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Connect Cards (Plaid) — now org-scoped ── */
+function ConnectCardsSection({ orgId }: { orgId: string }) {
   const [items, setItems] = useState<PlaidItemData[]>([]);
   const [loading, setLoading] = useState(true);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [exchanging, setExchanging] = useState(false);
   const [error, setError] = useState('');
 
-  // Load existing connected accounts
+  // Load existing connected accounts for this org
   useEffect(() => {
+    let cancelled = false;
     const fetchAccounts = async () => {
+      setLoading(true);
+      setItems([]);
       try {
         const res = await fetch(`${API_BASE}/plaid/accounts`, {
-          headers: getAuthHeaders(),
+          headers: getAuthHeaders(orgId),
         });
         const data = await res.json();
-        if (data.success) setItems(data.items);
+        if (!cancelled && data.success) setItems(data.items);
       } catch {
         // ignore
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchAccounts();
-  }, []);
+    return () => { cancelled = true; };
+  }, [orgId]);
 
   // Plaid Link
   const { open, ready } = usePlaidLink({
@@ -235,7 +422,7 @@ function ConnectCardsSection() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...getAuthHeaders(),
+            ...getAuthHeaders(orgId),
           },
           body: JSON.stringify({
             public_token,
@@ -266,7 +453,7 @@ function ConnectCardsSection() {
     try {
       const res = await fetch(`${API_BASE}/plaid/create-link-token`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(orgId),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to get link token');
@@ -280,7 +467,7 @@ function ConnectCardsSection() {
     try {
       await fetch(`${API_BASE}/plaid/items/${itemId}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(orgId),
       });
       setItems(prev => prev.filter(i => i.id !== itemId));
     } catch {
@@ -298,9 +485,9 @@ function ConnectCardsSection() {
     <>
       <div className="dash-section-header">
         <div>
-          <h2>Connect Cards &amp; Accounts</h2>
+          <h2>Cards & Accounts</h2>
           <p className="dash-section-sub">
-            Link your bank accounts and credit cards via Plaid to automatically import transactions.
+            Link bank accounts and credit cards via Plaid to automatically import transactions.
           </p>
         </div>
         {!loading && allAccounts.length > 0 && (
@@ -385,171 +572,7 @@ function ConnectCardsSection() {
   );
 }
 
-/* ── Organizations ── */
-function OrganizationsSection({ user, setUser }: { user: User; setUser: (u: User) => void }) {
-  const [creating, setCreating] = useState(false);
-  const [orgName, setOrgName] = useState('');
-  const [orgDBA, setOrgDBA] = useState('');
-  const [orgEIN, setOrgEIN] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const orgs = user.organizations || [];
-
-  const handleCreate = async () => {
-    if (!orgName.trim()) return;
-    setSubmitting(true);
-    setError('');
-    setSuccess('');
-    try {
-      const res = await fetch(`${API_BASE}/organizations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({
-          name: orgName.trim(),
-          dba: orgDBA.trim() || undefined,
-          ein: orgEIN.trim() || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create organization');
-
-      const newOrg = data.organization;
-      const updatedOrgs = [...orgs, { id: newOrg.id, name: newOrg.name, role: 'ADMIN' }];
-      const updatedUser = { ...user, organizations: updatedOrgs };
-      setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setOrgName('');
-      setOrgDBA('');
-      setOrgEIN('');
-      setCreating(false);
-      setSuccess(`"${newOrg.name}" created successfully`);
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create organization');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="dash-section-header">
-        <div>
-          <h2>Organizations</h2>
-          <p className="dash-section-sub">
-            Manage your organizations or create a new one.
-          </p>
-        </div>
-        {!creating && (
-          <button className="dash-btn-primary" onClick={() => { setCreating(true); setError(''); setSuccess(''); }}>
-            <Plus size={14} /> New Organization
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <div className="dash-roles-state error" style={{ justifyContent: 'flex-start', marginBottom: 16, padding: '12px 16px' }}>
-          <AlertCircle size={16} />{error}
-        </div>
-      )}
-
-      {success && (
-        <div className="dash-org-success">
-          <CheckCircle2 size={16} />{success}
-        </div>
-      )}
-
-      {creating && (
-        <div className="dash-card" style={{ marginBottom: 20 }}>
-          <h3 className="dash-card-title">Create Organization</h3>
-          <div className="dash-org-form">
-            <input
-              type="text"
-              className="dash-org-input"
-              placeholder="Organization name (required)"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              autoFocus
-              disabled={submitting}
-            />
-            <input
-              type="text"
-              className="dash-org-input"
-              placeholder="DBA (optional)"
-              value={orgDBA}
-              onChange={(e) => setOrgDBA(e.target.value)}
-              disabled={submitting}
-            />
-            <input
-              type="text"
-              className="dash-org-input"
-              placeholder="EIN (optional)"
-              value={orgEIN}
-              onChange={(e) => setOrgEIN(e.target.value)}
-              disabled={submitting}
-            />
-            <div className="dash-org-form-actions">
-              <button
-                className="dash-btn-outline"
-                onClick={() => { setCreating(false); setOrgName(''); setOrgDBA(''); setOrgEIN(''); setError(''); }}
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
-                className="dash-btn-primary"
-                onClick={handleCreate}
-                disabled={submitting || !orgName.trim()}
-              >
-                {submitting ? <><Loader2 size={14} className="dash-spinner" /> Creating…</> : 'Create'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {orgs.length === 0 ? (
-        <div className="dash-connect-empty">
-          <div className="dash-connect-empty-icon"><Building2 size={40} /></div>
-          <h3>No organizations yet</h3>
-          <p>Create an organization to start managing expenses, team members, and more.</p>
-          {!creating && (
-            <button className="dash-btn-primary" onClick={() => setCreating(true)}>
-              <Plus size={14} /> Create Organization
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="dash-org-list">
-          {orgs.map((org, i) => (
-            <div key={org.id} className="dash-org-card">
-              <div className="dash-org-card-left">
-                <div className="dash-org-card-icon" style={{ background: ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'][i % 6] }}>
-                  <Building2 size={18} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div className="dash-org-card-name">{org.name}</div>
-                  {(org as any).dba && <div className="dash-org-card-detail">DBA: {(org as any).dba}</div>}
-                  {(org as any).ein && <div className="dash-org-card-detail">EIN: {(org as any).ein}</div>}
-                  <div className="dash-org-card-id">ID: {org.id.slice(0, 8)}…</div>
-                </div>
-              </div>
-              <span className={`dash-role-badge ${org.role.toLowerCase()}`}>{org.role}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-/* ── Roles ── */
+/* ── Roles — now single-org scoped ── */
 interface RoleUser {
   user: {
     id: string;
@@ -559,128 +582,89 @@ interface RoleUser {
   id: string;
   role: string;
   permissions: string[];
-  orgId?: string;
 }
 
-interface OrgWithMembers {
-  id: string;
-  name: string;
-  members: RoleUser[];
-}
-
-function RolesSection({ user }: { user: User }) {
-  const [orgMembers, setOrgMembers] = useState<OrgWithMembers[]>([]);
+function RolesSection({ orgId, orgName }: { orgId: string; orgName: string }) {
+  const [members, setMembers] = useState<RoleUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [inviting, setInviting] = useState<string | null>(null);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('EMPLOYEE');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createEmail, setCreateEmail] = useState('');
+  const [createRole, setCreateRole] = useState('EMPLOYEE');
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [editEmail, setEditEmail] = useState('');
   const [editRole, setEditRole] = useState('EMPLOYEE');
   const [saving, setSaving] = useState(false);
 
-  const userOrgs = user?.organizations || [];
-
   useEffect(() => {
-    const fetchOrgMembers = async () => {
+    let cancelled = false;
+    const fetchMembers = async () => {
+      setLoading(true);
+      setMembers([]);
       try {
-        setLoading(true);
-        const orgData: OrgWithMembers[] = [];
-
-        for (const org of userOrgs) {
-          const res = await fetch(`${API_BASE}/organizations/members`, {
-            headers: {
-              ...getAuthHeaders(),
-              'x-org-id': org.id,
-            },
-          });
-          const data = await res.json();
-          if (res.ok) {
-            orgData.push({
-              id: org.id,
-              name: org.name,
-              members: data.members || [],
-            });
-          }
+        const res = await fetch(`${API_BASE}/organizations/members`, {
+          headers: getAuthHeaders(orgId),
+        });
+        const data = await res.json();
+        if (!cancelled && res.ok) {
+          setMembers(data.members || []);
         }
-
-        setOrgMembers(orgData);
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Failed to load members');
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load members');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
+    fetchMembers();
+    return () => { cancelled = true; };
+  }, [orgId]);
 
-    if (userOrgs.length > 0) {
-      fetchOrgMembers();
-    } else {
-      setLoading(false);
-    }
-  }, [userOrgs]);
-
-  const handleInvite = async (orgId: string) => {
-    if (!inviteEmail.trim()) return;
+  const handleCreateRole = async () => {
+    if (!createEmail.trim()) return;
     setSaving(true);
+    setError('');
     try {
       const res = await fetch(`${API_BASE}/organizations/invite`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-          'x-org-id': orgId,
+          ...getAuthHeaders(orgId),
         },
         body: JSON.stringify({
-          email: inviteEmail.trim(),
-          role: inviteRole,
+          email: createEmail.trim(),
+          role: createRole,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to invite member');
+      if (!res.ok) throw new Error(data.error || 'Failed to create role');
 
-      setOrgMembers(prev =>
-        prev.map(org =>
-          org.id === orgId
-            ? { ...org, members: [...org.members, data.membership] }
-            : org
-        )
-      );
-      setInviting(null);
-      setInviteEmail('');
-      setInviteRole('EMPLOYEE');
+      setMembers(prev => [...prev, data.membership]);
+      setShowCreateModal(false);
+      setCreateEmail('');
+      setCreateRole('EMPLOYEE');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to invite member');
+      setError(err instanceof Error ? err.message : 'Failed to create role');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEditRole = async (orgId: string, memberId: string) => {
+  const handleSaveEdit = async (memberId: string) => {
     setSaving(true);
     try {
       const res = await fetch(`${API_BASE}/organizations/members/${memberId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-          'x-org-id': orgId,
+          ...getAuthHeaders(orgId),
         },
         body: JSON.stringify({ role: editRole }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update member');
 
-      setOrgMembers(prev =>
-        prev.map(org =>
-          org.id === orgId
-            ? {
-                ...org,
-                members: org.members.map(m =>
-                  m.id === memberId ? { ...m, role: editRole } : m
-                ),
-              }
-            : org
-        )
+      setMembers(prev =>
+        prev.map(m => m.id === memberId ? { ...m, role: editRole } : m)
       );
       setEditingMemberId(null);
     } catch (err: unknown) {
@@ -701,11 +685,17 @@ function RolesSection({ user }: { user: User }) {
     <>
       <div className="dash-section-header">
         <div>
-          <h2>Roles</h2>
+          <h2>Team & Roles</h2>
           <p className="dash-section-sub">
-            Manage team members and their roles across your organizations.
+            Manage team members and their roles for {orgName}.
           </p>
         </div>
+        <button
+          className="dash-btn-primary"
+          onClick={() => { setShowCreateModal(true); setCreateEmail(''); setCreateRole('EMPLOYEE'); }}
+        >
+          <Plus size={14} /> Create Role
+        </button>
       </div>
 
       {error && (
@@ -714,152 +704,173 @@ function RolesSection({ user }: { user: User }) {
         </div>
       )}
 
+      {showCreateModal && (
+        <div className="dash-modal-overlay" onClick={() => !saving && setShowCreateModal(false)}>
+          <div className="dash-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dash-modal-header">
+              <h3>Create Role</h3>
+              <button
+                className="dash-modal-close"
+                onClick={() => !saving && setShowCreateModal(false)}
+                disabled={saving}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="dash-modal-content">
+              <div className="dash-form-group">
+                <label className="dash-form-label">Email Address</label>
+                <input
+                  type="email"
+                  className="dash-org-input"
+                  placeholder="name@example.com"
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  autoFocus
+                  disabled={saving}
+                />
+              </div>
+              <div className="dash-form-group">
+                <label className="dash-form-label">Role</label>
+                <select
+                  className="dash-org-input"
+                  value={createRole}
+                  onChange={(e) => setCreateRole(e.target.value)}
+                  disabled={saving}
+                >
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+            </div>
+            <div className="dash-modal-footer">
+              <button
+                className="dash-btn-outline"
+                onClick={() => setShowCreateModal(false)}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                className="dash-btn-primary"
+                onClick={handleCreateRole}
+                disabled={saving || !createEmail.trim()}
+              >
+                {saving ? <Loader2 size={14} className="dash-spinner" /> : <Plus size={14} />}
+                {saving ? 'Creating…' : 'Create Role'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="dash-roles-state">
           <Loader2 size={20} className="dash-spinner" />
           <span>Loading team members…</span>
         </div>
-      ) : userOrgs.length === 0 ? (
-        <div className="dash-roles-state">
-          <span>No organizations yet. Create one to manage team members.</span>
-        </div>
-      ) : orgMembers.length === 0 ? (
-        <div className="dash-roles-state">
-          <span>No organizations with members found.</span>
+      ) : members.length === 0 ? (
+        <div className="dash-connect-empty">
+          <div className="dash-connect-empty-icon"><Users size={40} /></div>
+          <h3>No team members</h3>
+          <p>Create a role to add team members to this organization.</p>
+          <button className="dash-btn-primary" onClick={() => { setShowCreateModal(true); setCreateEmail(''); setCreateRole('EMPLOYEE'); }}>
+            <Plus size={14} /> Create Role
+          </button>
         </div>
       ) : (
-        <div className="dash-orgs-roles-grid">
-          {orgMembers.map((org) => (
-            <div key={org.id} className="dash-org-members-card">
-              <div className="dash-org-members-header">
-                <h3>{org.name}</h3>
-                {inviting !== org.id && (
-                  <button
-                    className="dash-btn-primary"
-                    onClick={() => {
-                      setInviting(org.id);
-                      setInviteEmail('');
-                      setInviteRole('EMPLOYEE');
-                    }}
-                    style={{ padding: '8px 14px' }}
+        <div className="dash-card">
+          <div className="dash-team-list">
+            {members.map((m, i) => (
+              <div key={m.id} className="dash-team-row">
+                <div className="dash-team-left">
+                  <div
+                    className="dash-team-avatar"
+                    style={{ background: avatarColors[i % avatarColors.length] }}
                   >
-                    <Plus size={12} /> Add Role
-                  </button>
-                )}
-              </div>
-
-              {inviting === org.id && (
-                <div className="dash-invite-form">
-                  <input
-                    type="email"
-                    className="dash-org-input"
-                    placeholder="Email address"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    disabled={saving}
-                  />
-                  <select
-                    className="dash-org-input"
-                    value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value)}
-                    disabled={saving}
-                  >
-                    <option value="EMPLOYEE">Employee</option>
-                    <option value="MANAGER">Manager</option>
-                    <option value="ADMIN">Admin</option>
-                  </select>
-                  <div className="dash-invite-actions">
-                    <button
-                      className="dash-btn-outline"
-                      onClick={() => setInviting(null)}
-                      disabled={saving}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="dash-btn-primary"
-                      onClick={() => handleInvite(org.id)}
-                      disabled={saving || !inviteEmail.trim()}
-                    >
-                      {saving ? <Loader2 size={12} className="dash-spinner" style={{ marginRight: 4 }} /> : null}
-                      Invite
-                    </button>
+                    {getInitials(m.user.name, m.user.email)}
+                  </div>
+                  <div>
+                    <div className="dash-team-name">{m.user.name || m.user.email}</div>
+                    <div className="dash-team-email">{m.user.email}</div>
                   </div>
                 </div>
-              )}
+                <div className="dash-team-right">
+                  <span className={`dash-role-badge ${m.role.toLowerCase()}`}>{m.role}</span>
+                  <button
+                    className="dash-icon-btn small"
+                    onClick={() => {
+                      setEditingMemberId(m.id);
+                      setEditEmail(m.user.email);
+                      setEditRole(m.role);
+                    }}
+                    title="Edit"
+                  >
+                    <Settings size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-              {org.members.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-light)', fontSize: '0.85rem' }}>
-                  No members yet
-                </div>
-              ) : (
-                <div className="dash-team-list">
-                  {org.members.map((m, i) => (
-                    <div key={m.id} className="dash-team-row">
-                      <div className="dash-team-left">
-                        <div
-                          className="dash-team-avatar"
-                          style={{ background: avatarColors[i % avatarColors.length] }}
-                        >
-                          {getInitials(m.user.name, m.user.email)}
-                        </div>
-                        <div>
-                          <div className="dash-team-name">{m.user.name || m.user.email}</div>
-                          <div className="dash-team-email">{m.user.email}</div>
-                        </div>
-                      </div>
-                      <div className="dash-team-right">
-                        {editingMemberId === m.id ? (
-                          <>
-                            <select
-                              className="dash-role-select"
-                              value={editRole}
-                              onChange={(e) => setEditRole(e.target.value)}
-                              disabled={saving}
-                            >
-                              <option value="EMPLOYEE">Employee</option>
-                              <option value="MANAGER">Manager</option>
-                              <option value="ADMIN">Admin</option>
-                            </select>
-                            <button
-                              className="dash-icon-btn small"
-                              onClick={() => handleEditRole(org.id, m.id)}
-                              disabled={saving}
-                              title="Save"
-                            >
-                              {saving ? <Loader2 size={14} className="dash-spinner" /> : <CheckCircle2 size={14} />}
-                            </button>
-                            <button
-                              className="dash-icon-btn small"
-                              onClick={() => setEditingMemberId(null)}
-                              disabled={saving}
-                              title="Cancel"
-                            >
-                              <X size={14} />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <span className={`dash-role-badge ${m.role.toLowerCase()}`}>{m.role}</span>
-                            <button
-                              className="dash-icon-btn small"
-                              onClick={() => {
-                                setEditingMemberId(m.id);
-                                setEditRole(m.role);
-                              }}
-                              title="Edit role"
-                            >
-                              <Settings size={14} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+      {editingMemberId && (
+        <div className="dash-modal-overlay" onClick={() => !saving && setEditingMemberId(null)}>
+          <div className="dash-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dash-modal-header">
+              <h3>Edit Role</h3>
+              <button
+                className="dash-modal-close"
+                onClick={() => !saving && setEditingMemberId(null)}
+                disabled={saving}
+              >
+                <X size={18} />
+              </button>
             </div>
-          ))}
+            <div className="dash-modal-content">
+              <div className="dash-form-group">
+                <label className="dash-form-label">Email Address</label>
+                <input
+                  type="email"
+                  className="dash-org-input"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  disabled={true}
+                />
+                <p className="dash-form-hint">Email cannot be changed</p>
+              </div>
+              <div className="dash-form-group">
+                <label className="dash-form-label">Role</label>
+                <select
+                  className="dash-org-input"
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  disabled={saving}
+                >
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+            </div>
+            <div className="dash-modal-footer">
+              <button
+                className="dash-btn-outline"
+                onClick={() => setEditingMemberId(null)}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                className="dash-btn-primary"
+                onClick={() => handleSaveEdit(editingMemberId)}
+                disabled={saving}
+              >
+                {saving ? <Loader2 size={14} className="dash-spinner" /> : <CheckCircle2 size={14} />}
+                {saving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>
