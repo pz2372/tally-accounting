@@ -103,6 +103,7 @@ model User {
   uploadedStatements Statement[] @relation("StatementsUploadedBy")
   uploadedSalesReports SalesReport[]
   supportTickets SupportTicket[]
+  inviteTokens InviteToken[]
 }
 
 model Organization {
@@ -131,6 +132,7 @@ model Organization {
   recurringChargeInstances RecurringChargeInstance[]
   supportTickets SupportTicket[]
   plaidItems       PlaidItem[]
+  inviteTokens InviteToken[]
 
   @@index([billingOwnerId])
 }
@@ -517,4 +519,20 @@ model CardTransaction {
   @@index([orgId, pending])
   @@index([plaidAccountId, date])
   @@index([pendingTransactionId])
+}
+
+model InviteToken {
+  id        String    @id @default(uuid())
+  token     String    @unique @default(uuid())
+  userId    String
+  orgId     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User         @relation(fields: [userId], references: [id])
+  org  Organization @relation(fields: [orgId], references: [id])
+
+  @@index([token])
+  @@index([userId])
 }

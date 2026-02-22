@@ -10,6 +10,41 @@ export const transporter = nodemailer.createTransport({
   },
 });
 
+export const sendInviteEmail = async (
+  to: string,
+  inviteToken: string,
+  orgName: string,
+  inviterName?: string | null
+) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const inviteLink = `${frontendUrl}/accept-invite/${inviteToken}`;
+
+  await transporter.sendMail({
+    from: `"Tally" <${process.env.SMTP_USER}>`,
+    to,
+    subject: `You've been invited to ${orgName} on Tally`,
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0f172a;color:#f1f5f9;border-radius:12px;">
+        <h2 style="margin:0 0 8px;font-size:22px;">You're invited!</h2>
+        <p style="color:#94a3b8;margin:0 0 24px;">
+          ${inviterName ? `${inviterName} has` : 'You have been'} invited you to join <strong style="color:#f1f5f9;">${orgName}</strong> on Tally.
+        </p>
+        <p style="color:#94a3b8;margin:0 0 28px;">
+          Click the button below to set up your password and get started.
+        </p>
+        <div style="text-align:center;margin:0 0 28px;">
+          <a href="${inviteLink}" style="display:inline-block;padding:14px 32px;background:#6366F1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">
+            Accept Invitation
+          </a>
+        </div>
+        <p style="color:#64748b;margin:0;font-size:12px;">
+          This invitation expires in 7 days. If you didn't expect this, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+  });
+};
+
 export const sendVerificationEmail = async (
   to: string,
   code: string,

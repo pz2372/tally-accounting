@@ -42,7 +42,7 @@ interface HomeScreenProps {
   currentUser?: {
     name?: string;
     email?: string;
-    organizations?: Array<{ id: string; name: string; role?: string }>;
+    organizations?: Array<{ id: string; name: string; dba?: string; role?: string }>;
   } | null;
 }
 
@@ -164,7 +164,8 @@ export default function HomeScreen({
   }, [selectedBusinessId]);
 
   const selectedBusiness = businesses.find((business) => business.id === selectedBusinessId);
-  const businessName = selectedBusiness?.name || 'Organization';
+  const businessName = selectedBusiness?.dba || selectedBusiness?.name || 'Organization';
+  const businessLegalName = selectedBusiness?.dba ? selectedBusiness.name : null;
   const isEmployee = selectedBusiness?.role === 'EMPLOYEE';
   const totalSpent = metrics.totalSpent;
   const totalSales = metrics.totalSales;
@@ -281,14 +282,21 @@ export default function HomeScreen({
                 onPress={() => hasMultipleBusinesses && setShowBusinessDropdown(!showBusinessDropdown)}
                 disabled={!hasMultipleBusinesses}
               >
-                <Text style={styles.businessName}>{businessName}</Text>
-                {hasMultipleBusinesses && (
-                  <Ionicons
-                    name={showBusinessDropdown ? "chevron-up" : "chevron-down"}
-                    size={20}
-                    color={colors.textPrimary}
-                  />
-                )}
+                <View>
+                  <View style={styles.businessNameRow}>
+                    <Text style={styles.businessName}>{businessName}</Text>
+                    {hasMultipleBusinesses && (
+                      <Ionicons
+                        name={showBusinessDropdown ? "chevron-up" : "chevron-down"}
+                        size={20}
+                        color={colors.textPrimary}
+                      />
+                    )}
+                  </View>
+                  {businessLegalName && (
+                    <Text style={styles.businessLegalName}>{businessLegalName}</Text>
+                  )}
+                </View>
               </TouchableOpacity>
 
               {/* Business Dropdown Menu */}
@@ -307,12 +315,17 @@ export default function HomeScreen({
                       }}
                     >
                       <View style={styles.businessDropdownItemContent}>
-                        <Text style={[
-                          styles.businessDropdownText,
-                          selectedBusinessId === business.id && styles.businessDropdownTextActive
-                        ]}>
-                          {business.name}
-                        </Text>
+                        <View>
+                          <Text style={[
+                            styles.businessDropdownText,
+                            selectedBusinessId === business.id && styles.businessDropdownTextActive
+                          ]}>
+                            {business.dba || business.name}
+                          </Text>
+                          {business.dba && (
+                            <Text style={styles.businessDropdownSubtext}>{business.name}</Text>
+                          )}
+                        </View>
                       </View>
                       {selectedBusinessId === business.id && (
                         <View style={styles.checkmarkCircle}>
@@ -477,11 +490,21 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingRight: spacing.sm,
   },
+  businessNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   businessName: {
     fontSize: 22,
     fontWeight: '700',
     color: colors.textPrimary,
     letterSpacing: -0.5,
+  },
+  businessLegalName: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   businessDropdown: {
     position: 'absolute',
@@ -537,6 +560,11 @@ const styles = StyleSheet.create({
   businessDropdownTextActive: {
     fontWeight: '700',
     color: '#0f172a',
+  },
+  businessDropdownSubtext: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   avatarButton: {
     marginLeft: spacing.md,

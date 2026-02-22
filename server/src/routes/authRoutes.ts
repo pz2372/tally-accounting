@@ -12,6 +12,10 @@ const router = Router();
 router.post('/firebase-login', authController.firebaseLogin);
 // POST /api/auth/register - Register new user
 router.post('/register', authController.register);
+// GET /api/auth/invite/:token - Validate invite token
+router.get('/invite/:token', authController.validateInvite);
+// POST /api/auth/accept-invite - Accept invite and create account
+router.post('/accept-invite', authController.acceptInvite);
 
 // All routes below require authentication
 router.use(verifyToken);

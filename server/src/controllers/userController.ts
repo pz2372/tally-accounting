@@ -1,5 +1,6 @@
 import { getAuth, getFirestore } from '../config/firebase';
 import { USER_ROLES } from '../middleware/roleAuth';
+import prisma from '../config/database';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types/http';
 
@@ -8,25 +9,34 @@ type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | 
 // Get current user profile with role
 export const getCurrentUser: Handler = async (req, res) => {
   try {
-    const db = getFirestore();
-    const user = await getAuth().getUser(req.user.uid);
-
-    // Get user role from Firestore
-    const userDoc = await db.collection('users').doc(req.user.uid).get();
-    const userData = userDoc.exists ? userDoc.data() : {};
+    // Load user from Prisma with organizations
+    const dbUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: {
+        memberships: {
+          include: {
+            org: { include: { subscription: true } },
+          },
+        },
+      },
+    });
 
     res.json({
       success: true,
       user: {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        emailVerified: user.emailVerified,
-        role: userData.role || USER_ROLES.EMPLOYEE,
-        businessId: userData.businessId,
-        createdAt: user.metadata.creationTime,
-        lastSignIn: user.metadata.lastSignInTime
+        id: dbUser?.id,
+        email: dbUser?.email,
+        name: dbUser?.name,
+        emailVerified: req.user.emailVerified || false,
+        createdAt: dbUser?.createdAt,
+        organizations: dbUser?.memberships.map(m => ({
+          id: m.orgId,
+          name: m.org.name,
+          dba: m.org.dba,
+          role: m.role,
+          permissions: m.permissions,
+          subscription: m.org.subscription,
+        })) || [],
       }
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
+import { sendInviteEmail } from '../config/email';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
@@ -217,7 +218,25 @@ export const inviteUser: Handler = async (req, res) => {
         org: true
       }
     });
-    
+
+    // Create invite token (expires in 7 days)
+    const inviteToken = await prisma.inviteToken.create({
+      data: {
+        userId: invitedUser.id,
+        orgId,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    // Send invite email
+    try {
+      const inviterUser = await prisma.user.findUnique({ where: { id: req.user.id }, select: { name: true } });
+      await sendInviteEmail(email, inviteToken.token, membership.org.name, inviterUser?.name);
+    } catch (emailError) {
+      console.error('Failed to send invite email:', emailError);
+      // Don't fail the invite if email fails — membership is already created
+    }
+
     res.status(201).json({
       success: true,
       message: 'User invited successfully',

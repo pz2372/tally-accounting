@@ -5,7 +5,10 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../types/http';
 import { PRESET_CATEGORIES } from '../config/categories';
 
+import { Request } from 'express';
+
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
+type PublicHandler = (req: Request, res: Response) => Promise<Response | void> | Response | void;
 
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is required');
@@ -108,6 +111,7 @@ export const register: Handler = async (req, res) => {
         organizations: user.memberships.map(m => ({
           id: m.orgId,
           name: m.org.name,
+          dba: m.org.dba,
           role: m.role,
           permissions: m.permissions,
           subscription: m.org.subscription
@@ -242,6 +246,7 @@ export const firebaseLogin: Handler = async (req, res) => {
         organizations: user.memberships.map(m => ({
           id: m.orgId,
           name: m.org.name,
+          dba: m.org.dba,
           role: m.role,
           permissions: m.permissions,
           subscription: m.org.subscription
@@ -295,6 +300,153 @@ export const createCustomToken: Handler = async (req, res) => {
       success: false,
       error: 'Failed to create token'
     });
+  }
+};
+
+// Validate invite token (public)
+export const validateInvite: PublicHandler = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const invite = await prisma.inviteToken.findUnique({
+      where: { token },
+      include: {
+        user: { select: { email: true } },
+        org: { select: { name: true } },
+      },
+    });
+
+    if (!invite) {
+      return res.status(404).json({ success: false, error: 'Invalid invite link' });
+    }
+
+    if (invite.usedAt) {
+      return res.status(400).json({ success: false, error: 'This invite has already been used' });
+    }
+
+    if (invite.expiresAt < new Date()) {
+      return res.status(400).json({ success: false, error: 'This invite has expired' });
+    }
+
+    res.json({
+      success: true,
+      email: invite.user.email,
+      orgName: invite.org.name,
+    });
+  } catch (error) {
+    console.error('validateInvite error:', error);
+    res.status(500).json({ success: false, error: 'Failed to validate invite' });
+  }
+};
+
+// Accept invite — set password, create Firebase user, activate account (public)
+export const acceptInvite: PublicHandler = async (req, res) => {
+  try {
+    const { token, name, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ success: false, error: 'Token and password are required' });
+    }
+
+    const invite = await prisma.inviteToken.findUnique({
+      where: { token },
+      include: {
+        user: {
+          include: {
+            memberships: {
+              include: {
+                org: { include: { subscription: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!invite) {
+      return res.status(404).json({ success: false, error: 'Invalid invite link' });
+    }
+
+    if (invite.usedAt) {
+      return res.status(400).json({ success: false, error: 'This invite has already been used' });
+    }
+
+    if (invite.expiresAt < new Date()) {
+      return res.status(400).json({ success: false, error: 'This invite has expired' });
+    }
+
+    // Create Firebase auth user
+    let userRecord;
+    try {
+      userRecord = await getAuth().createUser({
+        email: invite.user.email,
+        password,
+        displayName: name || undefined,
+      });
+    } catch (error) {
+      if (error.code === 'auth/email-already-exists') {
+        return res.status(409).json({ success: false, error: 'An account with this email already exists. Please log in instead.' });
+      }
+      console.error('Firebase createUser error:', error);
+      return res.status(400).json({ success: false, error: 'Failed to create account' });
+    }
+
+    // Update the DB user with Firebase UID and name
+    const user = await prisma.user.update({
+      where: { id: invite.userId },
+      data: {
+        firebaseUid: userRecord.uid,
+        name: name?.trim() || null,
+      },
+      include: {
+        memberships: {
+          include: {
+            org: { include: { subscription: true } },
+          },
+        },
+      },
+    });
+
+    // Mark invite as used
+    await prisma.inviteToken.update({
+      where: { id: invite.id },
+      data: { usedAt: new Date() },
+    });
+
+    // Generate JWT
+    const accessToken = jwt.sign(
+      {
+        id: user.id,
+        firebaseUid: userRecord.uid,
+        email: user.email,
+        emailVerified: userRecord.emailVerified || false,
+      },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.status(201).json({
+      success: true,
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: userRecord.emailVerified || false,
+        createdAt: user.createdAt,
+        organizations: user.memberships.map((m) => ({
+          id: m.orgId,
+          name: m.org.name,
+          dba: m.org.dba,
+          role: m.role,
+          permissions: m.permissions,
+          subscription: m.org.subscription,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('acceptInvite error:', error);
+    res.status(500).json({ success: false, error: 'Failed to accept invite' });
   }
 };
 

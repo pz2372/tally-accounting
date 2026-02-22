@@ -221,7 +221,12 @@ export const checkAuth = async (): Promise<{ valid: boolean; user: any | null }>
     const response = await axios.get(`${API_URL}/api/auth/me`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    return { valid: true, user: response.data.user ?? response.data };
+    const freshUser = response.data.user ?? response.data;
+    // Update stored user with fresh data from server
+    if (freshUser) {
+      await storeUser(freshUser);
+    }
+    return { valid: true, user: freshUser };
   } catch (error: any) {
     if (error.response?.status === 401) {
       // Token is invalid or expired — clear it

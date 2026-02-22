@@ -6,6 +6,7 @@ import {
   Building2,
   ChevronRight,
   Settings,
+  Pencil,
   Plus,
   CreditCard,
 } from 'lucide-react';
@@ -161,13 +162,20 @@ export default function Dashboard() {
         </nav>
 
         <div className="dash-sidebar-bottom">
-          <button className="dash-nav-item" onClick={() => { /* settings placeholder */ }}>
-            <Settings size={18} />
-            {!sidebarCollapsed && <span>Settings</span>}
-          </button>
-          <button className="dash-nav-item logout" onClick={logout}>
-            <LogOut size={18} />
-            {!sidebarCollapsed && <span>Log Out</span>}
+          {!sidebarCollapsed && (
+            <div className="dash-sidebar-user">
+              <div className="dash-user-avatar">{initials}</div>
+              {user.name && <span className="dash-user-name">{user.name}</span>}
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <div className="dash-sidebar-user collapsed" title={user.name || undefined}>
+              <div className="dash-user-avatar">{initials}</div>
+            </div>
+          )}
+          <button className="dash-sidebar-user logout" onClick={logout} title={sidebarCollapsed ? 'Log Out' : undefined}>
+            <div className="dash-logout-icon"><LogOut size={14} /></div>
+            {!sidebarCollapsed && <span className="dash-user-name">Log Out</span>}
           </button>
         </div>
       </aside>
@@ -188,10 +196,15 @@ export default function Dashboard() {
             ) : null}
           </div>
           <div className="dash-topbar-right">
-            <div className="dash-user-chip">
-              <div className="dash-user-avatar">{initials}</div>
-              {user.name && <span className="dash-user-name">{user.name}</span>}
-            </div>
+            {selectedOrg && !showCreateOrg && (
+              <button
+                className="dash-icon-btn"
+                onClick={() => setShowEditOrg(true)}
+                title="Edit organization"
+              >
+                <Pencil size={16} />
+              </button>
+            )}
           </div>
         </header>
 
@@ -206,29 +219,20 @@ export default function Dashboard() {
             />
           ) : selectedOrg ? (
             <>
-              <div className="dash-org-header">
-                <div className="dash-org-tabs">
-                  <button
-                    className={`dash-org-tab${activeTab === 'cards' ? ' active' : ''}`}
-                    onClick={() => setActiveTab('cards')}
-                  >
-                    <CreditCard size={16} />
-                    Cards & Accounts
-                  </button>
-                  <button
-                    className={`dash-org-tab${activeTab === 'roles' ? ' active' : ''}`}
-                    onClick={() => setActiveTab('roles')}
-                  >
-                    <Users size={16} />
-                    Team & Roles
-                  </button>
-                </div>
+              <div className="dash-org-tabs">
                 <button
-                  className="dash-icon-btn"
-                  onClick={() => setShowEditOrg(true)}
-                  title="Edit organization"
+                  className={`dash-org-tab${activeTab === 'cards' ? ' active' : ''}`}
+                  onClick={() => setActiveTab('cards')}
                 >
-                  <Settings size={18} />
+                  <CreditCard size={16} />
+                  Cards & Accounts
+                </button>
+                <button
+                  className={`dash-org-tab${activeTab === 'roles' ? ' active' : ''}`}
+                  onClick={() => setActiveTab('roles')}
+                >
+                  <Users size={16} />
+                  Team & Roles
                 </button>
               </div>
 

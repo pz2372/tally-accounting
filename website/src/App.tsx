@@ -6,6 +6,7 @@ import Home from './pages/Home'
 import Register from './pages/Register'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import AcceptInvite from './pages/AcceptInvite'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -18,20 +19,22 @@ function ScrollToTop() {
 function App() {
   const location = useLocation()
   const isDashboard = location.pathname === '/dashboard'
+  const isAcceptInvite = location.pathname.startsWith('/accept-invite')
 
   return (
     <>
       <ScrollToTop />
-      {!isDashboard && <Navbar />}
+      {!isDashboard && !isAcceptInvite && <Navbar />}
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/accept-invite/:token" element={<AcceptInvite />} />
         </Routes>
       </main>
-      {!isDashboard && <Footer />}
+      {!isDashboard && !isAcceptInvite && <Footer />}
     </>
   )
 }
