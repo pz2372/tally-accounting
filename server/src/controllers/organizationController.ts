@@ -116,20 +116,31 @@ export const getOrganization: Handler = async (req, res) => {
 export const updateOrganization: Handler = async (req, res) => {
   try {
     const { orgId, role } = req.user;
-    const { name } = req.body;
-    
+    const { name, dba, ein } = req.body;
+
     if (role !== 'ADMIN') {
       return res.status(403).json({
         success: false,
         error: 'Admin access required'
       });
     }
-    
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Organization name is required'
+      });
+    }
+
     const org = await prisma.organization.update({
       where: { id: orgId },
-      data: { name }
+      data: {
+        name: name.trim(),
+        dba: dba?.trim() || null,
+        ein: ein?.trim() || null
+      }
     });
-    
+
     res.json({
       success: true,
       message: 'Organization updated successfully',
