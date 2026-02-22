@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
-import './Pricing.css';
+import '../css/Pricing.css';
 
 const features = [
   'Unlimited team members',

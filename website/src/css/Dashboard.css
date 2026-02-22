@@ -1399,7 +1399,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1407,10 +1408,10 @@
 }
 
 .dash-modal {
-  background: var(--bg-card);
+  background: var(--bg-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 20px 25px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   width: 90%;
   max-width: 480px;
   display: flex;

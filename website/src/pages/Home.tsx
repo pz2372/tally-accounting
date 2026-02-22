@@ -27,7 +27,7 @@ import {
   List,
 } from 'lucide-react';
 import Phone3D from '../components/Phone3D';
-import './Home.css';
+import '../css/Home.css';
 
 /* ── Phone mock screens ───────────────── */
 function DashboardScreen() {

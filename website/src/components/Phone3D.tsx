@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import './Phone3D.css';
+import '../css/Phone3D.css';
 
 interface PhoneScreen {
   id: string;
