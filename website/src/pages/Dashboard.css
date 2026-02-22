@@ -28,7 +28,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 10px;
   padding: 0 4px;
 }
 
@@ -41,7 +41,7 @@
 }
 
 .dash-logo {
-  height: 28px;
+  height: 60px;
   width: auto;
   max-width: 180px;
   object-fit: contain;
@@ -51,6 +51,7 @@
   height: 28px;
   width: 28px;
   object-fit: contain;
+  margin-top: 5px;
 }
 
 .dash-org-badge {
@@ -109,6 +110,31 @@
   border-top: 1px solid var(--border);
   margin-top: 4px;
   padding-top: 12px;
+}
+
+.dash-nav-org-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dash-nav-org-primary {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-nav-org-secondary {
+  font-size: 0.72rem;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dash-collapse-btn {
@@ -201,10 +227,28 @@
   z-index: 50;
 }
 
+.dash-topbar-left {
+  flex: 1;
+}
+
+.dash-topbar-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .dash-page-title {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text);
+  margin: 0;
+}
+
+.dash-page-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin: 0;
+  font-weight: 400;
 }
 
 .dash-topbar-right {
@@ -1292,6 +1336,14 @@
   margin-top: 4px;
 }
 
+/* ─── Org Header ─── */
+.dash-org-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 /* ─── Org Tabs ─── */
 .dash-org-tabs {
   display: flex;
@@ -1299,6 +1351,7 @@
   margin-bottom: 24px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0;
+  flex: 1;
 }
 
 .dash-org-tab {

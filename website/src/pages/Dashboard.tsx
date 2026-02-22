@@ -85,6 +85,7 @@ export default function Dashboard() {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<OrgTab>('cards');
   const [showCreateOrg, setShowCreateOrg] = useState(false);
+  const [showEditOrg, setShowEditOrg] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const logout = useCallback(() => {
@@ -183,15 +184,20 @@ export default function Dashboard() {
               key={org.id}
               className={`dash-nav-item${selectedOrgId === org.id && !showCreateOrg ? ' active' : ''}`}
               onClick={() => { setSelectedOrgId(org.id); setShowCreateOrg(false); }}
-              title={sidebarCollapsed ? org.name : undefined}
+              title={sidebarCollapsed ? (org.dba || org.name) : undefined}
             >
               <div
                 className="dash-nav-org-dot"
                 style={{ background: ORG_COLORS[i % ORG_COLORS.length] }}
               >
-                {org.name[0].toUpperCase()}
+                {(org.dba || org.name)[0].toUpperCase()}
               </div>
-              {!sidebarCollapsed && <span>{org.name}</span>}
+              {!sidebarCollapsed && (
+                <div className="dash-nav-org-text">
+                  <span className="dash-nav-org-primary">{org.dba || org.name}</span>
+                  {org.dba && <span className="dash-nav-org-secondary">{org.name}</span>}
+                </div>
+              )}
             </button>
           ))}
           <button
@@ -220,12 +226,16 @@ export default function Dashboard() {
         {/* Top bar */}
         <header className="dash-topbar">
           <div className="dash-topbar-left">
-            <h1 className="dash-page-title">
-              {showCreateOrg
-                ? 'New Organization'
-                : selectedOrg?.name || 'Dashboard'
-              }
-            </h1>
+            {showCreateOrg ? (
+              <div>
+                <h1 className="dash-page-title">New Organization</h1>
+              </div>
+            ) : selectedOrg ? (
+              <div className="dash-topbar-title-group">
+                <h1 className="dash-page-title">{selectedOrg.dba || selectedOrg.name}</h1>
+                {selectedOrg.dba && <p className="dash-page-subtitle">{selectedOrg.name}</p>}
+              </div>
+            ) : null}
           </div>
           <div className="dash-topbar-right">
             <div className="dash-user-chip">
@@ -247,21 +257,30 @@ export default function Dashboard() {
             />
           ) : selectedOrg ? (
             <>
-              {/* Org sub-tabs */}
-              <div className="dash-org-tabs">
+              {/* Org sub-tabs and edit button */}
+              <div className="dash-org-header">
+                <div className="dash-org-tabs">
+                  <button
+                    className={`dash-org-tab${activeTab === 'cards' ? ' active' : ''}`}
+                    onClick={() => setActiveTab('cards')}
+                  >
+                    <CreditCard size={16} />
+                    Cards & Accounts
+                  </button>
+                  <button
+                    className={`dash-org-tab${activeTab === 'roles' ? ' active' : ''}`}
+                    onClick={() => setActiveTab('roles')}
+                  >
+                    <Users size={16} />
+                    Team & Roles
+                  </button>
+                </div>
                 <button
-                  className={`dash-org-tab${activeTab === 'cards' ? ' active' : ''}`}
-                  onClick={() => setActiveTab('cards')}
+                  className="dash-icon-btn"
+                  onClick={() => setShowEditOrg(true)}
+                  title="Edit organization"
                 >
-                  <CreditCard size={16} />
-                  Cards & Accounts
-                </button>
-                <button
-                  className={`dash-org-tab${activeTab === 'roles' ? ' active' : ''}`}
-                  onClick={() => setActiveTab('roles')}
-                >
-                  <Users size={16} />
-                  Team & Roles
+                  <Settings size={18} />
                 </button>
               </div>
 
@@ -270,6 +289,23 @@ export default function Dashboard() {
               )}
               {activeTab === 'roles' && (
                 <RolesSection orgId={selectedOrg.id} orgName={selectedOrg.name} />
+              )}
+
+              {showEditOrg && (
+                <EditOrgModal
+                  org={selectedOrg}
+                  onClose={() => setShowEditOrg(false)}
+                  onSaved={(updatedOrg) => {
+                    setShowEditOrg(false);
+                    // Update org in user's organizations list
+                    const updated = user!.organizations!.map(o =>
+                      o.id === selectedOrg.id ? { ...o, ...updatedOrg } : o
+                    );
+                    const updatedUser = { ...user!, organizations: updated };
+                    setUser(updatedUser);
+                    localStorage.setItem('user', JSON.stringify(updatedUser));
+                  }}
+                />
               )}
             </>
           ) : orgs.length === 0 ? (
@@ -282,6 +318,123 @@ export default function Dashboard() {
               </button>
             </div>
           ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Edit Organization Modal ── */
+function EditOrgModal({
+  org,
+  onClose,
+  onSaved,
+}: {
+  org: OrgInfo;
+  onClose: () => void;
+  onSaved: (org: Partial<OrgInfo>) => void;
+}) {
+  const [name, setName] = useState(org.name);
+  const [dba, setDba] = useState(org.dba || '');
+  const [ein, setEin] = useState(org.ein || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/organizations`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(org.id),
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          dba: dba.trim() || undefined,
+          ein: ein.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update organization');
+
+      onSaved({
+        id: org.id,
+        name: data.organization.name,
+        dba: data.organization.dba,
+        ein: data.organization.ein,
+        role: org.role,
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update organization');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="dash-modal-overlay" onClick={() => !saving && onClose()}>
+      <div className="dash-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="dash-modal-header">
+          <h3>Edit Organization</h3>
+          <button className="dash-modal-close" onClick={onClose} disabled={saving}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="dash-modal-content">
+          {error && (
+            <div className="dash-roles-state error" style={{ justifyContent: 'flex-start', padding: '12px 16px' }}>
+              <AlertCircle size={16} />{error}
+            </div>
+          )}
+          <div className="dash-form-group">
+            <label className="dash-form-label">Organization Name</label>
+            <input
+              type="text"
+              className="dash-org-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={saving}
+              autoFocus
+            />
+          </div>
+          <div className="dash-form-group">
+            <label className="dash-form-label">DBA — Doing Business As</label>
+            <input
+              type="text"
+              className="dash-org-input"
+              placeholder="Optional"
+              value={dba}
+              onChange={(e) => setDba(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+          <div className="dash-form-group">
+            <label className="dash-form-label">EIN — Employer Identification Number</label>
+            <input
+              type="text"
+              className="dash-org-input"
+              placeholder="Optional"
+              value={ein}
+              onChange={(e) => setEin(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+        </div>
+        <div className="dash-modal-footer">
+          <button className="dash-btn-outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className="dash-btn-primary"
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+          >
+            {saving ? <Loader2 size={14} className="dash-spinner" /> : <CheckCircle2 size={14} />}
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
         </div>
       </div>
     </div>
