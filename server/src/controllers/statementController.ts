@@ -2,8 +2,54 @@ import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
+import { uploadToS3 } from '../services/s3Service';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
+
+// Upload statement file to S3 and create record
+export const uploadStatementWithFile: Handler = async (req, res) => {
+  try {
+    const { orgId, userId } = req.user;
+
+    if (!orgId) {
+      return res.status(403).json({ success: false, error: 'Organization context required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Statement file is required' });
+    }
+
+    const { provider, statementMonth, sourceType } = req.body;
+
+    // Upload to S3 - statements folder
+    const s3Result = await uploadToS3(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      `${orgId}/statements`
+    );
+
+    const statement = await prisma.statement.create({
+      data: {
+        orgId,
+        provider: provider || null,
+        statementMonth: statementMonth || null,
+        sourceType: sourceType || 'pdf',
+        fileUrl: s3Result.url,
+        uploadedById: userId,
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Statement uploaded successfully',
+      statement,
+    });
+  } catch (error: any) {
+    console.error('uploadStatementWithFile error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
 
 // Upload card statement with transactions
 export const uploadStatement: Handler = async (req, res) => {

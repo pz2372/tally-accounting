@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
   Pressable,
-  Image, 
+  Image,
   ActivityIndicator,
-  Alert 
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,12 +20,21 @@ import { CATEGORIES, getCategoryColor } from '../components/categories';
 import { extractReceiptData } from '../services/aiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getOrgCachedData } from '../services/cacheService';
+import { getAccessToken } from '../services/authService';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
+const PAYMENT_METHOD_MAP: Record<string, string> = {
+  'Credit Card': 'CREDIT_CARD',
+  'Debit Card': 'DEBIT_CARD',
+  'Cash': 'CASH',
+};
 
 interface ReviewScanScreenProps {
   imageUri: string;
   onBack: () => void;
   isSaving?: boolean;
-  onSave: (data: {
+  onSave?: (data: {
     merchant: string;
     amount: string;
     category: string;
@@ -35,11 +44,14 @@ interface ReviewScanScreenProps {
     imageUri: string;
     documentType?: 'receipt' | 'sales_report';
   }) => void;
+  selectedOrgId?: string | null;
+  onSuccess?: () => void;
 }
 
-export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = false }: ReviewScanScreenProps) {
+export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _isSaving = false, selectedOrgId, onSuccess }: ReviewScanScreenProps) {
   const { t } = useContext(LanguageContext);
   const [isExtracting, setIsExtracting] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [merchant, setMerchant] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -101,7 +113,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = 
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Validate required fields
     if (!merchant.trim()) {
       Alert.alert(t('common.validationError'), t('reviewScan.enterMerchant'));
@@ -118,16 +130,141 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = 
       return;
     }
 
-    onSave({
-      merchant,
-      amount,
-      category: selectedCategory,
-      paymentMethod,
-      date: selectedDate,
-      notes,
-      imageUri,
-      documentType,
-    });
+    setIsSaving(true);
+    try {
+      // Get auth token and org ID
+      const accessToken = await getAccessToken();
+      if (!accessToken) {
+        Alert.alert('Error', 'Session expired. Please log in again.');
+        setIsSaving(false);
+        return;
+      }
+
+      let orgId = selectedOrgId;
+      if (!orgId) {
+        const userRaw = await AsyncStorage.getItem('@current_user');
+        const user = userRaw ? JSON.parse(userRaw) : null;
+        orgId = user?.organizations?.[0]?.id;
+      }
+
+      if (!orgId) {
+        Alert.alert('Error', 'No organization found. Please log in again.');
+        setIsSaving(false);
+        return;
+      }
+
+      // Prepare FormData
+      const amountCents = Math.round(parseFloat(amount) * 100);
+      const paymentMethodApi = PAYMENT_METHOD_MAP[paymentMethod] || 'CREDIT_CARD';
+
+      const formData = new FormData();
+      const filename = imageUri.split('/').pop() || 'receipt.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const fileType = match ? `image/${match[1]}` : 'image/jpeg';
+
+      formData.append('file', {
+        uri: imageUri,
+        type: fileType,
+        name: filename,
+      } as any);
+      formData.append('amountCents', String(amountCents));
+
+      // Route to correct endpoint and add document-type-specific fields
+      let endpoint: string;
+      if (documentType === 'sales_report') {
+        endpoint = `${API_URL}/api/sales-reports/with-receipt`;
+        formData.append('businessDate', selectedDate.toISOString());
+        if (merchant.trim()) formData.append('merchant', merchant.trim());
+        if (notes.trim()) formData.append('notes', notes.trim());
+      } else {
+        endpoint = `${API_URL}/api/expenses/with-receipt`;
+        formData.append('paymentMethod', paymentMethodApi);
+        formData.append('expenseDate', selectedDate.toISOString());
+        formData.append('categoryName', selectedCategory);
+        if (merchant.trim()) formData.append('merchant', merchant.trim());
+        if (notes.trim()) formData.append('notes', notes.trim());
+      }
+
+      // Send to backend
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'x-org-id': orgId,
+        },
+        body: formData,
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) {
+        throw new Error(responseData.error || `Failed to save ${documentType === 'sales_report' ? 'sales report' : 'expense'}`);
+      }
+
+      // Update local cache based on document type
+      const monthKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
+
+      if (documentType === 'sales_report') {
+        const savedReport = responseData.report;
+        if (savedReport) {
+          const cacheKey = `@org_sales_reports_${orgId}`;
+          const cached = await AsyncStorage.getItem(cacheKey);
+          const cachedList = cached ? JSON.parse(cached) : [];
+          const updatedList = [savedReport, ...cachedList];
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(updatedList));
+
+          // Clear monthly cache to force refresh on salesReportScreen
+          await AsyncStorage.removeItem(`${cacheKey}_${monthKey}`);
+        }
+      } else {
+        const savedExpense = responseData.expense;
+        if (savedExpense) {
+          const cacheKey = `@org_expenses_${orgId}`;
+          const cached = await AsyncStorage.getItem(cacheKey);
+          const cachedList = cached ? JSON.parse(cached) : [];
+          const updatedList = [savedExpense, ...cachedList];
+          await AsyncStorage.setItem(cacheKey, JSON.stringify(updatedList));
+
+          // Clear monthly cache to force refresh on expensesScreen
+          await AsyncStorage.removeItem(`${cacheKey}_${monthKey}`);
+        }
+      }
+
+      // Call optional legacy onSave callback for compatibility
+      if (onSave) {
+        onSave({
+          merchant,
+          amount,
+          category: selectedCategory,
+          paymentMethod,
+          date: selectedDate,
+          notes,
+          imageUri,
+          documentType,
+        });
+      }
+
+      // Show success and call onSuccess
+      Alert.alert(
+        'Success',
+        `${documentType === 'sales_report' ? 'Sales report' : 'Expense'} saved successfully!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setIsSaving(false);
+              onSuccess?.();
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error saving:', error);
+      Alert.alert(
+        'Error',
+        error?.message || 'Failed to save. Please try again.',
+        [{ text: 'OK', onPress: () => setIsSaving(false) }]
+      );
+    }
   };
 
   const handleCancel = () => {

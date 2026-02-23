@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as statementController from '../controllers/statementController';
 import { requireOrg, verifyToken } from '../middleware/auth';
+import { uploadSingle } from '../middleware/upload';
 
 const router = Router();
 
@@ -9,6 +10,7 @@ router.use(verifyToken);
 router.use(requireOrg);
 
 // Statement management
+router.post('/with-file', uploadSingle, statementController.uploadStatementWithFile);
 router.post('/', statementController.uploadStatement);
 router.get('/', statementController.getAllStatements);
 router.get('/unmatched', statementController.getUnmatchedTransactions);

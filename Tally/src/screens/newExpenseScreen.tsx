@@ -129,7 +129,7 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
 
       if (selectedReceipt) {
         const formData = new FormData();
-        formData.append('receipt', { uri: selectedReceipt, type: 'image/jpeg', name: 'receipt.jpg' } as any);
+        formData.append('file', { uri: selectedReceipt, type: 'image/jpeg', name: 'receipt.jpg' } as any);
         formData.append('amountCents', String(amountCents));
         formData.append('paymentMethod', paymentEntry.apiValue);
         formData.append('expenseDate', selectedDate.toISOString());

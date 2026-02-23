@@ -6,10 +6,12 @@ import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
-import { createAuthenticatedAxios } from '../services/authService';
+import { getAccessToken } from '../services/authService';
 import DatePickerModal from '../components/DatePickerModal';
 import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface UploadStatementScreenProps {
   onBack: () => void;
@@ -92,18 +94,6 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
     );
   };
 
-  const handleSaveScannedStatement = (uri: string) => {
-    // Create a DocumentPickerAsset-like object from the scanned image
-    const fileName = `scanned_statement_${Date.now()}.jpg`;
-    setSelectedFile({
-      uri,
-      name: fileName,
-      size: 0, // Size unknown for scanned images
-      mimeType: 'image/jpeg',
-    } as DocumentPicker.DocumentPickerAsset);
-    setShowScanScreen(false);
-  };
-
   const handleSave = async () => {
     if (!selectedFile) {
       Alert.alert(t('uploadStatement.noFileSelected'), t('uploadStatement.pleaseSelectFile'));
@@ -126,7 +116,10 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         return;
       }
 
-      const api = await createAuthenticatedAxios();
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Authentication failed');
+      }
 
       let progress = 0;
       const progressInterval = setInterval(() => {
@@ -135,13 +128,23 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
       }, 150);
 
       if (uploadType === 'dailySales') {
-        await api.post('/api/sales-reports', {
-          businessDate: selectedDate.toISOString(),
-          source: 'POS_UPLOAD',
-          fileUrl: selectedFile.uri,
-          fileType: selectedFile.mimeType || 'unknown',
-        }, {
-          headers: { 'x-org-id': orgId },
+        // Upload daily sales report with file
+        const formData = new FormData();
+        formData.append('file', {
+          uri: selectedFile.uri,
+          type: selectedFile.mimeType || 'application/octet-stream',
+          name: selectedFile.name,
+        } as any);
+        formData.append('businessDate', selectedDate.toISOString());
+        formData.append('source', 'POS_UPLOAD');
+
+        await fetch(`${API_URL}/api/sales-reports/with-receipt`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-org-id': orgId,
+          },
+          body: formData,
         });
 
         clearInterval(progressInterval);
@@ -154,14 +157,25 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
           ]);
         }, 300);
       } else {
+        // Upload monthly bank statement with file
+        const formData = new FormData();
+        formData.append('file', {
+          uri: selectedFile.uri,
+          type: selectedFile.mimeType || 'application/octet-stream',
+          name: selectedFile.name,
+        } as any);
         const statementMonth = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
-        await api.post('/api/statements', {
-          provider: statementName.trim(),
-          statementMonth,
-          sourceType: selectedFile.mimeType?.includes('pdf') ? 'pdf' : 'csv',
-          transactions: [],
-        }, {
-          headers: { 'x-org-id': orgId },
+        formData.append('provider', statementName.trim());
+        formData.append('statementMonth', statementMonth);
+        formData.append('sourceType', selectedFile.mimeType?.includes('pdf') ? 'pdf' : 'csv');
+
+        await fetch(`${API_URL}/api/statements/with-file`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-org-id': orgId,
+          },
+          body: formData,
         });
 
         clearInterval(progressInterval);
@@ -343,7 +357,8 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
       {showScanScreen && (
         <ScanScreen
           onCancel={() => setShowScanScreen(false)}
-          onSave={handleSaveScannedStatement}
+          onExpenseSaved={() => setShowScanScreen(false)}
+          selectedOrgId={selectedOrgId}
         />
       )}
     </SafeAreaView>

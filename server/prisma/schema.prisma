@@ -245,6 +245,7 @@ model Statement {
   provider       String?
   statementMonth String?  // "2026-01"
   sourceType     String   @default("csv") // "csv" | "pdf" | "plaid"
+  fileUrl        String?
 
   uploadedById   String?
   uploadedBy     User?    @relation("StatementsUploadedBy", fields: [uploadedById], references: [id])

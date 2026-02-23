@@ -2,10 +2,70 @@ import { Prisma, SalesReportSource, SalesReportStatus } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
+import { uploadToS3 } from '../services/s3Service';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
-// Upload daily sales report
+// Upload daily sales report from scanned receipt
+export const createSalesReportWithReceipt: Handler = async (req, res) => {
+  try {
+    const { orgId, userId } = req.user;
+
+    if (!orgId) {
+      return res.status(403).json({ success: false, error: 'Organization context required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'Receipt image is required' });
+    }
+
+    const { amountCents, businessDate, merchant, notes } = req.body;
+
+    if (!amountCents || !businessDate) {
+      return res.status(400).json({ success: false, error: 'Amount and business date are required' });
+    }
+
+    // Upload to S3 - use salereports bucket instead of receipts
+    const s3Result = await uploadToS3(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      `${orgId}/salereports`
+    );
+
+    // Create sales report record with the scanned image
+    const report = await prisma.salesReport.create({
+      data: {
+        orgId,
+        businessDate: new Date(businessDate),
+        source: 'MANUAL_ENTRY',
+        uploadedById: userId,
+        fileUrl: s3Result.url,
+        fileType: req.file.mimetype,
+        fileHash: null,
+        netSalesCents: Number.parseInt(String(amountCents), 10),
+        grossSalesCents: Number.parseInt(String(amountCents), 10),
+        currency: 'USD',
+        notes: notes || merchant || null,
+        status: 'PENDING'
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Sales report created successfully',
+      report
+    });
+  } catch (error: any) {
+    console.error('createSalesReportWithReceipt error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+};
+
+// Upload daily sales report (legacy)
 export const uploadSalesReport: Handler = async (req, res) => {
   try {
     const { orgId, userId } = req.user;
@@ -26,21 +86,21 @@ export const uploadSalesReport: Handler = async (req, res) => {
       fileType,
       fileHash,
     } = req.body;
-    
+
     if (!orgId) {
       return res.status(403).json({
         success: false,
         error: 'Organization context required'
       });
     }
-    
+
     if (!businessDate) {
       return res.status(400).json({
         success: false,
         error: 'Business date is required'
       });
     }
-    
+
     // Check if report already exists for this date
     const existing = await prisma.salesReport.findUnique({
       where: {
@@ -50,14 +110,14 @@ export const uploadSalesReport: Handler = async (req, res) => {
         }
       }
     });
-    
+
     if (existing) {
       return res.status(400).json({
         success: false,
         error: 'Sales report already exists for this date'
       });
     }
-    
+
     const sourceValue = typeof source === 'string' ? source : undefined;
     const isSalesReportSource = (value: string): value is SalesReportSource => (
       value === 'POS_UPLOAD' || value === 'MANUAL_ENTRY' || value === 'API_IMPORT'
@@ -85,7 +145,7 @@ export const uploadSalesReport: Handler = async (req, res) => {
         status: 'PENDING'
       }
     });
-    
+
     res.status(201).json({
       success: true,
       message: 'Sales report uploaded successfully',

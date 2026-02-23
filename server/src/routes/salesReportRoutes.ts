@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as salesReportController from '../controllers/salesReportController';
 import { requireOrg, verifyToken } from '../middleware/auth';
+import { uploadSingle } from '../middleware/upload';
 
 const router = Router();
 
@@ -9,6 +10,7 @@ router.use(verifyToken);
 router.use(requireOrg);
 
 // Sales report management
+router.post('/with-receipt', uploadSingle, salesReportController.createSalesReportWithReceipt);
 router.post('/', salesReportController.uploadSalesReport);
 router.get('/', salesReportController.getAllSalesReports);
 router.get('/analytics', salesReportController.getSalesAnalytics);

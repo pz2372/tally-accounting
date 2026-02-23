@@ -240,7 +240,11 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
         return (
             <ScanScreen
                 onCancel={() => setShowScanScreen(false)}
-                onSave={(imageUri) => handleCaptureComplete(imageUri)}
+                onExpenseSaved={() => {
+                    setShowScanScreen(false);
+                    onExpenseUpdated?.();
+                }}
+                selectedOrgId={selectedOrgId}
             />
         );
     }

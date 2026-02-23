@@ -156,7 +156,6 @@ export default function App() {
               <View style={{ flex: 1 }}>
                 <ScanScreen
                   onCancel={handleCaptureCancel}
-                  showReviewScreen={true}
                   onExpenseSaved={() => {
                     handleDataChanged();
                     setActiveTab(previousTab);

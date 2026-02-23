@@ -13,7 +13,7 @@ export const s3Client = new S3Client({
 });
 
 export const S3_CONFIG = {
-  bucketName: process.env.S3_BUCKET_NAME || 'tally-receipts',
+  bucketName: process.env.S3_BUCKET_NAME || 'tally-accounting',
   region: process.env.S3_BUCKET_REGION || 'us-east-1',
   maxFileSize: 10 * 1024 * 1024, // 10MB
   allowedMimeTypes: [
@@ -23,6 +23,9 @@ export const S3_CONFIG = {
     'image/gif',
     'image/webp',
     'application/pdf',
+    'text/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ],
 };
 
