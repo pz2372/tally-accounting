@@ -11,6 +11,7 @@ export interface ExtractedReceiptData {
   date: string;
   category?: string;
   notes?: string;
+  documentType?: 'receipt' | 'sales_report';
 }
 
 /**
@@ -20,7 +21,7 @@ export interface ExtractedReceiptData {
  */
 export const extractReceiptData = async (req: Request, res: Response) => {
   try {
-    const { image } = req.body;
+    const { image, categories } = req.body;
 
     if (!image) {
       return res.status(400).json({ error: 'Image is required' });
@@ -31,6 +32,12 @@ export const extractReceiptData = async (req: Request, res: Response) => {
     if (imageSizeBytes > 5 * 1024 * 1024) {
       return res.status(400).json({ error: 'Image is too large. Please try again.' });
     }
+
+    // Build category suggestions for Claude
+    const categoryList = Array.isArray(categories) ? categories : [];
+    const categoryText = categoryList.length > 0
+      ? `\nChoose the best category from: ${categoryList.join(', ')}`
+      : '';
 
     // Call Claude Vision to extract receipt data
     const message = await client.messages.create({
@@ -50,15 +57,21 @@ export const extractReceiptData = async (req: Request, res: Response) => {
             },
             {
               type: 'text',
-              text: `Please analyze this receipt image and extract the following information in JSON format:
+              text: `Please analyze this document and extract the following information in JSON format:
 {
-  "merchant": "business name",
+  "documentType": "receipt or sales_report - determine from the document (receipt=business expense, sales_report=business income)",
+  "merchant": "business name or store name",
   "amount": "total amount (numbers only, e.g., '45.99')",
   "date": "date in YYYY-MM-DD format if visible, otherwise current date",
-  "notes": "brief description of what was purchased, if visible"
+  "category": "best matching category based on merchant and items"${categoryText},
+  "notes": "brief description of what was purchased or sold, if visible"
 }
 
-If any field cannot be determined from the receipt, use empty string. Be concise.`,
+For documentType:
+- Use "receipt" if this is a purchase receipt, invoice, or expense document
+- Use "sales_report" if this is a daily sales summary, revenue report, or income document
+
+If any field cannot be determined, use empty string for that field. Be concise.`,
             },
           ],
         },
@@ -94,6 +107,14 @@ If any field cannot be determined from the receipt, use empty string. Be concise
     }
     if (!extracted.notes) {
       extracted.notes = '';
+    }
+    // Validate category is in the allowed list
+    if (extracted.category && categoryList.length > 0 && !categoryList.includes(extracted.category)) {
+      extracted.category = '';
+    }
+    // Validate documentType
+    if (!extracted.documentType || !['receipt', 'sales_report'].includes(extracted.documentType)) {
+      extracted.documentType = 'receipt';
     }
 
     res.json(extracted);

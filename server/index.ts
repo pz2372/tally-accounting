@@ -13,6 +13,9 @@ if (!process.env.JWT_SECRET) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust Render's reverse proxy so express-rate-limit can identify clients correctly
+app.set('trust proxy', 1);
+
 // Initialize Firebase
 initializeFirebase();
 
@@ -62,8 +65,8 @@ const authLimiter = rateLimit({
   message: { success: false, error: 'Too many authentication attempts, please try again later' }
 });
 
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Routes
 app.use('/', mainRoutes);
