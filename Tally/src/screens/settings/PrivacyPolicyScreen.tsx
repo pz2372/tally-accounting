@@ -31,127 +31,243 @@ export default function PrivacyPolicyScreen({ onBack }: PrivacyPolicyScreenProps
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.lastUpdated}>
-            <Text style={styles.lastUpdatedText}>Last Updated: February 13, 2026</Text>
+            <Text style={styles.lastUpdatedText}>Last Updated: February 22, 2026</Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Introduction</Text>
+            <Text style={styles.paragraph}>
+              Tally ("we," "us," "our," or "the Company") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our expense management and receipt tracking application, including any related mobile applications and services (the "Service").
+            </Text>
+            <Text style={styles.paragraph}>
+              Please read this Privacy Policy carefully. If you do not agree with our policies and practices, please do not use our Service.
+            </Text>
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>1. Information We Collect</Text>
             <Text style={styles.paragraph}>
-              We collect information that you provide directly to us when you create an account, use our services, or communicate with us. This includes:
+              We collect information in multiple ways:
             </Text>
+            <Text style={styles.subTitle}>Information You Provide Directly:</Text>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Account information (name, email, business details)</Text>
+              <Text style={styles.bulletText}>Account registration (name, email, phone number, password)</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Financial data (expenses, receipts, statements)</Text>
+              <Text style={styles.bulletText}>Business information (business name, EIN, DBA, organization details)</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Usage information and analytics</Text>
+              <Text style={styles.bulletText}>Financial data (expense details, amounts, merchants, categories, payment methods)</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Receipt images, bank statements, and transaction records</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Bank account information via Plaid integration for transaction syncing</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Support communications and customer service inquiries</Text>
+            </View>
+            <Text style={styles.subTitle}>Information Collected Automatically:</Text>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Device information (device type, OS, app version)</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Usage analytics (features accessed, time spent, interactions)</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Crash reports and performance data</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Location data (only if you grant permission)</Text>
             </View>
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>2. How We Use Your Information</Text>
             <Text style={styles.paragraph}>
-              We use the information we collect to:
+              We use the information we collect for the following purposes:
             </Text>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Provide, maintain, and improve our services</Text>
+              <Text style={styles.bulletText}>To provide, maintain, and improve the Service</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Process your transactions and manage your account</Text>
+              <Text style={styles.bulletText}>To process and manage your expenses and financial records</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Send you technical notices and support messages</Text>
+              <Text style={styles.bulletText}>To match bank transactions with submitted receipts</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Detect and prevent fraud or unauthorized access</Text>
+              <Text style={styles.bulletText}>To manage user accounts and provide customer support</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>To detect, prevent, and address fraud or technical issues</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>To send service notifications and support messages</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>To analyze usage patterns and improve user experience</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>To comply with legal and regulatory obligations</Text>
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>3. Data Security</Text>
+            <Text style={styles.sectionTitle}>3. Data Security & Encryption</Text>
             <Text style={styles.paragraph}>
-              We implement appropriate technical and organizational measures to protect your personal information against unauthorized or unlawful processing, accidental loss, destruction, or damage. Your data is encrypted both in transit and at rest.
+              We implement industry-standard security measures to protect your data:
             </Text>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>4. Data Sharing</Text>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>End-to-end encryption for data in transit (HTTPS/TLS)</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Encryption of sensitive data at rest in our databases</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Regular security audits and penetration testing</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Access controls and role-based permissions for employee accounts</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Secure authentication with Firebase</Text>
+            </View>
             <Text style={styles.paragraph}>
-              We do not sell your personal information. We may share your information only in the following circumstances:
+              While we implement these protections, no security system is impenetrable. You acknowledge the inherent risks of internet transmission.
             </Text>
-            <View style={styles.bulletPoint}>
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>With your consent or at your direction</Text>
-            </View>
-            <View style={styles.bulletPoint}>
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>With service providers who assist us in operating our platform</Text>
-            </View>
-            <View style={styles.bulletPoint}>
-              <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>To comply with legal obligations</Text>
-            </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>5. Your Rights</Text>
+            <Text style={styles.sectionTitle}>4. Data Sharing & Third Parties</Text>
+            <Text style={styles.paragraph}>
+              We do not sell, trade, or rent your personal information to third parties. We may share your information only in these circumstances:
+            </Text>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>With your explicit consent or at your direction</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>With service providers (Plaid for bank integration, Stripe for payments, Firebase for authentication)</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>With other organization members if you granted them access</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>To comply with court orders, subpoenas, or legal requirements</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>To protect against fraud or security threats</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              Our service providers are contractually obligated to maintain the confidentiality and security of your information.
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>5. Your Privacy Rights</Text>
             <Text style={styles.paragraph}>
               You have the right to:
             </Text>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Access and receive a copy of your personal data</Text>
+              <Text style={styles.bulletText}>Access and download your personal data</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Rectify or update your information</Text>
+              <Text style={styles.bulletText}>Correct or update inaccurate information</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Request deletion of your data</Text>
+              <Text style={styles.bulletText}>Request deletion of your account and associated data</Text>
             </View>
             <View style={styles.bulletPoint}>
               <Text style={styles.bullet}>•</Text>
-              <Text style={styles.bulletText}>Object to or restrict certain processing</Text>
+              <Text style={styles.bulletText}>Opt out of certain data processing activities</Text>
             </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Withdraw consent at any time</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              To exercise these rights, contact us at support@tallyapp.com with proof of your identity.
+            </Text>
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>6. Data Retention</Text>
             <Text style={styles.paragraph}>
-              We retain your information for as long as your account is active or as needed to provide you services. You may request deletion of your account and associated data at any time through the app settings.
+              We retain your data for as long as your account is active and needed to provide our services. After account deletion:
             </Text>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Personal data is deleted within 30 days</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Financial records may be retained longer for tax compliance (typically 7 years)</Text>
+            </View>
+            <View style={styles.bulletPoint}>
+              <Text style={styles.bullet}>•</Text>
+              <Text style={styles.bulletText}>Backup copies are retained for disaster recovery purposes</Text>
+            </View>
           </View>
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>7. Children's Privacy</Text>
             <Text style={styles.paragraph}>
-              Our services are not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13.
+              Tally is not intended for children under 18 years of age. We do not knowingly collect personal information from children under 18. If we become aware of such collection, we will take steps to delete such information promptly.
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>8. Changes to This Policy</Text>
+            <Text style={styles.sectionTitle}>8. International Data Transfers</Text>
             <Text style={styles.paragraph}>
-              We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new policy on this page and updating the "Last Updated" date.
+              Your data may be processed and stored in the United States or other countries where our servers are located. By using Tally, you consent to the transfer of your information to countries outside your country of residence, which may have different data protection rules.
             </Text>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>9. Contact Us</Text>
+            <Text style={styles.sectionTitle}>9. Changes to This Privacy Policy</Text>
             <Text style={styles.paragraph}>
-              If you have any questions about this Privacy Policy, please contact us at:
+              We may update this Privacy Policy periodically. We will notify you of material changes by posting the updated policy in the app and updating the "Last Updated" date. Continued use of our Service constitutes acceptance of the updated Privacy Policy.
             </Text>
-            <Text style={styles.contactText}>support@acme.com</Text>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>10. Contact Us</Text>
+            <Text style={styles.paragraph}>
+              If you have questions about this Privacy Policy or our data practices, please contact us at:
+            </Text>
+            <Text style={styles.contactText}>support@tallyapp.com</Text>
           </View>
 
           <View style={styles.bottomSpacing} />
@@ -214,6 +330,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: spacing.md,
+  },
+  subTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
   paragraph: {
     fontSize: 15,
