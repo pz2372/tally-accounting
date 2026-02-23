@@ -37,7 +37,13 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "react-native-document-scanner-plugin",
+        {
+          "cameraPermission": "Allow Tally to use the camera to scan receipts and sales reports"
+        }
+      ]
     ],
     "extra": {
       "eas": {

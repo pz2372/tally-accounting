@@ -26,9 +26,15 @@ export const extractReceiptData = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Image is required' });
     }
 
+    // Check image size - Anthropic limit is ~5MB base64
+    const imageSizeBytes = (image.length * 3) / 4;
+    if (imageSizeBytes > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Image is too large. Please try again.' });
+    }
+
     // Call Claude Vision to extract receipt data
     const message = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [
         {
@@ -92,9 +98,9 @@ If any field cannot be determined from the receipt, use empty string. Be concise
 
     res.json(extracted);
   } catch (error: any) {
-    console.error('Error extracting receipt data:', error);
+    console.error('Error extracting receipt data:', error?.status, error?.message, error?.error);
     res.status(500).json({
-      error: error.message || 'Failed to extract receipt data',
+      error: error?.error?.message || error?.message || 'Failed to extract receipt data',
     });
   }
 };

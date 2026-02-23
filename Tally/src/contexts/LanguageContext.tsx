@@ -199,6 +199,8 @@ const translations: Record<string, Record<string, string>> = {
     // Date Picker
     'datePicker.selectDate': 'Select Date',
     'datePicker.showAll': 'Show All',
+    'datePicker.selectStart': 'Tap a date to select',
+    'datePicker.selectEnd': 'tap another for range',
     
     // Statements Screen
     'statements.title': 'Statements',
@@ -600,6 +602,8 @@ const translations: Record<string, Record<string, string>> = {
     // Date Picker
     'datePicker.selectDate': 'Seleccionar Fecha',
     'datePicker.showAll': 'Mostrar Todo',
+    'datePicker.selectStart': 'Toca una fecha para seleccionar',
+    'datePicker.selectEnd': 'toca otra para rango',
     
     // Statements Screen
     'statements.title': 'Estados',
@@ -922,6 +926,8 @@ const translations: Record<string, Record<string, string>> = {
         // Date Picker
     'datePicker.selectDate': '选择日期',
     'datePicker.showAll': '显示全部',
+    'datePicker.selectStart': '点击选择日期',
+    'datePicker.selectEnd': '再点击选择范围',
         // Statements Screen
     'statements.title': '报表',
     'statements.matched': '已匹配',

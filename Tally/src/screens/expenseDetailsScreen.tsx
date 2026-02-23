@@ -28,6 +28,7 @@ interface ExpenseDetailsScreenProps {
     onBack: () => void;
     onExpenseDeleted?: () => void;
     onExpenseUpdated?: () => void;
+    selectedOrgId?: string | null;
 }
 
 const getCategoryColor = (category: string): string => {
@@ -49,7 +50,7 @@ const getCategoryColor = (category: string): string => {
     }
 };
 
-export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted, onExpenseUpdated }: ExpenseDetailsScreenProps) {
+export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted, onExpenseUpdated, selectedOrgId }: ExpenseDetailsScreenProps) {
     const { t } = useContext(LanguageContext);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -92,6 +93,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
     };
 
     const getOrgId = async (): Promise<string | null> => {
+        if (selectedOrgId) return selectedOrgId;
         try {
             const userStr = await AsyncStorage.getItem('@current_user');
             if (!userStr) return null;

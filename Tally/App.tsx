@@ -39,6 +39,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [homeHasOverlay, setHomeHasOverlay] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const settingsSlideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   const handleDataChanged = () => setDataVersion(v => v + 1);
@@ -130,9 +131,10 @@ export default function App() {
             {showLanding && <LandingScreen onFinish={handleLandingFinish} />}
           </>
         ) : selectedExpense ? (
-          <ExpenseDetailsScreen 
-            expense={selectedExpense} 
-            onBack={() => setSelectedExpense(null)} 
+          <ExpenseDetailsScreen
+            expense={selectedExpense}
+            onBack={() => setSelectedExpense(null)}
+            selectedOrgId={selectedOrgId}
           />
         ) : (
           <>
@@ -143,10 +145,12 @@ export default function App() {
                 hasOrganization={hasOrganization}
                 currentUser={currentUser}
                 onDataChanged={handleDataChanged}
+                onOrgChange={setSelectedOrgId}
+                onExpensePress={setSelectedExpense}
               />
             </View>
             <View style={{ flex: 1, display: activeTab === 'expenses' ? 'flex' : 'none' }}>
-              <ExpensesScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} />
+              <ExpensesScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} selectedOrgId={selectedOrgId} />
             </View>
             {activeTab === 'capture' && (
               <View style={{ flex: 1 }}>
@@ -157,11 +161,12 @@ export default function App() {
                     handleDataChanged();
                     setActiveTab(previousTab);
                   }}
+                  selectedOrgId={selectedOrgId}
                 />
               </View>
             )}
             <View style={{ flex: 1, display: activeTab === 'category' ? 'flex' : 'none' }}>
-              <CategoryScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} />
+              <CategoryScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} selectedOrgId={selectedOrgId} />
             </View>
             {!homeHasOverlay && activeTab !== 'capture' && (
               <BottomNavigation
@@ -183,6 +188,7 @@ export default function App() {
                   onLogout={handleLogout}
                   hasOrganization={hasOrganization}
                   currentUser={currentUser}
+                  selectedOrgId={selectedOrgId}
                 />
               </Animated.View>
             )}

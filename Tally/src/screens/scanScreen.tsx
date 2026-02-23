@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Platform, PermissionsAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
+import DocumentScanner from 'react-native-document-scanner-plugin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing } from '../styles/theme';
 import ReviewScanScreen from './reviewScanScreen';
@@ -21,9 +21,10 @@ interface ScanScreenProps {
   onSave?: (imageUri: string) => void;
   showReviewScreen?: boolean;
   onExpenseSaved?: () => void;
+  selectedOrgId?: string | null;
 }
 
-export default function ScanScreen({ onCancel, onSave: _onSave, showReviewScreen: _showReviewScreen = false, onExpenseSaved }: ScanScreenProps) {
+export default function ScanScreen({ onCancel, onSave: _onSave, showReviewScreen: _showReviewScreen = false, onExpenseSaved, selectedOrgId }: ScanScreenProps) {
   const [scannedImage, setScannedImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [showReview, setShowReview] = useState(false);
@@ -39,32 +40,39 @@ export default function ScanScreen({ onCancel, onSave: _onSave, showReviewScreen
   const scanDocument = async () => {
     try {
       setIsScanning(true);
-      
-      // Request camera permissions
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Camera permission is required to take photos');
-        onCancel();
-        return;
+
+      // Request camera permission on Android if needed
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: 'Camera Permission',
+            message: 'Tally needs camera access to scan receipts and sales reports',
+            buttonPositive: 'OK',
+            buttonNegative: 'Cancel',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Required', 'Camera permission is required to scan documents');
+          onCancel();
+          return;
+        }
       }
-      
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 0.8,
+
+      const { scannedImages, status } = await DocumentScanner.scanDocument({
+        croppedImageQuality: 100,
+        maxNumDocuments: 1,
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setScannedImage(result.assets[0].uri);
+      if (status === 'success' && scannedImages && scannedImages.length > 0) {
+        setScannedImage(scannedImages[0]);
         setShowReview(true);
       } else {
-        // User cancelled - go back to previous tab
+        // User cancelled
         onCancel();
       }
     } catch (error) {
-      console.log('Camera cancelled or error:', error);
-      // User cancelled - go back to previous tab
+      console.log('Scanner cancelled or error:', error);
       onCancel();
     } finally {
       setIsScanning(false);
@@ -98,7 +106,7 @@ export default function ScanScreen({ onCancel, onSave: _onSave, showReviewScreen
 
       const userRaw = await AsyncStorage.getItem('@current_user');
       const user = userRaw ? JSON.parse(userRaw) : null;
-      const orgId = user?.organizations?.[0]?.id;
+      const orgId = selectedOrgId || user?.organizations?.[0]?.id;
       if (!orgId) {
         Alert.alert('Error', 'No organization found. Please log in again.');
         setIsSaving(false);
@@ -194,7 +202,7 @@ export default function ScanScreen({ onCancel, onSave: _onSave, showReviewScreen
           {isScanning && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Opening Camera...</Text>
+              <Text style={styles.loadingText}>Opening Scanner...</Text>
             </View>
           )}
         </SafeAreaView>

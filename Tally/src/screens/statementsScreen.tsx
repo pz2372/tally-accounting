@@ -15,26 +15,44 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 interface StatementsScreenProps {
   onBack: () => void;
   onNavigate: (screen: string) => void;
+  selectedOrgId?: string | null;
 }
 
 interface Statement {
-  id: number;
+  id: string;
   name: string;
   period: string;
   uploadDate: string;
   totalTransactions: number;
   matchedTransactions: number;
+  unmatchedTransactions: number;
   totalAmount: number;
   type: 'statement' | 'sales';
+  sourceType?: string;
   status: 'processed' | 'processing' | 'error';
 }
 
-export default function StatementsScreen({ onBack, onNavigate }: StatementsScreenProps) {
+interface StatementTransactionItem {
+  id: string;
+  postedDate: string;
+  merchantRaw: string;
+  merchantNorm?: string;
+  amountCents: number;
+  currency: string;
+  last4?: string;
+  matches: any[];
+}
+
+export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: StatementsScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [statements, setStatements] = useState<Statement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'statement' | 'sales'>('all');
+  const [selectedStatement, setSelectedStatement] = useState<Statement | null>(null);
+  const [statementTransactions, setStatementTransactions] = useState<StatementTransactionItem[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [transactionFilter, setTransactionFilter] = useState<'all' | 'unmatched'>('all');
   
   // Check if selected month is current month or later
   const isCurrentOrFutureMonth = () => {
@@ -51,25 +69,15 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
   const loadStatements = async () => {
     try {
       setIsLoading(true);
-      
-      // Get user data which contains organizations
-      const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
-      if (!userDataStr) {
-        console.log('No user data found');
-        setStatements([]);
-        setIsLoading(false);
-        return;
-      }
-      
-      const userData = JSON.parse(userDataStr);
-      const firstOrgId = userData?.organizations?.[0]?.id;
-      
+
+      let firstOrgId = selectedOrgId;
       if (!firstOrgId) {
-        console.log('No organization ID found');
-        setStatements([]);
-        setIsLoading(false);
-        return;
+        const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+        if (!userDataStr) { setStatements([]); setIsLoading(false); return; }
+        const userData = JSON.parse(userDataStr);
+        firstOrgId = userData?.organizations?.[0]?.id;
       }
+      if (!firstOrgId) { setStatements([]); setIsLoading(false); return; }
 
       // Format month for query (YYYY-MM)
       const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
@@ -129,9 +137,11 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
             period: stmt.statementMonth || '',
             uploadDate: new Date(stmt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             totalTransactions: stmt._count?.transactions || 0,
-            matchedTransactions: 0,
+            matchedTransactions: stmt.matchedTransactions || 0,
+            unmatchedTransactions: stmt.unmatchedTransactions || 0,
             totalAmount: 0,
             type: 'statement' as const,
+            sourceType: stmt.sourceType || 'csv',
             status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing'
           }));
           transformedDocuments.push(...transformedStatements);
@@ -152,8 +162,10 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
               uploadDate: new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
               totalTransactions: 0,
               matchedTransactions: 0,
+              unmatchedTransactions: 0,
               totalAmount: report.netSales || 0,
               type: 'sales' as const,
+              sourceType: 'sales',
               status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing'
             }));
           transformedDocuments.push(...transformedSales);
@@ -204,9 +216,11 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
                 period: stmt.statementMonth || '',
                 uploadDate: new Date(stmt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                 totalTransactions: stmt._count?.transactions || 0,
-                matchedTransactions: 0,
+                matchedTransactions: stmt.matchedTransactions || 0,
+                unmatchedTransactions: stmt.unmatchedTransactions || 0,
                 totalAmount: 0,
                 type: 'statement' as const,
+                sourceType: stmt.sourceType || 'csv',
                 status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing'
               }));
               transformedDocuments.push(...transformedStatements);
@@ -216,7 +230,7 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
               const transformedSales: Statement[] = retrySalesResponse.data.reports
                 .filter((report: any) => {
                   const reportDate = new Date(report.businessDate);
-                  return reportDate.getFullYear() === selectedMonth.getFullYear() && 
+                  return reportDate.getFullYear() === selectedMonth.getFullYear() &&
                          reportDate.getMonth() === selectedMonth.getMonth();
                 })
                 .map((report: any) => ({
@@ -226,8 +240,10 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
                   uploadDate: new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                   totalTransactions: 0,
                   matchedTransactions: 0,
+                  unmatchedTransactions: 0,
                   totalAmount: report.netSales || 0,
                   type: 'sales' as const,
+                  sourceType: 'sales',
                   status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing'
                 }));
               transformedDocuments.push(...transformedSales);
@@ -247,16 +263,19 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
     } catch (error: any) {
       console.error('Error loading statements:', error);
       // If there's an error fetching, still show cached data if available
-      const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
-      if (userDataStr) {
-        const userData = JSON.parse(userDataStr);
-        const firstOrgId = userData?.organizations?.[0]?.id;
-        if (firstOrgId) {
-          const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
-          const cacheKey = `${CACHE_KEYS.ORG_STATEMENTS}${firstOrgId}_${monthKey}`;
-          const cachedStatements = await getCachedData(cacheKey);
-          setStatements(cachedStatements || []);
+      let fallbackOrgId = selectedOrgId;
+      if (!fallbackOrgId) {
+        const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+        if (userDataStr) {
+          const userData = JSON.parse(userDataStr);
+          fallbackOrgId = userData?.organizations?.[0]?.id;
         }
+      }
+      if (fallbackOrgId) {
+        const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
+        const cacheKey = `${CACHE_KEYS.ORG_STATEMENTS}${fallbackOrgId}_${monthKey}`;
+        const cachedStatements = await getCachedData(cacheKey);
+        setStatements(cachedStatements || []);
       }
     } finally {
       setIsLoading(false);
@@ -307,7 +326,172 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
     return statement.type === selectedFilter;
   });
 
-  const swipeHandlers = useSwipeBack(onBack);
+  const loadStatementTransactions = async (statementId: string, filterUnmatched: boolean = false) => {
+    try {
+      setIsLoadingTransactions(true);
+      const token = await getAccessToken();
+      if (!token) return;
+
+      let orgId = selectedOrgId;
+      if (!orgId) {
+        const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+        if (userDataStr) {
+          const userData = JSON.parse(userDataStr);
+          orgId = userData?.organizations?.[0]?.id;
+        }
+      }
+      if (!orgId) return;
+
+      const params: any = {};
+      if (filterUnmatched) params.hasMatch = 'false';
+
+      const response = await axios.get(
+        `${API_URL}/api/statements/${statementId}/transactions`,
+        {
+          params,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Org-Id': orgId
+          }
+        }
+      );
+
+      if (response.data.success) {
+        setStatementTransactions(response.data.transactions || []);
+      }
+    } catch (error) {
+      console.error('Error loading statement transactions:', error);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
+
+  const handleStatementPress = (statement: Statement) => {
+    setSelectedStatement(statement);
+    setTransactionFilter('all');
+    loadStatementTransactions(statement.id);
+  };
+
+  const handleBackFromDetail = () => {
+    setSelectedStatement(null);
+    setStatementTransactions([]);
+  };
+
+  const swipeHandlers = useSwipeBack(selectedStatement ? handleBackFromDetail : onBack);
+
+  // Statement detail view
+  if (selectedStatement) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.container} {...swipeHandlers}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBackFromDetail} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{selectedStatement.name}</Text>
+            <View style={{ width: 32 }} />
+          </View>
+
+          {/* Statement summary */}
+          <View style={styles.detailSummary}>
+            <Text style={styles.detailPeriod}>{selectedStatement.period}</Text>
+            <View style={styles.detailStats}>
+              <View style={styles.detailStat}>
+                <Text style={styles.detailStatValue}>{selectedStatement.totalTransactions}</Text>
+                <Text style={styles.detailStatLabel}>Total</Text>
+              </View>
+              <View style={styles.detailStat}>
+                <Text style={[styles.detailStatValue, { color: colors.primary }]}>{selectedStatement.matchedTransactions}</Text>
+                <Text style={styles.detailStatLabel}>Matched</Text>
+              </View>
+              <View style={styles.detailStat}>
+                <Text style={[styles.detailStatValue, { color: selectedStatement.unmatchedTransactions > 0 ? colors.red : colors.textPrimary }]}>
+                  {selectedStatement.unmatchedTransactions}
+                </Text>
+                <Text style={styles.detailStatLabel}>Unmatched</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Filter toggle */}
+          <View style={styles.filterContainer}>
+            <TouchableOpacity
+              style={[styles.filterButton, transactionFilter === 'all' && styles.filterButtonActive]}
+              onPress={() => {
+                setTransactionFilter('all');
+                loadStatementTransactions(selectedStatement.id, false);
+              }}
+            >
+              <Text style={[styles.filterButtonText, transactionFilter === 'all' && styles.filterButtonTextActive]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, transactionFilter === 'unmatched' && styles.filterButtonActive]}
+              onPress={() => {
+                setTransactionFilter('unmatched');
+                loadStatementTransactions(selectedStatement.id, true);
+              }}
+            >
+              <Text style={[styles.filterButtonText, transactionFilter === 'unmatched' && styles.filterButtonTextActive]}>
+                Unmatched
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {isLoadingTransactions ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : statementTransactions.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="checkmark-circle-outline" size={48} color={colors.primary} />
+                <Text style={styles.emptyText}>
+                  {transactionFilter === 'unmatched' ? 'All transactions matched!' : 'No transactions found'}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.statementsList}>
+                {statementTransactions.map((txn) => {
+                  const txnDate = new Date(txn.postedDate);
+                  const hasMatch = txn.matches && txn.matches.length > 0;
+                  return (
+                    <View key={txn.id} style={styles.transactionCard}>
+                      <View style={styles.transactionDate}>
+                        <Text style={styles.transactionMonth}>
+                          {txnDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+                        </Text>
+                        <Text style={styles.transactionDay}>{txnDate.getDate()}</Text>
+                      </View>
+                      <View style={styles.transactionContent}>
+                        <Text style={styles.transactionMerchant} numberOfLines={1}>
+                          {txn.merchantNorm || txn.merchantRaw}
+                        </Text>
+                        {txn.last4 && (
+                          <Text style={styles.transactionLast4}>****{txn.last4}</Text>
+                        )}
+                      </View>
+                      <View style={styles.transactionRight}>
+                        <Text style={styles.transactionAmount}>
+                          ${(txn.amountCents / 100).toFixed(2)}
+                        </Text>
+                        <View style={[styles.matchBadge, hasMatch ? styles.matchedBadge : styles.unmatchedBadge]}>
+                          <Text style={[styles.matchBadgeText, hasMatch ? styles.matchedBadgeText : styles.unmatchedBadgeText]}>
+                            {hasMatch ? 'Matched' : 'Unmatched'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -430,8 +614,9 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
                   key={statement.id}
                   style={styles.statementCard}
                   onPress={() => {
-                    // TODO: Open document viewer or detail screen for the statement
-                    console.log('Opening statement:', statement);
+                    if (statement.type === 'statement') {
+                      handleStatementPress(statement);
+                    }
                   }}
                 >
                   <View style={styles.statementIconContainer}>
@@ -446,13 +631,22 @@ export default function StatementsScreen({ onBack, onNavigate }: StatementsScree
                     <Text style={styles.statementDate}>{statement.uploadDate}</Text>
                   </View>
                   <View style={styles.statementRight}>
-                    <View style={styles.fileTypeBadge}>
-                      <Text style={styles.fileTypeText}>{statement.type === 'statement' ? 'STATEMENT' : 'SALES'}</Text>
+                    <View style={[styles.fileTypeBadge, statement.sourceType === 'plaid' && styles.plaidBadge]}>
+                      <Text style={styles.fileTypeText}>
+                        {statement.sourceType === 'plaid' ? 'PLAID' : statement.type === 'statement' ? 'STATEMENT' : 'SALES'}
+                      </Text>
                     </View>
                     {statement.type === 'statement' && (
-                      <Text style={styles.statementInfo}>
-                        {statement.matchedTransactions}/{statement.totalTransactions} matched
-                      </Text>
+                      <View>
+                        <Text style={styles.statementInfo}>
+                          {statement.matchedTransactions}/{statement.totalTransactions} matched
+                        </Text>
+                        {statement.unmatchedTransactions > 0 && (
+                          <Text style={[styles.statementInfo, { color: colors.red }]}>
+                            {statement.unmatchedTransactions} unmatched
+                          </Text>
+                        )}
+                      </View>
                     )}
                   </View>
                 </TouchableOpacity>
@@ -644,5 +838,116 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  plaidBadge: {
+    backgroundColor: '#6366F1',
+  },
+  detailSummary: {
+    backgroundColor: colors.surface,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.xl,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  detailPeriod: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  detailStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  detailStat: {
+    alignItems: 'center',
+  },
+  detailStatValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  detailStatLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  transactionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  transactionDate: {
+    alignItems: 'center',
+    minWidth: 36,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: '#e6e6e6',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  transactionMonth: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+  },
+  transactionDay: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  transactionContent: {
+    flex: 1,
+    gap: 2,
+  },
+  transactionMerchant: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  transactionLast4: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  transactionRight: {
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+  },
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  matchBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  matchedBadge: {
+    backgroundColor: '#DCFCE7',
+  },
+  unmatchedBadge: {
+    backgroundColor: '#FEE2E2',
+  },
+  matchBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  matchedBadgeText: {
+    color: '#16A34A',
+  },
+  unmatchedBadgeText: {
+    color: '#DC2626',
   },
 });

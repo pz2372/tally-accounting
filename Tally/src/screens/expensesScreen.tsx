@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
-import DatePickerModal from '../components/DatePickerModal';
+import DatePickerModal, { DateRange } from '../components/DatePickerModal';
 import { getCategoryColor, CATEGORIES } from '../components/categories';
 import { getOrgCachedData } from '../services/cacheService';
 
@@ -24,7 +24,7 @@ interface ExpenseGroup {
   expenses: Expense[];
 }
 
-export default function ExpensesScreen({ onExpensePress, dataVersion = 0 }: { onExpensePress?: (expense: Expense) => void; dataVersion?: number }) {
+export default function ExpensesScreen({ onExpensePress, dataVersion = 0, selectedOrgId }: { onExpensePress?: (expense: Expense) => void; dataVersion?: number; selectedOrgId?: string | null }) {
   const { t } = useContext(LanguageContext);
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -36,37 +36,38 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0 }: { on
   const [categories, setCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
   useEffect(() => {
     loadExpenses();
-  }, [dataVersion]);
+  }, [dataVersion, selectedOrgId]);
 
   useEffect(() => {
     filterExpenses();
-  }, [selectedCategory, allExpenses, selectedDate, isDateFilterActive, searchQuery]);
+  }, [selectedCategory, allExpenses, selectedDate, isDateFilterActive, searchQuery, dateRange]);
 
   const loadExpenses = async () => {
     try {
       setIsLoading(true);
-      
-      // Get user to find first org ID
-      const userStr = await AsyncStorage.getItem('@current_user');
-      if (!userStr) {
-        console.log('No user found in cache');
-        setIsLoading(false);
-        return;
+
+      // Determine org ID: use selected or fall back to first org
+      let orgId = selectedOrgId;
+      if (!orgId) {
+        const userStr = await AsyncStorage.getItem('@current_user');
+        if (!userStr) {
+          setIsLoading(false);
+          return;
+        }
+        const user = JSON.parse(userStr);
+        orgId = user.organizations?.[0]?.id;
       }
-      
-      const user = JSON.parse(userStr);
-      const firstOrgId = user.organizations?.[0]?.id;
-      if (!firstOrgId) {
-        console.log('No organization found for user');
+      if (!orgId) {
         setIsLoading(false);
         return;
       }
 
       // Load org data from cache
-      const orgData = await getOrgCachedData(firstOrgId);
+      const orgData = await getOrgCachedData(orgId);
       const { expenses, categories: orgCategories } = orgData || {};
 
       // Combine preset categories from categories.ts with orgCategories from cache
@@ -137,8 +138,17 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0 }: { on
       ? allExpenses 
       : allExpenses.filter((exp: any) => exp.category === selectedCategory);
 
-    // Filter by selected date only if date filter is active
-    if (isDateFilterActive) {
+    // Filter by date range or single date
+    if (dateRange) {
+      const start = dateRange.startDate.getTime();
+      const end = new Date(dateRange.endDate);
+      end.setHours(23, 59, 59, 999);
+      const endTs = end.getTime();
+      filtered = filtered.filter((exp: any) => {
+        const t = exp.fullDate.getTime();
+        return t >= start && t <= endTs;
+      });
+    } else if (isDateFilterActive) {
       const selectedDateStr = selectedDate.toDateString();
       filtered = filtered.filter((exp: any) => exp.fullDate.toDateString() === selectedDateStr);
     }
@@ -200,9 +210,16 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0 }: { on
   const onDateChange = (date: Date) => {
     setSelectedDate(date);
     setIsDateFilterActive(true);
+    setDateRange(null);
   };
 
   const handleResetDate = () => {
+    setIsDateFilterActive(false);
+    setDateRange(null);
+  };
+
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range);
     setIsDateFilterActive(false);
   };
 
@@ -331,6 +348,7 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0 }: { on
           onDateChange={onDateChange}
           onClose={() => setShowDatePicker(false)}
           onReset={handleResetDate}
+          onDateRangeChange={handleDateRangeChange}
         />
 
         {/* Expense List */}
@@ -349,8 +367,8 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0 }: { on
               <Text style={styles.emptyText}>No expenses</Text>
             </View>
           ) : (
-            expenseGroups.map((group, groupIndex) => (
-            <View key={groupIndex}>
+            expenseGroups.map((group) => (
+            <View key={group.dateLabel}>
               <View style={styles.dateHeaderContainer}>
                 <Text style={styles.dateHeader}>{group.dateLabel}</Text>
                 <View style={styles.dateHeaderLine} />

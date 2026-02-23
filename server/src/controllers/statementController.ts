@@ -97,14 +97,35 @@ export const getAllStatements: Handler = async (req, res) => {
         },
         _count: {
           select: { transactions: true }
+        },
+        transactions: {
+          select: {
+            id: true,
+            matches: {
+              where: { status: { in: ['MATCHED', 'NEEDS_REVIEW'] } },
+              select: { id: true }
+            }
+          }
         }
       },
       orderBy: { createdAt: 'desc' }
     });
-    
+
+    // Post-process to compute match counts and strip raw transactions
+    const statementsWithCounts = statements.map(s => {
+      const matchedTransactions = s.transactions.filter(t => t.matches.length > 0).length;
+      const unmatchedTransactions = s.transactions.filter(t => t.matches.length === 0).length;
+      const { transactions, ...rest } = s;
+      return {
+        ...rest,
+        matchedTransactions,
+        unmatchedTransactions,
+      };
+    });
+
     res.json({
       success: true,
-      statements
+      statements: statementsWithCounts
     });
   } catch (error) {
     console.error('getAllStatements error:', error);
@@ -231,6 +252,53 @@ export const getStatementTransactions: Handler = async (req, res) => {
     });
   } catch (error) {
     console.error('getStatementTransactions error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+};
+
+// Get all unmatched transactions across statements for an organization
+export const getUnmatchedTransactions: Handler = async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    const { statementMonth } = req.query;
+
+    if (!orgId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Organization context required'
+      });
+    }
+
+    const where: Prisma.StatementTransactionWhereInput = {
+      statement: { orgId },
+      matches: { none: {} }
+    };
+
+    const statementMonthValue = typeof statementMonth === 'string' ? statementMonth : undefined;
+    if (statementMonthValue) {
+      where.statement = { ...(where.statement as object), statementMonth: statementMonthValue };
+    }
+
+    const transactions = await prisma.statementTransaction.findMany({
+      where,
+      include: {
+        statement: {
+          select: { id: true, provider: true, statementMonth: true, sourceType: true }
+        }
+      },
+      orderBy: { postedDate: 'desc' }
+    });
+
+    res.json({
+      success: true,
+      transactions,
+      totalCount: transactions.length
+    });
+  } catch (error) {
+    console.error('getUnmatchedTransactions error:', error);
     res.status(500).json({
       success: false,
       error: 'Internal server error'

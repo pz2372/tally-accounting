@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Dimensions, ActivityIndicator, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,6 +44,8 @@ interface HomeScreenProps {
   hasOrganization: boolean;
   onCreateOrganization?: () => void;
   onDataChanged?: () => void;
+  onOrgChange?: (orgId: string) => void;
+  onExpensePress?: (expense: any) => void;
   currentUser?: {
     name?: string;
     email?: string;
@@ -57,6 +59,8 @@ export default function HomeScreen({
   hasOrganization,
   onCreateOrganization,
   onDataChanged,
+  onOrgChange,
+  onExpensePress,
   currentUser
 }: HomeScreenProps) {
   const { t } = useContext(LanguageContext);
@@ -65,6 +69,7 @@ export default function HomeScreen({
   const [activeScreen, setActiveScreen] = useState<'home' | 'newExpense' | 'uploadStatement' | 'needsAttention' | 'statements' | 'recurring' | 'salesReport' | 'sales' | 'missingReceipts'>('home');
   const [metrics, setMetrics] = useState<HomeMetrics>(defaultMetrics);
   const [missingReceiptExpenses, setMissingReceiptExpenses] = useState<any[]>([]);
+  const [isLoadingOrgData, setIsLoadingOrgData] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   useEffect(() => {
@@ -92,6 +97,7 @@ export default function HomeScreen({
         const saved = await AsyncStorage.getItem(SELECTED_BUSINESS_KEY);
         if (saved) {
           setSelectedBusinessId(saved);
+          onOrgChange?.(saved);
         }
       } catch (error) {
         console.warn('Failed to load selected business:', error);
@@ -120,12 +126,65 @@ export default function HomeScreen({
     });
   };
 
+  const handleOrgSwitch = async (orgId: string) => {
+    if (orgId === selectedBusinessId) return;
+
+    setShowBusinessDropdown(false);
+    setIsLoadingOrgData(true);
+
+    try {
+      const api = await createAuthenticatedAxios();
+
+      // Fetch all org data in parallel
+      const [expensesRes, categoriesRes, statementsRes, recurringRes, receiptsRes, matchesRes, salesRes] = await Promise.all([
+        api.get('/api/expenses', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { expenses: [] } })),
+        api.get('/api/categories', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { categories: [] } })),
+        api.get('/api/statements', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { statements: [] } })),
+        api.get('/api/recurring-charges', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { charges: [] } })),
+        api.get('/api/receipts', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { receipts: [] } })),
+        api.get('/api/matches', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { matches: [] } })),
+        api.get('/api/sales-reports', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { reports: [] } })),
+      ]);
+
+      // Cache the org data
+      const CACHE_KEYS = {
+        ORG_EXPENSES: '@org_expenses_',
+        ORG_CATEGORIES: '@org_categories_',
+        ORG_STATEMENTS: '@org_statements_',
+        ORG_RECURRING_CHARGES: '@org_recurring_charges_',
+        ORG_RECEIPTS: '@org_receipts_',
+        ORG_RECEIPT_MATCHES: '@org_receipt_matches_',
+        ORG_SALES_REPORTS: '@org_sales_reports_',
+      };
+
+      await Promise.all([
+        AsyncStorage.setItem(`${CACHE_KEYS.ORG_EXPENSES}${orgId}`, JSON.stringify(expensesRes.data.expenses || [])),
+        AsyncStorage.setItem(`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`, JSON.stringify(categoriesRes.data.categories || [])),
+        AsyncStorage.setItem(`${CACHE_KEYS.ORG_STATEMENTS}${orgId}`, JSON.stringify(statementsRes.data.statements || [])),
+        AsyncStorage.setItem(`${CACHE_KEYS.ORG_RECURRING_CHARGES}${orgId}`, JSON.stringify(recurringRes.data.charges || [])),
+        AsyncStorage.setItem(`${CACHE_KEYS.ORG_RECEIPTS}${orgId}`, JSON.stringify(receiptsRes.data.receipts || [])),
+        AsyncStorage.setItem(`${CACHE_KEYS.ORG_RECEIPT_MATCHES}${orgId}`, JSON.stringify(matchesRes.data.matches || [])),
+        AsyncStorage.setItem(`${CACHE_KEYS.ORG_SALES_REPORTS}${orgId}`, JSON.stringify(salesRes.data.reports || [])),
+      ]);
+
+      // Switch org and trigger refresh
+      setSelectedBusinessId(orgId);
+      onOrgChange?.(orgId);
+      onDataChanged?.();
+    } catch (error) {
+      console.error('Error switching organization:', error);
+    } finally {
+      setIsLoadingOrgData(false);
+    }
+  };
+
   const businesses = currentUser?.organizations || [];
   const hasMultipleBusinesses = businesses.length > 1;
 
   useEffect(() => {
     if (!selectedBusinessId && businesses.length > 0) {
       setSelectedBusinessId(businesses[0].id);
+      onOrgChange?.(businesses[0].id);
     }
   }, [businesses, selectedBusinessId]);
 
@@ -134,25 +193,27 @@ export default function HomeScreen({
 
     const loadMetrics = async () => {
       try {
-        const raw = await AsyncStorage.getItem(HOME_METRICS_KEY);
-        if (!raw) return;
-
-        const parsed = JSON.parse(raw);
         let nextMetrics = defaultMetrics;
 
-        if (selectedBusinessId && parsed?.byOrg?.[selectedBusinessId]) {
-          nextMetrics = {
-            ...defaultMetrics,
-            ...parsed.byOrg[selectedBusinessId]
-          };
-        } else if (parsed && typeof parsed === 'object') {
-          nextMetrics = {
-            ...defaultMetrics,
-            ...parsed
-          };
+        // Try to load from cache first
+        const raw = await AsyncStorage.getItem(HOME_METRICS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+
+          if (selectedBusinessId && parsed?.byOrg?.[selectedBusinessId]) {
+            nextMetrics = {
+              ...defaultMetrics,
+              ...parsed.byOrg[selectedBusinessId]
+            };
+          } else if (parsed && typeof parsed === 'object') {
+            nextMetrics = {
+              ...defaultMetrics,
+              ...parsed
+            };
+          }
         }
 
-        // Compute totalSpent from all cached expenses for current month
+        // Always compute current metrics from org data
         if (selectedBusinessId) {
           const orgData = await getOrgCachedData(selectedBusinessId);
           if (orgData?.expenses && Array.isArray(orgData.expenses)) {
@@ -195,20 +256,39 @@ export default function HomeScreen({
             }
           }
 
-          // Fetch gross/net sales from monthly-summary API
+          // Fetch gross/net sales and statement matching data
           try {
             const api = await createAuthenticatedAxios();
             const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-            const response = await api.get('/api/sales-reports/monthly-summary', {
-              params: { month: monthKey },
-              headers: { 'x-org-id': selectedBusinessId },
-            });
-            if (response.data.success && response.data.summary) {
-              nextMetrics.grossSales = response.data.summary.grossSalesCents / 100;
-              nextMetrics.netSales = response.data.summary.netSalesCents / 100;
+            const [salesRes, statementsRes] = await Promise.all([
+              api.get('/api/sales-reports/monthly-summary', {
+                params: { month: monthKey },
+                headers: { 'x-org-id': selectedBusinessId },
+              }).catch(() => null),
+              api.get('/api/statements', {
+                params: { statementMonth: monthKey },
+                headers: { 'x-org-id': selectedBusinessId },
+              }).catch(() => null),
+            ]);
+
+            if (salesRes?.data.success && salesRes.data.summary) {
+              nextMetrics.grossSales = salesRes.data.summary.grossSalesCents / 100;
+              nextMetrics.netSales = salesRes.data.summary.netSalesCents / 100;
+            }
+
+            // Compute statement matching metrics
+            if (statementsRes?.data.success && statementsRes.data.statements) {
+              let totalTxns = 0;
+              let matchedTxns = 0;
+              for (const stmt of statementsRes.data.statements) {
+                totalTxns += stmt._count?.transactions || 0;
+                matchedTxns += stmt.matchedTransactions || 0;
+              }
+              nextMetrics.totalTransactions = totalTxns;
+              nextMetrics.capturedReceipts = matchedTxns;
             }
           } catch (err) {
-            console.warn('Failed to fetch sales summary for home:', err);
+            console.warn('Failed to fetch sales/statement data for home:', err);
           }
         }
 
@@ -295,28 +375,28 @@ export default function HomeScreen({
     let ScreenComponent;
     switch (activeScreen) {
       case 'newExpense':
-        ScreenComponent = <NewExpenseScreen onBack={() => { onDataChanged?.(); handleBack(); }} />;
+        ScreenComponent = <NewExpenseScreen onBack={() => { onDataChanged?.(); handleBack(); }} selectedOrgId={selectedBusinessId} />;
         break;
       case 'uploadStatement':
-        ScreenComponent = <UploadStatementScreen onBack={handleBack} />;
+        ScreenComponent = <UploadStatementScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;
         break;
       case 'needsAttention':
         ScreenComponent = <NeedsAttentionScreen onBack={handleBack} />;
         break;
       case 'statements':
-        ScreenComponent = <StatementsScreen onBack={handleBack} onNavigate={(screen) => setActiveScreen(screen as any)} />;
+        ScreenComponent = <StatementsScreen onBack={handleBack} onNavigate={(screen) => setActiveScreen(screen as any)} selectedOrgId={selectedBusinessId} />;
         break;
       case 'recurring':
-        ScreenComponent = <RecurringScreen onBack={handleBack} />;
+        ScreenComponent = <RecurringScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;
         break;
       case 'salesReport':
-        ScreenComponent = <SalesReportScreen onBack={handleBack} />;
+        ScreenComponent = <SalesReportScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;
         break;
       case 'sales':
-        ScreenComponent = <SalesReportScreen onBack={handleBack} />;
+        ScreenComponent = <SalesReportScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;
         break;
       case 'missingReceipts':
-        ScreenComponent = <MissingReceiptsScreen expenses={missingReceiptExpenses} onBack={handleBack} />;
+        ScreenComponent = <MissingReceiptsScreen expenses={missingReceiptExpenses} onBack={handleBack} onExpensePress={onExpensePress} />;
         break;
       default:
         return null;
@@ -369,10 +449,8 @@ export default function HomeScreen({
                         styles.businessDropdownItem,
                         selectedBusinessId === business.id && styles.businessDropdownItemActive
                       ]}
-                      onPress={() => {
-                        setSelectedBusinessId(business.id);
-                        setShowBusinessDropdown(false);
-                      }}
+                      onPress={() => handleOrgSwitch(business.id)}
+                      disabled={isLoadingOrgData}
                     >
                       <View style={styles.businessDropdownItemContent}>
                         <View>
@@ -495,6 +573,17 @@ export default function HomeScreen({
         </ScrollView>
       </SafeAreaView>
       {renderOverlayScreen()}
+
+      {/* Loading Overlay for Org Switch */}
+      <Modal
+        visible={isLoadingOrgData}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      </Modal>
     </>
   );
 }
@@ -740,8 +829,8 @@ const styles = StyleSheet.create({
     color: colors.surface,
   },
   overviewStatValueLarge: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: colors.surface,
     letterSpacing: -0.5,
   },
@@ -922,5 +1011,11 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: colors.background,
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

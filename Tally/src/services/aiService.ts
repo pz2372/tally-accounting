@@ -1,5 +1,5 @@
 // AI Service for Receipt Data Extraction
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { getAccessToken } from './authService';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -19,12 +19,24 @@ export interface ExtractedReceiptData {
  */
 export const extractReceiptData = async (imageUri: string): Promise<ExtractedReceiptData> => {
   try {
-    console.log('Extracting receipt data with Claude Vision...');
+    console.log('Extracting receipt data with Claude Vision...', imageUri);
+
+    // Ensure URI has file:// prefix if needed
+    let fileUri = imageUri;
+    if (!fileUri.startsWith('file://')) {
+      fileUri = `file://${fileUri}`;
+    }
+    console.log('Using file URI:', fileUri);
 
     // Read image as base64
-    const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+    const base64Image = await FileSystem.readAsStringAsync(fileUri, {
       encoding: FileSystem.EncodingType.Base64,
     });
+
+    if (!base64Image) {
+      throw new Error('Failed to read image file');
+    }
+    console.log('Image read successfully, size:', base64Image.length);
 
     // Get auth token
     const token = await getAccessToken();
@@ -62,6 +74,7 @@ export const extractReceiptData = async (imageUri: string): Promise<ExtractedRec
     };
   } catch (error: any) {
     console.error('Error extracting receipt data:', error?.message || error);
+    console.error('Full error:', JSON.stringify(error));
     // Return empty data on error so user can enter manually
     return {
       merchant: '',

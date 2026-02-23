@@ -13,11 +13,12 @@ import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface UploadStatementScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
 }
 
 type UploadType = 'dailySales' | 'monthlyStatement';
 
-export default function UploadStatementScreen({ onBack }: UploadStatementScreenProps) {
+export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadStatementScreenProps) {
   const { t } = useContext(LanguageContext);
   const [uploadType, setUploadType] = useState<UploadType>('dailySales');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
@@ -30,6 +31,7 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
   const isPickingFileRef = useRef(false);
 
   const getOrgId = async (): Promise<string | null> => {
+    if (selectedOrgId) return selectedOrgId;
     try {
       const userStr = await AsyncStorage.getItem('@current_user');
       if (!userStr) return null;
@@ -301,25 +303,6 @@ export default function UploadStatementScreen({ onBack }: UploadStatementScreenP
                 )}
               </View>
             )}
-          </View>
-
-          {/* Supported Formats */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('uploadStatement.supportedFormats')}</Text>
-            <View style={styles.formatsList}>
-              <View style={styles.formatItem}>
-                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
-                <Text style={styles.formatText}>{t('uploadStatement.pdfStatements')}</Text>
-              </View>
-              <View style={styles.formatItem}>
-                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
-                <Text style={styles.formatText}>{t('uploadStatement.csvExcel')}</Text>
-              </View>
-              <View style={styles.formatItem}>
-                <Ionicons name="document-text" size={20} color={colors.textSecondary} />
-                <Text style={styles.formatText}>{t('uploadStatement.qfxOfx')}</Text>
-              </View>
-            </View>
           </View>
 
           {/* Upload Progress */}

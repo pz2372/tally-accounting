@@ -24,9 +24,10 @@ const PAYMENT_METHODS: { label: PaymentMethod; icon: string; apiValue: string }[
 
 interface NewExpenseScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
 }
 
-export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
+export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseScreenProps) {
   const { t } = useContext(LanguageContext);
   const [merchant, setMerchant] = useState('');
   const [amount, setAmount] = useState('');
@@ -111,7 +112,7 @@ export default function NewExpenseScreen({ onBack }: NewExpenseScreenProps) {
 
       const userRaw = await AsyncStorage.getItem('@current_user');
       const user = userRaw ? JSON.parse(userRaw) : null;
-      const orgId = user?.organizations?.[0]?.id;
+      const orgId = selectedOrgId || user?.organizations?.[0]?.id;
       if (!orgId) {
         Alert.alert('Error', 'No organization found. Please log in again.');
         return;

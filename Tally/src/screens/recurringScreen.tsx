@@ -15,6 +15,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface RecurringScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
 }
 
 interface RecurringCharge {
@@ -28,7 +29,7 @@ interface RecurringCharge {
   lastCharge: string;
 }
 
-export default function RecurringScreen({ onBack }: RecurringScreenProps) {
+export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScreenProps) {
   const { t } = useContext(LanguageContext);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -51,22 +52,15 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
     let firstOrgId: string | undefined;
     try {
       setIsLoading(true);
-      
-      // Get user to find first org ID
-      const userStr = await AsyncStorage.getItem('@current_user');
-      if (!userStr) {
-        console.log('No user found in cache');
-        setIsLoading(false);
-        return;
-      }
-      
-      const user = JSON.parse(userStr);
-      firstOrgId = user.organizations?.[0]?.id;
+
+      firstOrgId = selectedOrgId || undefined;
       if (!firstOrgId) {
-        console.log('No organization found for user');
-        setIsLoading(false);
-        return;
+        const userStr = await AsyncStorage.getItem('@current_user');
+        if (!userStr) { setIsLoading(false); return; }
+        const user = JSON.parse(userStr);
+        firstOrgId = user.organizations?.[0]?.id;
       }
+      if (!firstOrgId) { setIsLoading(false); return; }
 
       // Try to load from cache first
       const cachedCharges = await getCachedData(`${CACHE_KEYS.ORG_RECURRING_CHARGES}${firstOrgId}`);
@@ -195,7 +189,7 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
 
       const currentUser = JSON.parse(currentUserStr);
       const token = await getAccessToken();
-      const orgId = currentUser.organizations?.[0]?.id;
+      const orgId = selectedOrgId || currentUser.organizations?.[0]?.id;
 
       if (!token || !orgId) {
         Alert.alert('Error', 'Authentication required');
@@ -322,7 +316,7 @@ export default function RecurringScreen({ onBack }: RecurringScreenProps) {
       }
 
       const user = JSON.parse(userStr);
-      const orgId = user.organizations?.[0]?.id;
+      const orgId = selectedOrgId || user.organizations?.[0]?.id;
       if (!orgId) {
         Alert.alert('Error', 'Organization not found');
         return;

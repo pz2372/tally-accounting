@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { plaidClient } from '../config/plaid';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
+import { executeMatching } from './matchController';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void>;
 
@@ -159,14 +160,22 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
 };
 
 // Pulls all pending updates for one PlaidItem via /transactions/sync
+// Stores transactions as Statement + StatementTransaction (grouped by month)
 async function syncItemTransactions(plaidItemInternalId: string): Promise<void> {
   const plaidItem = await prisma.plaidItem.findUnique({
     where: { id: plaidItemInternalId },
+    include: { accounts: true },
   });
   if (!plaidItem) return;
 
+  // Build a lookup: Plaid accountId -> last4 mask
+  const accountMaskMap = new Map(
+    plaidItem.accounts.map(a => [a.accountId, a.mask])
+  );
+
   let cursor = plaidItem.syncCursor ?? undefined;
   let hasMore = true;
+  const affectedStatementIds = new Set<string>();
 
   while (hasMore) {
     const response = await plaidClient.transactionsSync({
@@ -177,82 +186,75 @@ async function syncItemTransactions(plaidItemInternalId: string): Promise<void> 
 
     const { added, modified, removed, next_cursor, has_more } = response.data;
 
-    // Upsert added + modified
+    // Process added + modified: group by month, upsert Statement + StatementTransaction
     for (const txn of [...added, ...modified]) {
-      await prisma.cardTransaction.upsert({
-        where: { plaidTransactionId: txn.transaction_id },
-        update: {
-          amount: txn.amount,
-          isoCurrencyCode: txn.iso_currency_code ?? null,
-          unofficialCurrencyCode: txn.unofficial_currency_code ?? null,
-          date: new Date(txn.date),
-          authorizedDate: txn.authorized_date ? new Date(txn.authorized_date) : null,
-          authorizedDatetime: txn.authorized_datetime ? new Date(txn.authorized_datetime) : null,
-          datetime: txn.datetime ? new Date(txn.datetime) : null,
-          name: txn.name,
-          merchantName: txn.merchant_name ?? null,
-          merchantEntityId: txn.merchant_entity_id ?? null,
-          logoUrl: txn.logo_url ?? null,
-          website: txn.website ?? null,
-          paymentChannel: txn.payment_channel ?? null,
-          transactionCode: txn.transaction_code ?? null,
-          pending: txn.pending,
-          pendingTransactionId: txn.pending_transaction_id ?? null,
-          categoryId: txn.category_id ?? null,
-          category: txn.category ?? undefined,
-          personalFinanceCategory: txn.personal_finance_category?.primary ?? null,
-          personalFinanceCategoryDetail: txn.personal_finance_category?.detailed ?? null,
-          personalFinanceCategoryIconUrl: txn.personal_finance_category_icon_url ?? null,
-          address: txn.location?.address ?? null,
-          city: txn.location?.city ?? null,
-          region: txn.location?.region ?? null,
-          postalCode: txn.location?.postal_code ?? null,
-          country: txn.location?.country ?? null,
-          lat: txn.location?.lat ?? null,
-          lon: txn.location?.lon ?? null,
+      // Skip pending transactions - only store posted
+      if (txn.pending) continue;
+
+      const txnDate = new Date(txn.date);
+      const statementMonth = `${txnDate.getFullYear()}-${String(txnDate.getMonth() + 1).padStart(2, '0')}`;
+      const provider = plaidItem.institutionName || 'Unknown Bank';
+
+      // Find or create the Statement for this month + institution
+      const statement = await prisma.statement.upsert({
+        where: {
+          orgId_statementMonth_provider: {
+            orgId: plaidItem.orgId,
+            statementMonth,
+            provider,
+          },
         },
+        update: { updatedAt: new Date() },
         create: {
           orgId: plaidItem.orgId,
+          provider,
+          statementMonth,
+          sourceType: 'plaid',
+        },
+      });
+
+      affectedStatementIds.add(statement.id);
+
+      // Upsert the StatementTransaction keyed on plaidTransactionId
+      await prisma.statementTransaction.upsert({
+        where: { plaidTransactionId: txn.transaction_id },
+        update: {
+          postedDate: txnDate,
+          transactionDate: txn.authorized_date ? new Date(txn.authorized_date) : null,
+          merchantRaw: txn.name,
+          merchantNorm: txn.merchant_name ?? null,
+          amountCents: Math.round(txn.amount * 100),
+          currency: txn.iso_currency_code || 'USD',
+          last4: accountMaskMap.get(txn.account_id) || null,
+        },
+        create: {
+          statementId: statement.id,
           plaidTransactionId: txn.transaction_id,
-          plaidAccountId: txn.account_id,
-          pendingTransactionId: txn.pending_transaction_id ?? null,
-          amount: txn.amount,
-          isoCurrencyCode: txn.iso_currency_code ?? null,
-          unofficialCurrencyCode: txn.unofficial_currency_code ?? null,
-          date: new Date(txn.date),
-          authorizedDate: txn.authorized_date ? new Date(txn.authorized_date) : null,
-          authorizedDatetime: txn.authorized_datetime ? new Date(txn.authorized_datetime) : null,
-          datetime: txn.datetime ? new Date(txn.datetime) : null,
-          name: txn.name,
-          merchantName: txn.merchant_name ?? null,
-          merchantEntityId: txn.merchant_entity_id ?? null,
-          logoUrl: txn.logo_url ?? null,
-          website: txn.website ?? null,
-          paymentChannel: txn.payment_channel ?? null,
-          transactionCode: txn.transaction_code ?? null,
-          pending: txn.pending,
-          categoryId: txn.category_id ?? null,
-          category: txn.category ?? undefined,
-          personalFinanceCategory: txn.personal_finance_category?.primary ?? null,
-          personalFinanceCategoryDetail: txn.personal_finance_category?.detailed ?? null,
-          personalFinanceCategoryIconUrl: txn.personal_finance_category_icon_url ?? null,
-          address: txn.location?.address ?? null,
-          city: txn.location?.city ?? null,
-          region: txn.location?.region ?? null,
-          postalCode: txn.location?.postal_code ?? null,
-          country: txn.location?.country ?? null,
-          lat: txn.location?.lat ?? null,
-          lon: txn.location?.lon ?? null,
+          postedDate: txnDate,
+          transactionDate: txn.authorized_date ? new Date(txn.authorized_date) : null,
+          merchantRaw: txn.name,
+          merchantNorm: txn.merchant_name ?? null,
+          amountCents: Math.round(txn.amount * 100),
+          currency: txn.iso_currency_code || 'USD',
+          last4: accountMaskMap.get(txn.account_id) || null,
         },
       });
     }
 
-    // Delete removed transactions
+    // Handle removed transactions: delete matches first, then statement transactions
     if (removed.length > 0) {
-      await prisma.cardTransaction.deleteMany({
+      const removedPlaidIds = removed.map(r => r.transaction_id);
+
+      // Delete any matches referencing these transactions
+      await prisma.receiptMatch.deleteMany({
         where: {
-          plaidTransactionId: { in: removed.map((r) => r.transaction_id) },
+          cardTxn: { plaidTransactionId: { in: removedPlaidIds } },
         },
+      });
+
+      // Delete the statement transactions
+      await prisma.statementTransaction.deleteMany({
+        where: { plaidTransactionId: { in: removedPlaidIds } },
       });
     }
 
@@ -265,6 +267,17 @@ async function syncItemTransactions(plaidItemInternalId: string): Promise<void> 
     where: { id: plaidItemInternalId },
     data: { syncCursor: cursor },
   });
+
+  // Auto-run matching for each affected statement
+  for (const statementId of affectedStatementIds) {
+    try {
+      const result = await executeMatching(plaidItem.orgId, statementId);
+      console.log(`Auto-matching for statement ${statementId}: ${result.matchCount} matches`);
+    } catch (err) {
+      console.error(`Auto-matching error for statement ${statementId}:`, err);
+      // Don't throw - matching failure shouldn't break the sync
+    }
+  }
 }
 
 // DELETE /api/plaid/items/:itemId

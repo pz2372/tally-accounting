@@ -10,6 +10,7 @@ import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface SalesReportScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
 }
 
 interface ExpenseCategory {
@@ -41,7 +42,7 @@ const formatDollars = (cents: number) => {
   return `$${dollars.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 };
 
-export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
+export default function SalesReportScreen({ onBack, selectedOrgId }: SalesReportScreenProps) {
   const { t, language } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [expensesExpanded, setExpensesExpanded] = useState(false);
@@ -71,6 +72,7 @@ export default function SalesReportScreen({ onBack }: SalesReportScreenProps) {
   };
 
   const getOrgId = async (): Promise<string | null> => {
+    if (selectedOrgId) return selectedOrgId;
     try {
       const userStr = await AsyncStorage.getItem('@current_user');
       if (!userStr) return null;

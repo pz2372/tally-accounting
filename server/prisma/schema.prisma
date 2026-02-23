@@ -244,7 +244,7 @@ model Statement {
 
   provider       String?
   statementMonth String?  // "2026-01"
-  sourceType     String   @default("csv") // "csv" | "pdf"
+  sourceType     String   @default("csv") // "csv" | "pdf" | "plaid"
 
   uploadedById   String?
   uploadedBy     User?    @relation("StatementsUploadedBy", fields: [uploadedById], references: [id])
@@ -255,6 +255,7 @@ model Statement {
   org            Organization @relation(fields: [orgId], references: [id])
   transactions   StatementTransaction[]
 
+  @@unique([orgId, statementMonth, provider])
   @@index([orgId, createdAt])
   @@index([uploadedById])
 }
@@ -262,6 +263,8 @@ model Statement {
 model StatementTransaction {
   id              String   @id @default(cuid())
   statementId     String
+
+  plaidTransactionId String?  @unique  // null for manual uploads, set for Plaid syncs
 
   postedDate      DateTime
   transactionDate DateTime?

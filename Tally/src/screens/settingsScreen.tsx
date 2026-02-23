@@ -23,6 +23,7 @@ interface SettingsScreenProps {
   onBack: () => void;
   onLogout?: () => void;
   hasOrganization: boolean;
+  selectedOrgId?: string | null;
   currentUser?: {
     name?: string;
     email?: string;
@@ -31,11 +32,14 @@ interface SettingsScreenProps {
   } | null;
 }
 
-export default function SettingsScreen({ onBack, onLogout, hasOrganization, currentUser }: SettingsScreenProps) {
+export default function SettingsScreen({ onBack, onLogout, hasOrganization, currentUser, selectedOrgId }: SettingsScreenProps) {
   const { t } = useContext(LanguageContext);
   const [activeSubScreen, setActiveSubScreen] = useState<string | null>(null);
   const subScreenSlideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
-  const isEmployee = currentUser?.organizations?.[0]?.role === 'EMPLOYEE';
+  const selectedOrg = selectedOrgId
+    ? currentUser?.organizations?.find(o => o.id === selectedOrgId)
+    : currentUser?.organizations?.[0];
+  const isEmployee = selectedOrg?.role === 'EMPLOYEE';
   
   const handleLogout = async () => {
     await logout();
@@ -75,7 +79,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
         SubScreenComponent = <AccountInfoScreen onBack={handleSubScreenBack} currentUser={currentUser} />;
         break;
       case 'business':
-        SubScreenComponent = <BusinessDetailsScreen onBack={handleSubScreenBack} currentUser={currentUser} />;
+        SubScreenComponent = <BusinessDetailsScreen onBack={handleSubScreenBack} currentUser={currentUser} selectedOrgId={selectedOrgId} />;
         break;
       case 'language':
         SubScreenComponent = <LanguageScreen onBack={handleSubScreenBack} />;

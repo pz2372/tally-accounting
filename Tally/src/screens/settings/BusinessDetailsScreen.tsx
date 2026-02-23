@@ -12,12 +12,13 @@ const BUSINESS_DETAILS_KEY = '@business_details';
 
 interface BusinessDetailsScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
   currentUser?: {
     organizations?: Array<{ id: string; name: string }>;
   } | null;
 }
 
-export default function BusinessDetailsScreen({ onBack, currentUser }: BusinessDetailsScreenProps) {
+export default function BusinessDetailsScreen({ onBack, currentUser, selectedOrgId }: BusinessDetailsScreenProps) {
   const { t } = useContext(LanguageContext);
   const [businessName, setBusinessName] = useState('');
   const [taxId, setTaxId] = useState('');
@@ -67,7 +68,7 @@ export default function BusinessDetailsScreen({ onBack, currentUser }: BusinessD
     setIsSaving(true);
     try {
       // Save org name to backend
-      const orgId = currentUser?.organizations?.[0]?.id;
+      const orgId = selectedOrgId || currentUser?.organizations?.[0]?.id;
       if (orgId) {
         const api = await createAuthenticatedAxios();
         await api.put('/api/organizations', 

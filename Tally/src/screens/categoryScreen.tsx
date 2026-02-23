@@ -41,10 +41,11 @@ interface CategoryData {
 interface CategoryScreenProps {
   onExpensePress?: (expense: any) => void;
   dataVersion?: number;
+  selectedOrgId?: string | null;
 }
 
 
-export default function CategoryScreen({ onExpensePress, dataVersion = 0 }: CategoryScreenProps) {
+export default function CategoryScreen({ onExpensePress, dataVersion = 0, selectedOrgId }: CategoryScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
@@ -61,28 +62,24 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0 }: Cate
 
   useEffect(() => {
     loadCategoryData();
-  }, [selectedMonth, dataVersion]);
+  }, [selectedMonth, dataVersion, selectedOrgId]);
 
   const loadCategoryData = async () => {
     try {
       setIsLoading(true);
 
-      // Get user to find first org ID
-      const userStr = await AsyncStorage.getItem('@current_user');
-      if (!userStr) {
-        console.log('No user found in cache');
-        return;
+      // Determine org ID: use selected or fall back to first org
+      let orgId = selectedOrgId;
+      if (!orgId) {
+        const userStr = await AsyncStorage.getItem('@current_user');
+        if (!userStr) return;
+        const user = JSON.parse(userStr);
+        orgId = user.organizations?.[0]?.id;
       }
-
-      const user = JSON.parse(userStr);
-      const firstOrgId = user.organizations?.[0]?.id;
-      if (!firstOrgId) {
-        console.log('No organization found for user');
-        return;
-      }
+      if (!orgId) return;
 
       // Load org data from cache (categories here = org overrides only)
-      const orgData = await getOrgCachedData(firstOrgId);
+      const orgData = await getOrgCachedData(orgId);
       const { categories: orgOverrides, expenses } = orgData || {};
 
       // Build category data from constants, filtered by org overrides
