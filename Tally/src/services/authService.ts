@@ -18,7 +18,7 @@ export const storeTokens = async (accessToken: string, refreshToken?: string) =>
       await secureSet(REFRESH_TOKEN_KEY, refreshToken);
     }
   } catch (error) {
-    console.error('Error storing tokens:', error);
+    // Silently fail on token storage
   }
 };
 
@@ -26,7 +26,7 @@ export const storeUser = async (user: unknown) => {
   try {
     await secureSet(USER_KEY, JSON.stringify(user));
   } catch (error) {
-    console.error('Error storing user:', error);
+    // Silently fail on user storage
   }
 };
 
@@ -43,7 +43,6 @@ export const getAccessToken = async (): Promise<string | null> => {
 
     return token;
   } catch (error) {
-    console.error('Error getting access token:', error);
     return null;
   }
 };
@@ -66,7 +65,6 @@ export const refreshAccessToken = async (): Promise<string | null> => {
     await storeTokens(accessToken, refreshToken);
     return accessToken;
   } catch (error) {
-    console.error('Error refreshing access token:', error);
     return null;
   }
 };
@@ -76,7 +74,6 @@ export const getRefreshToken = async (): Promise<string | null> => {
   try {
     return await secureGet(REFRESH_TOKEN_KEY);
   } catch (error) {
-    console.error('Error getting refresh token:', error);
     return null;
   }
 };
@@ -88,7 +85,7 @@ export const clearTokens = async () => {
     await secureDelete(REFRESH_TOKEN_KEY);
     await secureDelete(USER_KEY);
   } catch (error) {
-    console.error('Error clearing tokens:', error);
+    // Silently fail on token clearing
   }
 };
 
@@ -97,7 +94,6 @@ export const getStoredUser = async () => {
     const raw = await secureGet(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (error) {
-    console.error('Error reading user:', error);
     return null;
   }
 };
@@ -120,7 +116,6 @@ const exchangeFirebaseToken = async (firebaseToken: string) => {
       error: null,
     };
   } catch (error: any) {
-    console.error('exchangeFirebaseToken error:', error?.message, error?.response?.status, error?.response?.data);
     return {
       accessToken: null,
       refreshToken: null,
@@ -188,7 +183,6 @@ export const login = async (email: string, password: string) => {
       user,
     };
   } catch (error: any) {
-    console.error('Login error:', error);
     return {
       success: false,
       error: error.message || 'An unexpected error occurred',

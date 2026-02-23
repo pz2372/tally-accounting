@@ -60,7 +60,7 @@ export default function ScanScreen({ onCancel, onSave: _onSave, showReviewScreen
       }
 
       const { scannedImages, status } = await DocumentScanner.scanDocument({
-        croppedImageQuality: 100,
+        croppedImageQuality: 60,
         maxNumDocuments: 1,
       });
 

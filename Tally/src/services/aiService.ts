@@ -10,14 +10,16 @@ export interface ExtractedReceiptData {
   date: Date;
   category: string;
   notes: string;
+  documentType: 'receipt' | 'sales_report';
 }
 
 /**
  * Extract receipt data using AI from an image URI
  * @param imageUri - Local file URI of the scanned receipt
+ * @param categories - Optional list of category names for Claude to choose from
  * @returns Extracted receipt data
  */
-export const extractReceiptData = async (imageUri: string): Promise<ExtractedReceiptData> => {
+export const extractReceiptData = async (imageUri: string, categories?: string[]): Promise<ExtractedReceiptData> => {
   try {
     console.log('Extracting receipt data with Claude Vision...', imageUri);
 
@@ -53,6 +55,7 @@ export const extractReceiptData = async (imageUri: string): Promise<ExtractedRec
       },
       body: JSON.stringify({
         image: base64Image,
+        categories: categories || [],
       }),
     });
 
@@ -71,6 +74,7 @@ export const extractReceiptData = async (imageUri: string): Promise<ExtractedRec
       date: data.date ? new Date(data.date) : new Date(),
       category: data.category || '',
       notes: data.notes || '',
+      documentType: (data.documentType === 'receipt' || data.documentType === 'sales_report') ? data.documentType : 'receipt',
     };
   } catch (error: any) {
     console.error('Error extracting receipt data:', error?.message || error);
@@ -82,6 +86,7 @@ export const extractReceiptData = async (imageUri: string): Promise<ExtractedRec
       date: new Date(),
       category: '',
       notes: '',
+      documentType: 'receipt',
     };
   }
 };

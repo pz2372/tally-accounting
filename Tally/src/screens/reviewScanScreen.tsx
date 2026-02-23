@@ -18,6 +18,8 @@ import { LanguageContext } from '../contexts/LanguageContext';
 import DatePickerModal from '../components/DatePickerModal';
 import { CATEGORIES, getCategoryColor } from '../components/categories';
 import { extractReceiptData } from '../services/aiService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getOrgCachedData } from '../services/cacheService';
 
 interface ReviewScanScreenProps {
   imageUri: string;
@@ -31,6 +33,7 @@ interface ReviewScanScreenProps {
     date: Date;
     notes: string;
     imageUri: string;
+    documentType?: 'receipt' | 'sales_report';
   }) => void;
 }
 
@@ -46,6 +49,8 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [notes, setNotes] = useState('');
+  const [documentType, setDocumentType] = useState<'receipt' | 'sales_report'>('receipt');
+  const [showDocumentTypePicker, setShowDocumentTypePicker] = useState(false);
 
   useEffect(() => {
     extractData();
@@ -54,13 +59,36 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = 
   const extractData = async () => {
     try {
       setIsExtracting(true);
-      const extracted = await extractReceiptData(imageUri);
-      
+
+      // Load org categories to pass to AI
+      let allCategories: string[] = [...CATEGORIES];
+      try {
+        const userStr = await AsyncStorage.getItem('@current_user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          const orgId = user.organizations?.[0]?.id;
+          if (orgId) {
+            const orgData = await getOrgCachedData(orgId);
+            const orgCategories = orgData?.categories;
+            if (orgCategories && Array.isArray(orgCategories)) {
+              const orgCategoryNames = orgCategories.map((c: any) => c.preset?.name || c.name || c.categoryName).filter(Boolean);
+              allCategories = [...allCategories, ...orgCategoryNames];
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading org categories:', err);
+        // Continue with just preset categories
+      }
+
+      const extracted = await extractReceiptData(imageUri, allCategories);
+
       if (extracted.merchant) setMerchant(extracted.merchant);
       if (extracted.amount) setAmount(extracted.amount);
       if (extracted.category) setSelectedCategory(extracted.category);
       if (extracted.date) setSelectedDate(extracted.date);
       if (extracted.notes) setNotes(extracted.notes);
+      if (extracted.documentType) setDocumentType(extracted.documentType);
     } catch (error) {
       console.error('Error extracting receipt data:', error);
       Alert.alert(
@@ -98,6 +126,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = 
       date: selectedDate,
       notes,
       imageUri,
+      documentType,
     });
   };
 
@@ -227,6 +256,78 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving = 
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                </Pressable>
+              )}
+            </View>
+
+            {/* Document Type Picker */}
+            <View style={[styles.inputGroup, showDocumentTypePicker && styles.inputGroupActive]}>
+              <Text style={styles.label}>Document Type</Text>
+              <TouchableOpacity
+                style={styles.pickerButton}
+                onPress={() => setShowDocumentTypePicker(!showDocumentTypePicker)}
+              >
+                <View style={styles.pickerButtonContent}>
+                  <Ionicons
+                    name={documentType === 'sales_report' ? 'trending-up-outline' : 'receipt-outline'}
+                    size={20}
+                    color={colors.textPrimary}
+                    style={{ marginRight: spacing.xs }}
+                  />
+                  <Text style={styles.pickerButtonText}>
+                    {documentType === 'receipt' ? 'Receipt (Expense)' : 'Sales Report (Income)'}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {showDocumentTypePicker && (
+                <Pressable
+                  style={styles.pickerDropdown}
+                  onPress={(e) => e.stopPropagation()}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerItem,
+                      documentType === 'receipt' && styles.pickerItemSelected
+                    ]}
+                    onPress={() => {
+                      setDocumentType('receipt');
+                      setShowDocumentTypePicker(false);
+                    }}
+                  >
+                    <View style={styles.pickerItemContent}>
+                      <Ionicons name="receipt-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                      <Text style={[
+                        styles.pickerItemText,
+                        documentType === 'receipt' && styles.pickerItemTextSelected
+                      ]}>Receipt (Expense)</Text>
+                    </View>
+                    {documentType === 'receipt' && (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerItem,
+                      documentType === 'sales_report' && styles.pickerItemSelected
+                    ]}
+                    onPress={() => {
+                      setDocumentType('sales_report');
+                      setShowDocumentTypePicker(false);
+                    }}
+                  >
+                    <View style={styles.pickerItemContent}>
+                      <Ionicons name="trending-up-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                      <Text style={[
+                        styles.pickerItemText,
+                        documentType === 'sales_report' && styles.pickerItemTextSelected
+                      ]}>Sales Report (Income)</Text>
+                    </View>
+                    {documentType === 'sales_report' && (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
                 </Pressable>
               )}
             </View>
