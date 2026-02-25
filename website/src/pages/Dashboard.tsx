@@ -5,7 +5,6 @@ import {
   LogOut,
   Building2,
   ChevronRight,
-  Settings,
   Pencil,
   Plus,
   CreditCard,
