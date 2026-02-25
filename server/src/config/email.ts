@@ -16,7 +16,7 @@ export const sendInviteEmail = async (
   orgName: string,
   inviterName?: string | null
 ) => {
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
   const inviteLink = `${frontendUrl}/accept-invite/${inviteToken}`;
 
   await transporter.sendMail({
