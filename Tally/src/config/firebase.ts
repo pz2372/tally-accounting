@@ -68,7 +68,6 @@ export const signInWithEmail = async (email: string, password: string) => {
 
     if (!response.ok) {
       const errorMessage = data.error?.message || 'Authentication failed';
-      console.error('Firebase REST sign in error:', errorMessage);
       return { user: null, error: errorMessage };
     }
 

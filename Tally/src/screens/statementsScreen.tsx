@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -261,7 +261,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
         }
       }
     } catch (error: any) {
-      console.error('Error loading statements:', error);
+      Alert.alert('Error', 'Failed to load statements. Please try again.');
       // If there's an error fetching, still show cached data if available
       let fallbackOrgId = selectedOrgId;
       if (!fallbackOrgId) {
@@ -360,7 +360,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
         setStatementTransactions(response.data.transactions || []);
       }
     } catch (error) {
-      console.error('Error loading statement transactions:', error);
+      Alert.alert('Error', 'Failed to load transactions. Please try again.');
     } finally {
       setIsLoadingTransactions(false);
     }

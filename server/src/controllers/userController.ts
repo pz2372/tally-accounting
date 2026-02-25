@@ -77,19 +77,15 @@ export const createCustomToken: Handler = async (req, res) => {
 // Update user profile
 export const updateProfile: Handler = async (req, res) => {
   try {
-    const { displayName, photoURL } = req.body;
-    const db = getFirestore();
+    const { displayName } = req.body;
+    const userId = req.user.id;
 
-    const updateData: { displayName?: string; photoURL?: string } = {};
-    if (displayName) updateData.displayName = displayName;
-    if (photoURL) updateData.photoURL = photoURL;
+    const updateData: { name?: string } = {};
+    if (displayName !== undefined) updateData.name = displayName?.trim() || null;
 
-    await getAuth().updateUser(req.user.uid, updateData);
-
-    // Update Firestore user doc
-    await db.collection('users').doc(req.user.uid).update({
-      displayName,
-      updatedAt: new Date()
+    await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
     });
 
     res.json({
@@ -97,7 +93,6 @@ export const updateProfile: Handler = async (req, res) => {
       message: 'Profile updated successfully'
     });
   } catch (error) {
-    console.error('updateProfile error:', error);
     res.status(500).json({
       success: false,
       error: 'Internal server error'

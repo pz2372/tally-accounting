@@ -173,7 +173,6 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
 
       Alert.alert('Saved', 'Expense saved successfully.', [{ text: 'OK', onPress: onBack }]);
     } catch (err: any) {
-      console.error('Save expense error:', err);
       Alert.alert('Error', err.message || 'Failed to save expense. Please try again.');
     } finally {
       setSaving(false);

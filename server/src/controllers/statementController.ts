@@ -26,7 +26,7 @@ export const uploadStatementWithFile: Handler = async (req, res) => {
       req.file.buffer,
       req.file.originalname,
       req.file.mimetype,
-      `${orgId}/statements`
+      `statements/${orgId}`
     );
 
     const statement = await prisma.statement.create({

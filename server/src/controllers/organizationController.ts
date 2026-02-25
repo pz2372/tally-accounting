@@ -160,7 +160,7 @@ export const updateOrganization: Handler = async (req, res) => {
 export const inviteUser: Handler = async (req, res) => {
   try {
     const { orgId, role, permissions: userPermissions } = req.user;
-    const { email, role: newUserRole, permissions } = req.body;
+    const { email, name, role: newUserRole, permissions } = req.body;
     
     // Check permissions
     if (role !== 'ADMIN' && !userPermissions.includes('MEMBER_INVITE')) {
@@ -184,7 +184,7 @@ export const inviteUser: Handler = async (req, res) => {
     
     if (!invitedUser) {
       invitedUser = await prisma.user.create({
-        data: { email }
+        data: { email, name: name?.trim() || null }
       });
     }
     

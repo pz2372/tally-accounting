@@ -61,7 +61,6 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         setSelectedFile(result.assets[0]);
       }
     } catch (err) {
-      console.error('Error picking file:', err);
       Alert.alert(t('uploadStatement.error'), t('uploadStatement.errorMessage'));
     } finally {
       isPickingFileRef.current = false;

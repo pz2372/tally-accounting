@@ -265,9 +265,8 @@ export default function PrivacyPolicyScreen({ onBack }: PrivacyPolicyScreenProps
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>10. Contact Us</Text>
             <Text style={styles.paragraph}>
-              If you have questions about this Privacy Policy or our data practices, please contact us at:
+              If you have questions about this Privacy Policy or our data practices, please contact us.
             </Text>
-            <Text style={styles.contactText}>support@tallyapp.com</Text>
           </View>
 
           <View style={styles.bottomSpacing} />

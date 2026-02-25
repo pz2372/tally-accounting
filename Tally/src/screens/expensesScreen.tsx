@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, ActivityIndicator, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -119,7 +119,7 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0, select
 
       setAllExpenses(validExpenses);
     } catch (error) {
-      console.error('Error loading expenses:', error);
+      Alert.alert('Error', 'Failed to load expenses. Please try again.');
       setAllExpenses([]);
       setExpenseGroups([]);
     } finally {

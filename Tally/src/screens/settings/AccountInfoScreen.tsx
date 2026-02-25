@@ -48,7 +48,7 @@ export default function AccountInfoScreen({ onBack, currentUser }: AccountInfoSc
           setPhone(currentUser.phoneNumber || '');
         }
       } catch (error) {
-        console.warn('Failed to load user profile:', error);
+        // silently fail - falls back to currentUser prop below
         // Fall back to currentUser prop on error
         if (currentUser && isActive) {
           setName(currentUser.name || '');
@@ -92,7 +92,7 @@ export default function AccountInfoScreen({ onBack, currentUser }: AccountInfoSc
         [{ text: 'OK', onPress: onBack }]
       );
     } catch (error: any) {
-      console.warn('Failed to save user profile:', error);
+      // Alert is shown below
       Alert.alert(
         'Error',
         error.response?.data?.error || 'Failed to save changes. Please try again.'
@@ -149,12 +149,9 @@ export default function AccountInfoScreen({ onBack, currentUser }: AccountInfoSc
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>{t('accountInfo.email')}</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.inputDisabled]}
                 value={email}
-                onChangeText={setEmail}
-                placeholder={t('accountInfo.enterEmail')}
-                keyboardType="email-address"
-                autoCapitalize="none"
+                editable={false}
                 placeholderTextColor={colors.textTertiary}
               />
             </View>
@@ -249,6 +246,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     fontSize: 15,
     color: colors.textPrimary,
+  },
+  inputDisabled: {
+    backgroundColor: colors.background,
+    color: colors.textSecondary,
   },
   buttonContainer: {
     paddingHorizontal: spacing.xxl,

@@ -222,6 +222,9 @@ model Expense {
   // 🔴 SOFT DELETE
   deletedAt   DateTime?
 
+  // Admin can dismiss missing receipt alert
+  receiptNotNeeded Boolean @default(false)
+
   // Recurring linkage
   recurringInstanceId String?  @unique
   recurringInstance   RecurringChargeInstance?

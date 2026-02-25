@@ -8,6 +8,7 @@ import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 interface ExportDataScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
 }
 
 interface ExportOption {
@@ -17,7 +18,7 @@ interface ExportOption {
   color: string;
 }
 
-export default function ExportDataScreen({ onBack }: ExportDataScreenProps) {
+export default function ExportDataScreen({ onBack, selectedOrgId }: ExportDataScreenProps) {
   const { t } = useContext(LanguageContext);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -63,7 +64,7 @@ export default function ExportDataScreen({ onBack }: ExportDataScreenProps) {
         [{ text: 'OK', onPress: onBack }]
       );
     } catch (error: any) {
-      console.warn('Export failed:', error);
+      // Alert is shown below
       Alert.alert('Error', 'Failed to export data. Please try again.');
     } finally {
       setIsExporting(false);

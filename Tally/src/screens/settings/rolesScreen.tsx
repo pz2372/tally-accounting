@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
+import { getAccessToken } from '../../services/authService';
 
-const ORG_MEMBERS_KEY = '@org_members';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface RolesScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
   currentUser?: {
     name?: string;
     email?: string;
@@ -19,105 +20,164 @@ interface RolesScreenProps {
   } | null;
 }
 
-export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
+interface OrgMember {
+  id: string;
+  role: 'ADMIN' | 'EMPLOYEE';
+  createdAt: string;
+  user: {
+    id: string;
+    email: string;
+    name?: string | null;
+  };
+}
+
+export default function RolesScreen({ onBack, currentUser, selectedOrgId }: RolesScreenProps) {
   const { t } = useContext(LanguageContext);
+  const orgId = selectedOrgId || currentUser?.organizations?.[0]?.id;
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteMemberId, setDeleteMemberId] = useState<number | null>(null);
-  const [editMemberId, setEditMemberId] = useState<number | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
+  const [deleteMemberId, setDeleteMemberId] = useState<string | null>(null);
+  const [editMemberId, setEditMemberId] = useState<string | null>(null);
+  const [editRole, setEditRole] = useState<'Admin' | 'Employee'>('Employee');
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'Admin' | 'Employee'>('Employee');
-  const [editCurrentUser, setEditCurrentUser] = useState(false);
-  const [currentUserEditName, setCurrentUserEditName] = useState(currentUser?.name || '');
-  const [currentUserEditRole, setCurrentUserEditRole] = useState<'Admin' | 'Employee'>(
-    currentUser?.organizations?.[0]?.role === 'ADMIN' ? 'Admin' : 'Employee'
-  );
-  const [members, setMembers] = useState<Array<{
-    id: number;
-    name: string;
-    role: 'Admin' | 'Employee';
-    email: string;
-    created: string;
-  }>>([]);
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    let isActive = true;
-
-    const loadMembers = async () => {
-      try {
-        const raw = await AsyncStorage.getItem(ORG_MEMBERS_KEY);
-        if (!raw || !isActive) return;
-
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setMembers(parsed);
-        }
-      } catch (error) {
-        console.warn('Failed to load members cache:', error);
-      }
+  const authHeaders = async () => {
+    const token = await getAccessToken();
+    return {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(orgId ? { 'x-org-id': orgId } : {}),
     };
+  };
 
-    loadMembers();
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  const saveMembersToCache = async (updatedMembers: typeof members) => {
+  const fetchMembers = async () => {
+    if (!orgId) return;
     try {
-      await AsyncStorage.setItem(ORG_MEMBERS_KEY, JSON.stringify(updatedMembers));
+      const headers = await authHeaders();
+      const res = await fetch(`${API_URL}/api/organizations/members`, { headers });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.members)) {
+        setMembers(data.members);
+      }
     } catch (error) {
-      console.warn('Failed to save members cache:', error);
+      Alert.alert('Error', 'Failed to load members. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleEditMember = (memberId: number) => {
-    const target = members.find((member) => member.id === memberId);
-    if (!target) return;
-    setEditMemberId(memberId);
-    setEditName(target.name);
-    setEditEmail(target.email);
+  useEffect(() => {
+    setMembers([]);
+    setIsLoading(true);
+    fetchMembers();
+  }, [orgId]);
+
+  const handleInviteMember = async () => {
+    const email = newMemberEmail.trim();
+    if (!email) return;
+
+    setIsSaving(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API_URL}/api/organizations/invite`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          email,
+          name: newMemberName.trim() || undefined,
+          role: newMemberRole === 'Admin' ? 'ADMIN' : 'EMPLOYEE',
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        Alert.alert(t('uploadStatement.error'), data.error || 'Failed to invite member');
+        return;
+      }
+
+      Alert.alert(t('common.success'), `Invite sent to ${email}`);
+      handleCloseAdd();
+      fetchMembers();
+    } catch (error: any) {
+      Alert.alert(t('uploadStatement.error'), error.message || 'Failed to invite member');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEditMember = (member: OrgMember) => {
+    setEditMemberId(member.id);
+    setEditRole(member.role === 'ADMIN' ? 'Admin' : 'Employee');
   };
 
   const handleCloseEdit = () => {
     setEditMemberId(null);
-    setEditName('');
-    setEditEmail('');
   };
 
-  const handleSaveEdit = () => {
-    if (editMemberId === null) return;
-    const nextName = editName.trim();
-    const nextEmail = editEmail.trim();
-    if (!nextName || !nextEmail) return;
+  const handleSaveEdit = async () => {
+    if (!editMemberId) return;
 
-    const updatedMembers = members.map((member) =>
-      member.id === editMemberId
-        ? { ...member, name: nextName, email: nextEmail }
-        : member
-    );
-    
-    setMembers(updatedMembers);
-    saveMembersToCache(updatedMembers);
-    handleCloseEdit();
+    setIsSaving(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API_URL}/api/organizations/members/${editMemberId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          role: editRole === 'Admin' ? 'ADMIN' : 'EMPLOYEE',
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        Alert.alert(t('uploadStatement.error'), data.error || 'Failed to update member');
+        return;
+      }
+
+      handleCloseEdit();
+      fetchMembers();
+    } catch (error: any) {
+      Alert.alert(t('uploadStatement.error'), error.message || 'Failed to update member');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleShowDeleteConfirm = (memberId: number) => {
+  const handleShowDeleteConfirm = (memberId: string) => {
     setDeleteMemberId(memberId);
     setShowDeleteModal(true);
   };
 
-  const handleDeleteMember = () => {
-    if (deleteMemberId === null) return;
-    const updatedMembers = members.filter((member) => member.id !== deleteMemberId);
-    setMembers(updatedMembers);
-    saveMembersToCache(updatedMembers);
-    setShowDeleteModal(false);
-    setDeleteMemberId(null);
+  const handleDeleteMember = async () => {
+    if (!deleteMemberId) return;
+
+    setIsSaving(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API_URL}/api/organizations/members/${deleteMemberId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        Alert.alert(t('uploadStatement.error'), data.error || 'Failed to remove member');
+        return;
+      }
+
+      setShowDeleteModal(false);
+      setDeleteMemberId(null);
+      fetchMembers();
+    } catch (error: any) {
+      Alert.alert(t('uploadStatement.error'), error.message || 'Failed to remove member');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCloseDelete = () => {
@@ -132,65 +192,7 @@ export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
     setNewMemberRole('Employee');
   };
 
-  const handleCloseEditCurrentUser = () => {
-    setEditCurrentUser(false);
-    setCurrentUserEditName(currentUser?.name || '');
-    setCurrentUserEditRole(currentUser?.organizations?.[0]?.role === 'ADMIN' ? 'Admin' : 'Employee');
-  };
-
-  const handleSaveEditCurrentUser = async () => {
-    const nextName = currentUserEditName.trim();
-    if (!nextName) return;
-
-    try {
-      // Note: In a real app, you would send this to the server to update the user's profile
-      console.log('Saving current user changes:', { name: nextName, role: currentUserEditRole });
-
-      // For now, just show success and close
-      Alert.alert('Success', 'Profile updated successfully');
-      handleCloseEditCurrentUser();
-    } catch (error) {
-      console.error('Error saving profile:', error);
-      Alert.alert('Error', 'Failed to update profile');
-    }
-  };
-
-  const handleAddMember = () => {
-    const name = newMemberName.trim();
-    const email = newMemberEmail.trim();
-    if (!name || !email) return;
-
-    // Get locale from language context
-    const getLocale = () => {
-      switch (t('nav.home')) {
-        case 'Inicio': return 'es'; // Spanish
-        case '\u4e3b\u9875': return 'zh'; // Chinese
-        default: return 'en'; // English
-      }
-    };
-    const locale = getLocale();
-    
-    const created = new Date().toLocaleDateString(locale, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-
-    const updatedMembers = [
-      ...members,
-      {
-        id: Date.now(),
-        name,
-        role: newMemberRole,
-        email,
-        created,
-      },
-    ];
-
-    setMembers(updatedMembers);
-    saveMembersToCache(updatedMembers);
-    handleCloseAdd();
-  };
+  const isCurrentUser = (member: OrgMember) => member.user.email === currentUser?.email;
 
   const swipeHandlers = useSwipeBack(onBack);
 
@@ -209,80 +211,63 @@ export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
 
         <ScrollView
           style={styles.content}
-          contentContainerStyle={members.length === 0 && !currentUser ? styles.emptyContainer : undefined}
+          contentContainerStyle={!isLoading && members.length === 0 ? styles.emptyContainer : undefined}
           showsVerticalScrollIndicator={false}
         >
-          {(currentUser || members.length > 0) && (
-            <View style={styles.memberList}>
-              {/* Current User Card */}
-              {currentUser && (
-                <View style={styles.memberCard}>
-                  <View style={[styles.roleBadge, currentUser.organizations?.[0]?.role === 'ADMIN' ? styles.roleBadgeAdmin : styles.roleBadgeEmployee]}>
-                    <Text style={[styles.roleBadgeText, currentUser.organizations?.[0]?.role === 'ADMIN' ? styles.roleBadgeTextAdmin : styles.roleBadgeTextEmployee]}>
-                      {currentUser.organizations?.[0]?.role === 'ADMIN' ? t('roles.admin') : t('roles.employee')}
-                    </Text>
-                  </View>
-                  <View style={styles.memberActions}>
-                    <TouchableOpacity
-                      style={styles.iconButton}
-                      onPress={() => {
-                        setCurrentUserEditName(currentUser.name || '');
-                        setCurrentUserEditRole(currentUser.organizations?.[0]?.role === 'ADMIN' ? 'Admin' : 'Employee');
-                        setEditCurrentUser(true);
-                      }}
-                    >
-                      <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.memberName}>{currentUser.name || 'User'}</Text>
-                  <Text style={styles.memberMeta}>{currentUser.email}</Text>
-                </View>
-              )}
-
-              {/* Other Members */}
-              {members.map((member) => (
-                <View key={member.id} style={styles.memberCard}>
-                  <View style={[styles.roleBadge, member.role === 'Admin' ? styles.roleBadgeAdmin : styles.roleBadgeEmployee]}>
-                    <Text style={[styles.roleBadgeText, member.role === 'Admin' ? styles.roleBadgeTextAdmin : styles.roleBadgeTextEmployee]}>
-                      {member.role === 'Admin' ? t('roles.admin') : t('roles.employee')}
-                    </Text>
-                  </View>
-                  {member.role === 'Employee' && (
-                    <View style={styles.memberActions}>
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => handleEditMember(member.id)}
-                      >
-                        <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={() => handleShowDeleteConfirm(member.id)}
-                      >
-                        <Ionicons name="trash-outline" size={18} color={colors.red} />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  <Text style={styles.memberName}>{member.name}</Text>
-                  <Text style={styles.memberMeta}>{member.email}</Text>
-                  <Text style={styles.memberCreated}>{t('roles.created')} {member.created}</Text>
-                </View>
-              ))}
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
             </View>
-          )}
-
-          {members.length === 0 && !currentUser ? (
+          ) : members.length > 0 ? (
+            <View style={styles.memberList}>
+              {members.map((member) => {
+                const isSelf = isCurrentUser(member);
+                const isAdmin = member.role === 'ADMIN';
+                return (
+                  <View key={member.id} style={styles.memberCard}>
+                    <View style={[styles.roleBadge, isAdmin ? styles.roleBadgeAdmin : styles.roleBadgeEmployee]}>
+                      <Text style={[styles.roleBadgeText, isAdmin ? styles.roleBadgeTextAdmin : styles.roleBadgeTextEmployee]}>
+                        {isAdmin ? t('roles.admin') : t('roles.employee')}
+                      </Text>
+                    </View>
+                    {!isSelf && (
+                      <View style={styles.memberActions}>
+                        <TouchableOpacity
+                          style={styles.iconButton}
+                          onPress={() => handleEditMember(member)}
+                        >
+                          <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.iconButton}
+                          onPress={() => handleShowDeleteConfirm(member.id)}
+                        >
+                          <Ionicons name="trash-outline" size={18} color={colors.red} />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    <Text style={styles.memberName}>
+                      {member.user.name || member.user.email}
+                    </Text>
+                    <Text style={styles.memberMeta}>{member.user.email}</Text>
+                    <Text style={styles.memberCreated}>
+                      {t('roles.created')} {new Date(member.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
             <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={32} color={colors.textSecondary} style={{ marginBottom: spacing.md }} />
               <Text style={styles.emptyTitle}>{t('roles.noMembersYet')}</Text>
-              <Text style={styles.emptySubtitle}>
-                {t('roles.emptySubtitle')}
-              </Text>
+              <Text style={styles.emptySubtitle}>{t('roles.emptySubtitle')}</Text>
             </View>
-          ) : null}
+          )}
         </ScrollView>
       </View>
 
+      {/* Invite Modal */}
       <Modal
         visible={showAddModal}
         transparent={true}
@@ -319,6 +304,7 @@ export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
                   placeholderTextColor={colors.textSecondary}
                   style={styles.input}
                   autoCapitalize="none"
+                  keyboardType="email-address"
                 />
               </View>
 
@@ -350,18 +336,23 @@ export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
               <TouchableOpacity
                 style={[
                   styles.saveButton,
-                  (!newMemberName.trim() || !newMemberEmail.trim()) && styles.saveButtonDisabled,
+                  (!newMemberEmail.trim() || isSaving) && styles.saveButtonDisabled,
                 ]}
-                onPress={handleAddMember}
-                disabled={!newMemberName.trim() || !newMemberEmail.trim()}
+                onPress={handleInviteMember}
+                disabled={!newMemberEmail.trim() || isSaving}
               >
-                <Text style={styles.saveButtonText}>{t('roles.addMemberButton')}</Text>
+                {isSaving ? (
+                  <ActivityIndicator color={colors.surface} size="small" />
+                ) : (
+                  <Text style={styles.saveButtonText}>{t('roles.addMemberButton')}</Text>
+                )}
               </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
+      {/* Edit Role Modal */}
       <Modal
         visible={editMemberId !== null}
         transparent={true}
@@ -379,39 +370,47 @@ export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
 
             <ScrollView style={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('roles.name')}</Text>
-                <TextInput
-                  value={editName}
-                  onChangeText={setEditName}
-                  placeholder={t('roles.employeeNamePlaceholder')}
-                  placeholderTextColor={colors.textSecondary}
-                  style={styles.input}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('roles.email')}</Text>
-                <TextInput
-                  value={editEmail}
-                  onChangeText={setEditEmail}
-                  placeholder={t('roles.emailPlaceholder')}
-                  placeholderTextColor={colors.textSecondary}
-                  style={styles.input}
-                  autoCapitalize="none"
-                />
+                <Text style={styles.inputLabel}>{t('roles.role')}</Text>
+                <View style={styles.rolePicker}>
+                  {(['Admin', 'Employee'] as const).map((role) => (
+                    <TouchableOpacity
+                      key={role}
+                      style={[
+                        styles.roleOption,
+                        editRole === role && styles.roleOptionActive,
+                      ]}
+                      onPress={() => setEditRole(role)}
+                    >
+                      <Text
+                        style={[
+                          styles.roleOptionText,
+                          editRole === role && styles.roleOptionTextActive,
+                        ]}
+                      >
+                        {role === 'Admin' ? t('roles.admin') : t('roles.employee')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
 
               <TouchableOpacity
-                style={styles.saveButton}
+                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
                 onPress={handleSaveEdit}
+                disabled={isSaving}
               >
-                <Text style={styles.saveButtonText}>{t('roles.save')}</Text>
+                {isSaving ? (
+                  <ActivityIndicator color={colors.surface} size="small" />
+                ) : (
+                  <Text style={styles.saveButtonText}>{t('roles.save')}</Text>
+                )}
               </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
+      {/* Delete Confirmation Modal */}
       <Modal
         visible={showDeleteModal}
         transparent={true}
@@ -431,79 +430,17 @@ export default function RolesScreen({ onBack, currentUser }: RolesScreenProps) {
                 <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.modalDeleteButton}
+                style={[styles.modalDeleteButton, isSaving && { opacity: 0.5 }]}
                 onPress={handleDeleteMember}
+                disabled={isSaving}
               >
-                <Text style={styles.modalDeleteText}>{t('common.delete')}</Text>
+                {isSaving ? (
+                  <ActivityIndicator color={colors.surface} size="small" />
+                ) : (
+                  <Text style={styles.modalDeleteText}>{t('common.delete')}</Text>
+                )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={editCurrentUser}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleCloseEditCurrentUser}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('roles.editEmployee')}</Text>
-              <TouchableOpacity onPress={handleCloseEditCurrentUser}>
-                <Ionicons name="close" size={24} color={colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('roles.name')}</Text>
-                <TextInput
-                  value={currentUserEditName}
-                  onChangeText={setCurrentUserEditName}
-                  placeholder={t('roles.employeeNamePlaceholder')}
-                  placeholderTextColor={colors.textSecondary}
-                  style={styles.input}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>{t('roles.role')}</Text>
-                <View style={styles.rolePicker}>
-                  {(['Admin', 'Employee'] as const).map((role) => (
-                    <TouchableOpacity
-                      key={role}
-                      style={[
-                        styles.roleOption,
-                        currentUserEditRole === role && styles.roleOptionActive,
-                      ]}
-                      onPress={() => setCurrentUserEditRole(role)}
-                    >
-                      <Text
-                        style={[
-                          styles.roleOptionText,
-                          currentUserEditRole === role && styles.roleOptionTextActive,
-                        ]}
-                      >
-                        {role === 'Admin' ? t('roles.admin') : t('roles.employee')}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.saveButton,
-                  !currentUserEditName.trim() && styles.saveButtonDisabled,
-                ]}
-                onPress={handleSaveEditCurrentUser}
-                disabled={!currentUserEditName.trim()}
-              >
-                <Text style={styles.saveButtonText}>{t('roles.save')}</Text>
-              </TouchableOpacity>
-            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -542,6 +479,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: spacing.xl,
+  },
+  loadingContainer: {
+    paddingTop: spacing.xxxl,
+    alignItems: 'center',
   },
   emptyContainer: {
     flex: 1,

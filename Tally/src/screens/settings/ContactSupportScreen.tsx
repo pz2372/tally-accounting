@@ -35,7 +35,7 @@ export default function ContactSupportScreen({ onBack }: ContactSupportScreenPro
         { text: 'OK', onPress: onBack },
       ]);
     } catch (error: any) {
-      console.warn('Failed to send support message:', error);
+      // Alert is shown below
       Alert.alert(
         'Error',
         error.response?.data?.error || 'Failed to send message. Please try again.'

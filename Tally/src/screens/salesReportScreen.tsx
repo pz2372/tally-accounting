@@ -108,7 +108,7 @@ export default function SalesReportScreen({ onBack, selectedOrgId }: SalesReport
         setError(response.data.error || 'Failed to load data');
       }
     } catch (err) {
-      console.error('fetchMonthlySummary error:', err);
+      // error state is set below
       setError('Failed to load sales report');
     } finally {
       setIsLoading(false);

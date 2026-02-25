@@ -12,6 +12,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface CategoriesScreenProps {
   onBack: () => void;
+  selectedOrgId?: string | null;
 }
 
 interface Category {
@@ -34,7 +35,7 @@ const CATEGORY_KEYS_TO_PRESET_ID: Record<string, string> = {
   'transportation': 'preset_transport',
 };
 
-export default function CategoriesScreen({ onBack }: CategoriesScreenProps) {
+export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesScreenProps) {
   const { t } = useContext(LanguageContext);
   
   const initialCategories: Category[] = [
@@ -95,7 +96,8 @@ export default function CategoriesScreen({ onBack }: CategoriesScreenProps) {
         { categories: updates },
         {
           headers: {
-            Authorization: `Bearer ${accessToken}`
+            Authorization: `Bearer ${accessToken}`,
+            ...(selectedOrgId ? { 'x-org-id': selectedOrgId } : {}),
           }
         }
       );
@@ -109,7 +111,7 @@ export default function CategoriesScreen({ onBack }: CategoriesScreenProps) {
         Alert.alert('Error', response.data.error || 'Failed to update categories');
       }
     } catch (error: any) {
-      console.error('Save error:', error);
+      // Alert is shown below
       Alert.alert(
         'Error', 
         error.response?.data?.error || error.message || 'Failed to save changes'

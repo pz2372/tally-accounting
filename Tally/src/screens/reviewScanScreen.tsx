@@ -89,7 +89,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
           }
         }
       } catch (err) {
-        console.error('Error loading org categories:', err);
+        // silently fail - continue with preset categories
         // Continue with just preset categories
       }
 
@@ -102,7 +102,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       if (extracted.notes) setNotes(extracted.notes);
       if (extracted.documentType) setDocumentType(extracted.documentType);
     } catch (error) {
-      console.error('Error extracting receipt data:', error);
+      // Alert is shown below
       Alert.alert(
         t('reviewScan.extractionError'),
         t('reviewScan.extractionErrorMessage'),
@@ -258,7 +258,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         ]
       );
     } catch (error: any) {
-      console.error('Error saving:', error);
+      // Alert is shown below
       Alert.alert(
         'Error',
         error?.message || 'Failed to save. Please try again.',

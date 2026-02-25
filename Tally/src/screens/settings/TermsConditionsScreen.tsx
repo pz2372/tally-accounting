@@ -366,9 +366,8 @@ export default function TermsConditionsScreen({ onBack }: TermsConditionsScreenP
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>19. Contact & Support</Text>
             <Text style={styles.paragraph}>
-              For questions about these Terms, account issues, or support requests, please contact us:
+              For questions about these Terms, account issues, or support requests, please contact us.
             </Text>
-            <Text style={styles.contactText}>support@tallyapp.com</Text>
           </View>
 
           <View style={styles.bottomSpacing} />

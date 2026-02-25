@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Dimensions, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Dimensions, ActivityIndicator, Modal, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -100,7 +100,7 @@ export default function HomeScreen({
           onOrgChange?.(saved);
         }
       } catch (error) {
-        console.warn('Failed to load selected business:', error);
+        // silently fail - non-critical cache load
       }
     };
     loadSelectedBusiness();
@@ -110,7 +110,7 @@ export default function HomeScreen({
   useEffect(() => {
     if (selectedBusinessId) {
       AsyncStorage.setItem(SELECTED_BUSINESS_KEY, selectedBusinessId).catch(error => {
-        console.warn('Failed to save selected business:', error);
+        // silently fail - non-critical cache save
       });
     }
   }, [selectedBusinessId]);
@@ -172,7 +172,7 @@ export default function HomeScreen({
       onOrgChange?.(orgId);
       onDataChanged?.();
     } catch (error) {
-      console.error('Error switching organization:', error);
+      Alert.alert('Error', 'Failed to switch organization. Please try again.');
     } finally {
       setIsLoadingOrgData(false);
     }
@@ -237,7 +237,7 @@ export default function HomeScreen({
 
             const missingReceiptsData: any[] = [];
             const missingReceiptCount = orgData.expenses.reduce((count: number, expense: any) => {
-              if (expense.deletedAt) return count;
+              if (expense.deletedAt || expense.receiptNotNeeded) return count;
               const expenseDate = new Date(expense.expenseDate);
               if (expenseDate.getMonth() !== currentMonth || expenseDate.getFullYear() !== currentYear) {
                 return count;
@@ -288,7 +288,7 @@ export default function HomeScreen({
               nextMetrics.capturedReceipts = matchedTxns;
             }
           } catch (err) {
-            console.warn('Failed to fetch sales/statement data for home:', err);
+            // silently fail - metrics will show without sales data
           }
         }
 
@@ -296,7 +296,7 @@ export default function HomeScreen({
           setMetrics(nextMetrics);
         }
       } catch (error) {
-        console.warn('Failed to load home metrics cache:', error);
+        // silently fail - non-critical metrics load
       }
     };
 
@@ -396,7 +396,7 @@ export default function HomeScreen({
         ScreenComponent = <SalesReportScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;
         break;
       case 'missingReceipts':
-        ScreenComponent = <MissingReceiptsScreen expenses={missingReceiptExpenses} onBack={handleBack} onExpensePress={onExpensePress} />;
+        ScreenComponent = <MissingReceiptsScreen expenses={missingReceiptExpenses} onBack={handleBack} onExpensePress={onExpensePress} isAdmin={selectedBusiness?.role === 'ADMIN'} selectedOrgId={selectedBusinessId} onDismiss={(expenseId) => setMissingReceiptExpenses(prev => prev.filter(e => e.id !== expenseId))} />;
         break;
       default:
         return null;

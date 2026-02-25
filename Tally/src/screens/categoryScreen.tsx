@@ -9,6 +9,7 @@ import {
   Platform,
   UIManager,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -154,7 +155,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
       setCategories(categoriesArray);
       setTotalSpent(categoriesArray.reduce((sum, cat) => sum + cat.amount, 0));
     } catch (error) {
-      console.error('Error loading category data:', error);
+      Alert.alert('Error', 'Failed to load category data. Please try again.');
     } finally {
       setIsLoading(false);
     }

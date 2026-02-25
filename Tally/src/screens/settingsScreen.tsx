@@ -85,13 +85,13 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
         SubScreenComponent = <LanguageScreen onBack={handleSubScreenBack} />;
         break;
       case 'categories':
-        SubScreenComponent = <CategoriesScreen onBack={handleSubScreenBack} />;
+        SubScreenComponent = <CategoriesScreen onBack={handleSubScreenBack} selectedOrgId={selectedOrgId} />;
         break;
       case 'export':
-        SubScreenComponent = <ExportDataScreen onBack={handleSubScreenBack} />;
+        SubScreenComponent = <ExportDataScreen onBack={handleSubScreenBack} selectedOrgId={selectedOrgId} />;
         break;
       case 'roles':
-        SubScreenComponent = <RolesScreen onBack={handleSubScreenBack} currentUser={currentUser} />;
+        SubScreenComponent = <RolesScreen onBack={handleSubScreenBack} currentUser={currentUser} selectedOrgId={selectedOrgId} />;
         break;
       case 'contact':
         SubScreenComponent = <ContactSupportScreen onBack={handleSubScreenBack} />;

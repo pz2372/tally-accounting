@@ -21,6 +21,9 @@ router.post('/', expenseController.createExpense);
 // POST /api/expenses/with-receipt - Create expense with receipt image (combined flow)
 router.post('/with-receipt', uploadSingle, expenseController.createExpenseWithReceipt);
 
+// PUT /api/expenses/:id/dismiss-receipt - Dismiss missing receipt (admin only)
+router.put('/:id/dismiss-receipt', expenseController.dismissMissingReceipt);
+
 // PUT /api/expenses/:id - Update expense
 router.put('/:id', expenseController.updateExpense);
 

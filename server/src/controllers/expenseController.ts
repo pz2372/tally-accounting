@@ -207,6 +207,30 @@ export const deleteExpense: Handler = async (req, res) => {
   }
 };
 
+// Dismiss missing receipt (admin only)
+export const dismissMissingReceipt: Handler = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { orgId, role } = req.user;
+
+    if (role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Admin access required' });
+    }
+
+    const existing = await prisma.expense.findFirst({ where: { id, orgId } });
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
+    }
+
+    await prisma.expense.update({ where: { id }, data: { receiptNotNeeded: true } });
+
+    res.json({ success: true, message: 'Receipt dismissed successfully' });
+  } catch (error) {
+    console.error('dismissMissingReceipt error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 // Create expense with receipt image (combined flow)
 export const createExpenseWithReceipt: Handler = async (req, res) => {
   try {
@@ -235,7 +259,7 @@ export const createExpenseWithReceipt: Handler = async (req, res) => {
       req.file.buffer,
       req.file.originalname,
       req.file.mimetype,
-      `${orgId}/receipts`
+      `receipts/${orgId}`
     );
 
     const expense = await prisma.expense.create({

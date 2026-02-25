@@ -30,7 +30,7 @@ export const createSalesReportWithReceipt: Handler = async (req, res) => {
       req.file.buffer,
       req.file.originalname,
       req.file.mimetype,
-      `${orgId}/salereports`
+      `salereports/${orgId}`
     );
 
     // Create sales report record with the scanned image

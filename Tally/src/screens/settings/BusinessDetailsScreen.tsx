@@ -8,8 +8,6 @@ import { LanguageContext } from '../../contexts/LanguageContext';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
 import { createAuthenticatedAxios } from '../../services/authService';
 
-const BUSINESS_DETAILS_KEY = '@business_details';
-
 interface BusinessDetailsScreenProps {
   onBack: () => void;
   selectedOrgId?: string | null;
@@ -21,34 +19,42 @@ interface BusinessDetailsScreenProps {
 export default function BusinessDetailsScreen({ onBack, currentUser, selectedOrgId }: BusinessDetailsScreenProps) {
   const { t } = useContext(LanguageContext);
   const [businessName, setBusinessName] = useState('');
+  const [dba, setDba] = useState('');
   const [taxId, setTaxId] = useState('');
   const [address, setAddress] = useState('');
-  const [industry, setIndustry] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  const orgId = selectedOrgId || currentUser?.organizations?.[0]?.id;
+  const selectedOrg = orgId
+    ? currentUser?.organizations?.find(o => o.id === orgId)
+    : currentUser?.organizations?.[0];
 
   useEffect(() => {
     let isActive = true;
 
     const loadBusinessDetails = async () => {
+      setIsLoading(true);
       try {
-        // First try to load from cache
-        const cachedData = await AsyncStorage.getItem(BUSINESS_DETAILS_KEY);
+        const cacheKey = orgId ? `@business_details_${orgId}` : '@business_details';
+        const cachedData = await AsyncStorage.getItem(cacheKey);
         if (cachedData && isActive) {
           const parsed = JSON.parse(cachedData);
           setBusinessName(parsed.businessName || '');
+          setDba(parsed.dba || '');
           setTaxId(parsed.taxId || '');
           setAddress(parsed.address || '');
-          setIndustry(parsed.industry || '');
-        } else if (currentUser?.organizations?.[0] && isActive) {
-          // Fall back to currentUser organization if no cache
-          setBusinessName(currentUser.organizations[0].name || '');
+        } else if (selectedOrg && isActive) {
+          setBusinessName(selectedOrg.name || '');
+          setDba((selectedOrg as any).dba || '');
+          setTaxId('');
+          setAddress('');
         }
       } catch (error) {
-        console.warn('Failed to load business details:', error);
-        // Fall back to currentUser on error
-        if (currentUser?.organizations?.[0] && isActive) {
-          setBusinessName(currentUser.organizations[0].name || '');
+        // silently fail - falls back to selectedOrg prop below
+        if (selectedOrg && isActive) {
+          setBusinessName(selectedOrg.name || '');
+          setDba((selectedOrg as any).dba || '');
         }
       } finally {
         if (isActive) {
@@ -62,29 +68,29 @@ export default function BusinessDetailsScreen({ onBack, currentUser, selectedOrg
     return () => {
       isActive = false;
     };
-  }, [currentUser]);
+  }, [orgId]);
 
   const handleSaveChanges = async () => {
     setIsSaving(true);
     try {
       // Save org name to backend
-      const orgId = selectedOrgId || currentUser?.organizations?.[0]?.id;
       if (orgId) {
         const api = await createAuthenticatedAxios();
-        await api.put('/api/organizations', 
-          { name: businessName.trim() },
+        await api.put('/api/organizations',
+          { name: businessName.trim(), dba: dba.trim() || null, ein: taxId.trim() || null },
           { headers: { 'x-org-id': orgId } }
         );
       }
 
-      // Cache all fields locally
+      // Cache all fields locally (org-scoped)
+      const cacheKey = orgId ? `@business_details_${orgId}` : '@business_details';
       const businessData = {
         businessName: businessName.trim(),
+        dba: dba.trim(),
         taxId: taxId.trim(),
         address: address.trim(),
-        industry: industry.trim(),
       };
-      await AsyncStorage.setItem(BUSINESS_DETAILS_KEY, JSON.stringify(businessData));
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(businessData));
       
       Alert.alert(
         t('common.done'),
@@ -92,7 +98,7 @@ export default function BusinessDetailsScreen({ onBack, currentUser, selectedOrg
         [{ text: 'OK', onPress: onBack }]
       );
     } catch (error: any) {
-      console.warn('Failed to save business details:', error);
+      // Alert is shown below
       Alert.alert(
         'Error',
         error.response?.data?.error || 'Failed to save changes. Please try again.'
@@ -123,10 +129,20 @@ export default function BusinessDetailsScreen({ onBack, currentUser, selectedOrg
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>{t('businessDetails.businessName')}</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.inputDisabled]}
                 value={businessName}
-                onChangeText={setBusinessName}
-                placeholder={t('businessDetails.enterBusinessName')}
+                editable={false}
+                placeholderTextColor={colors.textTertiary}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>DBA (Doing Business As)</Text>
+              <TextInput
+                style={styles.input}
+                value={dba}
+                onChangeText={setDba}
+                placeholder="Enter DBA name"
                 placeholderTextColor={colors.textTertiary}
               />
             </View>
@@ -235,6 +251,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     fontSize: 15,
     color: colors.textPrimary,
+  },
+  inputDisabled: {
+    backgroundColor: colors.background,
+    color: colors.textSecondary,
   },
   textArea: {
     minHeight: 80,

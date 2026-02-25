@@ -134,7 +134,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
             onExpenseDeleted?.();
             onBack();
         } catch (error) {
-            console.error('Delete expense error:', error);
+            // Alert is shown below
             Alert.alert(t('common.error') || 'Error', t('details.deleteError'));
         } finally {
             setIsDeleting(false);
@@ -199,7 +199,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
             Alert.alert(t('common.success'), t('details.editSuccess'));
             onExpenseUpdated?.();
         } catch (error) {
-            console.error('Edit expense error:', error);
+            // Alert is shown below
             Alert.alert(t('common.error') || 'Error', t('details.editError'));
         } finally {
             setIsSaving(false);

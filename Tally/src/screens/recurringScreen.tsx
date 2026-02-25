@@ -161,7 +161,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
         }
       }
     } catch (error: any) {
-      console.error('Error loading recurring charges:', error);
+      // silently fail - show cached data if available
       // If there's an error fetching, still show cached data if available
       if (firstOrgId) {
         const cachedCharges = await getCachedData(`${CACHE_KEYS.ORG_RECURRING_CHARGES}${firstOrgId}`);
@@ -225,7 +225,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
       Alert.alert('Success', 'Recurring charge deleted successfully');
 
     } catch (error) {
-      console.error('Error deleting recurring charge:', error);
+      // Alert is shown below
       if (axios.isAxiosError(error) && error.response) {
         Alert.alert('Error', error.response.data.error || 'Failed to delete recurring charge');
       } else {
@@ -393,7 +393,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
         Alert.alert('Success', 'Recurring charge added successfully');
       }
     } catch (error: any) {
-      console.error('Error adding recurring charge:', error);
+      // Alert is shown below
       
       // Handle 401 authentication errors
       if (error.response?.status === 401) {
