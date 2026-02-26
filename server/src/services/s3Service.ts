@@ -103,6 +103,20 @@ export async function getPresignedUrl(key: string, expiresIn: number = 3600): Pr
 }
 
 /**
+ * Get an S3 object stream
+ * @param key - The S3 key of the file
+ * @returns GetObject response with Body stream and ContentType
+ */
+export async function getS3Object(key: string) {
+  const command = new GetObjectCommand({
+    Bucket: S3_CONFIG.bucketName,
+    Key: key,
+  });
+
+  return s3Client.send(command);
+}
+
+/**
  * Extract S3 key from full URL
  * @param url - Full S3 URL
  * @returns S3 key or null if invalid

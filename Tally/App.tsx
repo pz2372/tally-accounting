@@ -147,6 +147,7 @@ export default function App() {
                 onDataChanged={handleDataChanged}
                 onOrgChange={setSelectedOrgId}
                 onExpensePress={setSelectedExpense}
+                dataVersion={dataVersion}
               />
             </View>
             <View style={{ flex: 1, display: activeTab === 'expenses' ? 'flex' : 'none' }}>

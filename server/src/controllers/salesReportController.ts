@@ -2,7 +2,7 @@ import { Prisma, SalesReportSource, SalesReportStatus } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
-import { uploadToS3 } from '../services/s3Service';
+import { uploadToS3, getPresignedUrl, extractS3Key, getS3Object } from '../services/s3Service';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
@@ -260,10 +260,19 @@ export const getSalesReportById: Handler = async (req, res) => {
         error: 'Sales report not found'
       });
     }
-    
+
+    // Generate presigned URL for private S3 file
+    let signedFileUrl: string | null = null;
+    if (report.fileUrl) {
+      const s3Key = extractS3Key(report.fileUrl);
+      if (s3Key) {
+        signedFileUrl = await getPresignedUrl(s3Key);
+      }
+    }
+
     res.json({
       success: true,
-      report
+      report: { ...report, fileUrl: signedFileUrl || report.fileUrl }
     });
   } catch (error) {
     console.error('getSalesReportById error:', error);
@@ -671,6 +680,46 @@ export const getSalesAnalytics: Handler = async (req, res) => {
       success: false,
       error: 'Internal server error'
     });
+  }
+};
+
+// Proxy S3 image for a sales report
+export const getSalesReportImage: Handler = async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    const { id } = req.params;
+
+    if (!orgId) {
+      return res.status(403).json({ success: false, error: 'Organization context required' });
+    }
+
+    const report = await prisma.salesReport.findFirst({
+      where: { id, orgId },
+      select: { fileUrl: true, fileType: true },
+    });
+
+    if (!report || !report.fileUrl) {
+      return res.status(404).json({ success: false, error: 'Image not found' });
+    }
+
+    const s3Key = extractS3Key(report.fileUrl);
+    if (!s3Key) {
+      return res.status(404).json({ success: false, error: 'Invalid file reference' });
+    }
+
+    const s3Response = await getS3Object(s3Key);
+
+    res.setHeader('Content-Type', report.fileType || 'image/jpeg');
+    if (s3Response.ContentLength) {
+      res.setHeader('Content-Length', s3Response.ContentLength);
+    }
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    const stream = s3Response.Body as NodeJS.ReadableStream;
+    stream.pipe(res);
+  } catch (error) {
+    console.error('getSalesReportImage error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load image' });
   }
 };
 

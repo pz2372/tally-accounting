@@ -46,6 +46,7 @@ interface HomeScreenProps {
   onDataChanged?: () => void;
   onOrgChange?: (orgId: string) => void;
   onExpensePress?: (expense: any) => void;
+  dataVersion?: number;
   currentUser?: {
     name?: string;
     email?: string;
@@ -61,6 +62,7 @@ export default function HomeScreen({
   onDataChanged,
   onOrgChange,
   onExpensePress,
+  dataVersion,
   currentUser
 }: HomeScreenProps) {
   const { t } = useContext(LanguageContext);
@@ -304,7 +306,7 @@ export default function HomeScreen({
     return () => {
       isActive = false;
     };
-  }, [selectedBusinessId]);
+  }, [selectedBusinessId, dataVersion]);
 
   const selectedBusiness = businesses.find((business) => business.id === selectedBusinessId);
   const businessName = selectedBusiness?.dba || selectedBusiness?.name || 'Organization';
@@ -395,7 +397,26 @@ export default function HomeScreen({
         ScreenComponent = <SalesReportScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;
         break;
       case 'missingReceipts':
-        ScreenComponent = <MissingReceiptsScreen expenses={missingReceiptExpenses} onBack={handleBack} onExpensePress={onExpensePress} isAdmin={selectedBusiness?.role === 'ADMIN'} selectedOrgId={selectedBusinessId} onDismiss={(expenseId) => setMissingReceiptExpenses(prev => prev.filter(e => e.id !== expenseId))} />;
+        ScreenComponent = <MissingReceiptsScreen expenses={missingReceiptExpenses} onBack={handleBack} onExpensePress={onExpensePress} isAdmin={selectedBusiness?.role === 'ADMIN'} selectedOrgId={selectedBusinessId} onDismiss={async (expenseId) => {
+                  setMissingReceiptExpenses(prev => prev.filter(e => e.id !== expenseId));
+                  setMetrics(prev => ({ ...prev, unmatchedItems: Math.max(0, prev.unmatchedItems - 1) }));
+                  // Update cached expenses so receiptNotNeeded persists across reloads
+                  if (selectedBusinessId) {
+                    try {
+                      const cacheKey = `@org_expenses_${selectedBusinessId}`;
+                      const raw = await AsyncStorage.getItem(cacheKey);
+                      if (raw) {
+                        const expenses = JSON.parse(raw);
+                        const updated = expenses.map((e: any) =>
+                          e.id === expenseId ? { ...e, receiptNotNeeded: true } : e
+                        );
+                        await AsyncStorage.setItem(cacheKey, JSON.stringify(updated));
+                      }
+                    } catch {
+                      // non-critical cache update
+                    }
+                  }
+                }} />;
         break;
       default:
         return null;

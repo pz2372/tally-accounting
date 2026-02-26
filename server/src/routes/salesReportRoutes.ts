@@ -16,6 +16,7 @@ router.get('/', salesReportController.getAllSalesReports);
 router.get('/analytics', salesReportController.getSalesAnalytics);
 router.get('/monthly-summary', salesReportController.getMonthlySummary);
 router.get('/:id', salesReportController.getSalesReportById);
+router.get('/:id/image', salesReportController.getSalesReportImage);
 router.put('/:id', salesReportController.updateSalesReport);
 router.post('/:id/approve', salesReportController.approveSalesReport);
 router.post('/:id/reject', salesReportController.rejectSalesReport);

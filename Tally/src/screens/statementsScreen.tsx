@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -30,6 +30,15 @@ interface Statement {
   type: 'statement' | 'sales';
   sourceType?: string;
   status: 'processed' | 'processing' | 'error';
+  fileUrl?: string;
+  grossSalesCents?: number;
+  netSalesCents?: number;
+  cashCents?: number;
+  tipsCents?: number;
+  taxCents?: number;
+  discountsCents?: number;
+  refundsCents?: number;
+  notes?: string;
 }
 
 interface StatementTransactionItem {
@@ -50,6 +59,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'statement' | 'sales'>('all');
   const [selectedStatement, setSelectedStatement] = useState<Statement | null>(null);
+  const [selectedSalesReport, setSelectedSalesReport] = useState<Statement | null>(null);
   const [statementTransactions, setStatementTransactions] = useState<StatementTransactionItem[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [transactionFilter, setTransactionFilter] = useState<'all' | 'unmatched'>('all');
@@ -83,18 +93,13 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
       const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
       const cacheKey = `${CACHE_KEYS.ORG_STATEMENTS}${firstOrgId}_${monthKey}`;
 
-      // Try to load from cache first
+      // Show cached data immediately, then always fetch fresh from server
       const cachedStatements = await getCachedData(cacheKey);
-      
+
       if (cachedStatements && Array.isArray(cachedStatements) && cachedStatements.length > 0) {
-        console.log('Loading statements from cache');
         setStatements(cachedStatements);
         setIsLoading(false);
-        return;
       }
-
-      // If not in cache, fetch from server
-      console.log('Fetching statements from server');
       
       const token = await getAccessToken();
       if (!token) {
@@ -166,7 +171,16 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
               totalAmount: report.netSales || 0,
               type: 'sales' as const,
               sourceType: 'sales',
-              status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing'
+              status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing',
+              fileUrl: report.fileUrl || undefined,
+              grossSalesCents: report.grossSalesCents ?? undefined,
+              netSalesCents: report.netSalesCents ?? undefined,
+              cashCents: report.cashCents ?? undefined,
+              tipsCents: report.tipsCents ?? undefined,
+              taxCents: report.taxCents ?? undefined,
+              discountsCents: report.discountsCents ?? undefined,
+              refundsCents: report.refundsCents ?? undefined,
+              notes: report.notes || undefined,
             }));
           transformedDocuments.push(...transformedSales);
         }
@@ -176,7 +190,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
 
         // Save to cache
         await AsyncStorage.setItem(cacheKey, JSON.stringify(transformedDocuments));
-        
+
         setStatements(transformedDocuments);
       } catch (apiError: any) {
         // If 401, try refreshing token and retry once
@@ -244,7 +258,16 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
                   totalAmount: report.netSales || 0,
                   type: 'sales' as const,
                   sourceType: 'sales',
-                  status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing'
+                  status: report.status === 'APPROVED' ? 'processed' : report.status === 'REJECTED' ? 'error' : 'processing',
+                  fileUrl: report.fileUrl || undefined,
+                  grossSalesCents: report.grossSalesCents ?? undefined,
+                  netSalesCents: report.netSalesCents ?? undefined,
+                  cashCents: report.cashCents ?? undefined,
+                  tipsCents: report.tipsCents ?? undefined,
+                  taxCents: report.taxCents ?? undefined,
+                  discountsCents: report.discountsCents ?? undefined,
+                  refundsCents: report.refundsCents ?? undefined,
+                  notes: report.notes || undefined,
                 }));
               transformedDocuments.push(...transformedSales);
             }
@@ -372,12 +395,31 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
     loadStatementTransactions(statement.id);
   };
 
+  const handleSalesReportPress = async (statement: Statement) => {
+    // Build proxy image URL (server streams S3 privately)
+    const token = await getAccessToken();
+    let orgId = selectedOrgId;
+    if (!orgId) {
+      const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        orgId = userData?.organizations?.[0]?.id;
+      }
+    }
+    setSelectedSalesReport({
+      ...statement,
+      fileUrl: statement.fileUrl ? `${API_URL}/api/sales-reports/${statement.id}/image` : undefined,
+      _imageHeaders: token && orgId ? { Authorization: `Bearer ${token}`, 'X-Org-Id': orgId } : undefined,
+    } as any);
+  };
+
   const handleBackFromDetail = () => {
     setSelectedStatement(null);
+    setSelectedSalesReport(null);
     setStatementTransactions([]);
   };
 
-  const swipeHandlers = useSwipeBack(selectedStatement ? handleBackFromDetail : onBack);
+  const swipeHandlers = useSwipeBack(selectedStatement || selectedSalesReport ? handleBackFromDetail : onBack);
 
   // Statement detail view
   if (selectedStatement) {
@@ -485,6 +527,80 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
                     </View>
                   );
                 })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Sales report detail view
+  if (selectedSalesReport) {
+    const formatCents = (cents?: number) => {
+      if (cents === undefined || cents === null) return '-';
+      return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    const salesFields = [
+      { label: 'Gross Sales', value: selectedSalesReport.grossSalesCents },
+      { label: 'Net Sales', value: selectedSalesReport.netSalesCents },
+      { label: 'Cash', value: selectedSalesReport.cashCents },
+      { label: 'Tips', value: selectedSalesReport.tipsCents },
+      { label: 'Tax', value: selectedSalesReport.taxCents },
+      { label: 'Discounts', value: selectedSalesReport.discountsCents },
+      { label: 'Refunds', value: selectedSalesReport.refundsCents },
+    ].filter(f => f.value !== undefined && f.value !== null);
+
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.container} {...swipeHandlers}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBackFromDetail} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Sales Report</Text>
+            <View style={{ width: 32 }} />
+          </View>
+
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Image */}
+            {selectedSalesReport.fileUrl && (
+              <View style={styles.salesImageContainer}>
+                <Image
+                  source={{
+                    uri: selectedSalesReport.fileUrl,
+                    headers: (selectedSalesReport as any)._imageHeaders,
+                  }}
+                  style={styles.salesImage}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+
+            {/* Date */}
+            <View style={styles.salesInfoCard}>
+              <Text style={styles.salesInfoLabel}>Business Date</Text>
+              <Text style={styles.salesInfoValue}>{selectedSalesReport.period}</Text>
+            </View>
+
+            {/* Financial breakdown */}
+            {salesFields.length > 0 && (
+              <View style={styles.salesBreakdownCard}>
+                {salesFields.map((field, index) => (
+                  <View key={field.label} style={[styles.salesBreakdownRow, index < salesFields.length - 1 && styles.salesBreakdownBorder]}>
+                    <Text style={styles.salesBreakdownLabel}>{field.label}</Text>
+                    <Text style={styles.salesBreakdownValue}>{formatCents(field.value)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Notes */}
+            {selectedSalesReport.notes && (
+              <View style={styles.salesInfoCard}>
+                <Text style={styles.salesInfoLabel}>Notes</Text>
+                <Text style={styles.salesInfoValue}>{selectedSalesReport.notes}</Text>
               </View>
             )}
           </ScrollView>
@@ -616,6 +732,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
                   onPress={() => {
                     if (statement.type === 'statement') {
                       handleStatementPress(statement);
+                    } else if (statement.type === 'sales') {
+                      handleSalesReportPress(statement);
                     }
                   }}
                 >
@@ -949,5 +1067,66 @@ const styles = StyleSheet.create({
   },
   unmatchedBadgeText: {
     color: '#DC2626',
+  },
+  salesImageContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    alignItems: 'center',
+  },
+  salesImage: {
+    width: Dimensions.get('window').width - spacing.xl * 2 - spacing.md * 2,
+    height: 300,
+    borderRadius: borderRadius.md,
+  },
+  salesInfoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  salesInfoLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  salesInfoValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  salesBreakdownCard: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  salesBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  salesBreakdownBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  salesBreakdownLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textSecondary,
+  },
+  salesBreakdownValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
 });

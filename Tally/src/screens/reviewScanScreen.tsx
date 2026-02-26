@@ -246,6 +246,22 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
 
           // Clear monthly cache to force refresh on salesReportScreen
           await AsyncStorage.removeItem(`${cacheKey}_${monthKey}`);
+
+          // Update home metrics cache with new sales figures
+          try {
+            const now = new Date();
+            const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            if (monthKey === currentMonthKey) {
+              const metricsRaw = await AsyncStorage.getItem('@home_metrics');
+              const metricsData = metricsRaw ? JSON.parse(metricsRaw) : {};
+              if (!metricsData.byOrg) metricsData.byOrg = {};
+              if (!metricsData.byOrg[orgId]) metricsData.byOrg[orgId] = {};
+              const orgMetrics = metricsData.byOrg[orgId];
+              orgMetrics.grossSales = (orgMetrics.grossSales || 0) + (savedReport.grossSalesCents ? savedReport.grossSalesCents / 100 : 0);
+              orgMetrics.netSales = (orgMetrics.netSales || 0) + (savedReport.netSalesCents ? savedReport.netSalesCents / 100 : 0);
+              await AsyncStorage.setItem('@home_metrics', JSON.stringify(metricsData));
+            }
+          } catch { }
         }
       } else {
         const savedExpense = responseData.expense;
