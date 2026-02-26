@@ -195,7 +195,7 @@ export default function Dashboard() {
             ) : null}
           </div>
           <div className="dash-topbar-right">
-            {selectedOrg && !showCreateOrg && (
+            {selectedOrg && !showCreateOrg && selectedOrg.role === 'ADMIN' && (
               <button
                 className="dash-icon-btn"
                 onClick={() => setShowEditOrg(true)}
@@ -216,7 +216,7 @@ export default function Dashboard() {
                 if (!selectedOrgId && orgs.length) setSelectedOrgId(orgs[0].id);
               }}
             />
-          ) : selectedOrg ? (
+          ) : selectedOrg && selectedOrg.role === 'ADMIN' ? (
             <>
               <div className="dash-org-tabs">
                 <button
@@ -254,6 +254,11 @@ export default function Dashboard() {
                 />
               )}
             </>
+          ) : selectedOrg ? (
+            <div className="dash-connect-empty">
+              <h3>Access Restricted</h3>
+              <p>You don't have permission to view this organization's details.</p>
+            </div>
           ) : orgs.length === 0 ? (
             <div className="dash-connect-empty">
               <div className="dash-connect-empty-icon"><Building2 size={40} /></div>

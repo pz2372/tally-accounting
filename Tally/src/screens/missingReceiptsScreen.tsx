@@ -1,5 +1,6 @@
-import React, { useContext, useRef, useState } from 'react';
+import React, { useContext, useRef, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, PanResponder, Alert, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -158,6 +159,56 @@ function SwipeableExpenseCard({
 export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress, isAdmin, selectedOrgId, onDismiss }: MissingReceiptsScreenProps) {
   const { t } = useContext(LanguageContext);
   const swipeHandlers = useSwipeBack(onBack);
+  const [visibleCategoryKeys, setVisibleCategoryKeys] = useState<Set<string>>(new Set());
+
+  // Load visible categories for employees
+  useEffect(() => {
+    const loadVisibleCategories = async () => {
+      // Admins see all categories
+      if (isAdmin) {
+        setVisibleCategoryKeys(new Set()); // Empty set means show all
+        return;
+      }
+
+      try {
+        // Determine org ID
+        let orgId = selectedOrgId;
+        if (!orgId) {
+          const userStr = await AsyncStorage.getItem('@current_user');
+          if (userStr) {
+            const user = JSON.parse(userStr);
+            orgId = user.organizations?.[0]?.id;
+          }
+        }
+        if (!orgId) return;
+
+        // Fetch categories from API to get visibility settings
+        const accessToken = await getAccessToken();
+        if (accessToken) {
+          const response = await axios.get(`${API_URL}/api/categories`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'x-org-id': orgId,
+            }
+          });
+          if (response.data.success && response.data.categories) {
+            // Only include visible categories for employees
+            const visible = new Set<string>(
+              response.data.categories
+                .filter((cat: any) => cat.isEnabled !== false && cat.visibleToEmployees !== false)
+                .map((cat: any) => cat.key)
+            );
+            setVisibleCategoryKeys(visible);
+          }
+        }
+      } catch {
+        // Silently fail - show all categories if API fails
+        setVisibleCategoryKeys(new Set());
+      }
+    };
+
+    loadVisibleCategories();
+  }, [isAdmin, selectedOrgId]);
 
   const formatExpense = (exp: any) => {
     const expenseDate = new Date(exp.expenseDate);
@@ -176,6 +227,11 @@ export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress
     };
   };
 
+  // Filter expenses based on category visibility
+  const filteredExpenses = isAdmin || visibleCategoryKeys.size === 0
+    ? expenses
+    : expenses.filter((exp: any) => visibleCategoryKeys.has(exp.categoryKey));
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container} {...(isAdmin ? {} : swipeHandlers)}>
@@ -190,14 +246,14 @@ export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {expenses.length === 0 ? (
+          {filteredExpenses.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="receipt-outline" size={48} color={colors.textSecondary} style={{ marginBottom: spacing.lg }} />
-              <Text style={styles.emptyTitle}>{t('home.noMissingReceipts') || 'No Missing Receipts'}</Text>
+              <Text style={styles.emptyTitle}>No Missing Receipts</Text>
             </View>
           ) : (
             <View style={styles.expensesList}>
-              {expenses.map((raw: any) => {
+              {filteredExpenses.map((raw: any) => {
                 const formatted = formatExpense(raw);
                 if (isAdmin) {
                   return (

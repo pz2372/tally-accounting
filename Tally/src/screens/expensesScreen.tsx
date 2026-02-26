@@ -3,11 +3,15 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platfo
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import DatePickerModal, { DateRange } from '../components/DatePickerModal';
 import { getCategoryColor, CATEGORIES } from '../components/categories';
 import { getOrgCachedData } from '../services/cacheService';
+import { getAccessToken } from '../services/authService';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface Expense {
   id: string;
@@ -50,15 +54,18 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0, select
     try {
       setIsLoading(true);
 
-      // Determine org ID: use selected or fall back to first org
+      // Determine org ID and user role
       let orgId = selectedOrgId;
+      let userRole = 'EMPLOYEE'; // default to employee for privacy
+
+      const userStr = await AsyncStorage.getItem('@current_user');
+      if (!userStr) {
+        setIsLoading(false);
+        return;
+      }
+      const user = JSON.parse(userStr);
+
       if (!orgId) {
-        const userStr = await AsyncStorage.getItem('@current_user');
-        if (!userStr) {
-          setIsLoading(false);
-          return;
-        }
-        const user = JSON.parse(userStr);
         orgId = user.organizations?.[0]?.id;
       }
       if (!orgId) {
@@ -66,24 +73,61 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0, select
         return;
       }
 
+      // Get user's role for this org
+      const org = user.organizations?.find((o: any) => o.id === orgId);
+      if (org?.role) {
+        userRole = org.role;
+      }
+
       // Load org data from cache
       const orgData = await getOrgCachedData(orgId);
-      const { expenses, categories: orgCategories } = orgData || {};
+      const { expenses } = orgData || {};
 
-      // Combine preset categories from categories.ts with orgCategories from cache
-      const presetMapped = CATEGORIES.map((categoryName: string, index: number) => ({
-        id: `preset-${index}`,
-        preset: {
-          name: categoryName,
-        },
-      }));
-      
-      // Add org-specific categories from cache
-      const allCategories = [...presetMapped];
-      if (orgCategories && Array.isArray(orgCategories)) {
-        allCategories.push(...orgCategories);
+      // Fetch categories from API to respect visibility settings
+      let apiCategories: any[] = [];
+      try {
+        const accessToken = await getAccessToken();
+        if (accessToken) {
+          const response = await axios.get(`${API_URL}/api/categories`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              'x-org-id': orgId,
+            }
+          });
+          if (response.data.success && response.data.categories) {
+            // Map API response to category format
+            // For employees, only include visible categories; admins see all enabled categories
+            apiCategories = response.data.categories
+              .filter((cat: any) => {
+                const isEnabled = cat.isEnabled !== false;
+                const isVisible = cat.visibleToEmployees !== false;
+                return isEnabled && (userRole === 'ADMIN' || isVisible);
+              })
+              .map((cat: any) => ({
+                id: cat.key,
+                preset: {
+                  name: cat.name,
+                },
+                key: cat.key,
+              }));
+          }
+        }
+      } catch {
+        // Silently fall back to preset categories if API fails
       }
-      
+
+      // Use API categories if available, otherwise use preset categories
+      const allCategories = apiCategories.length > 0 ? apiCategories :
+        CATEGORIES.map((categoryName: string, index: number) => ({
+          id: `preset-${index}`,
+          preset: {
+            name: categoryName,
+          },
+        }));
+
+      // Get set of visible category keys for filtering expenses
+      const visibleCategoryKeys = new Set(allCategories.map((cat: any) => cat.key || cat.id));
+
       setCategories(allCategories);
 
       if (!expenses || !Array.isArray(expenses)) {
@@ -95,12 +139,11 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0, select
 
       // Filter out deleted expenses and map to UI format
       const validExpenses = expenses
-        .filter((exp: any) => !exp.deletedAt)
+        .filter((exp: any) => !exp.deletedAt && visibleCategoryKeys.has(exp.categoryKey))
         .map((exp: any) => {
           const expenseDate = new Date(exp.expenseDate);
-          const orgCat = orgCategories?.find((c: any) => c.id === exp.orgCategoryId);
-          const categoryName = exp.categoryNameSnapshot || orgCat?.preset?.name || 'Miscellaneous';
-          
+          const categoryName = exp.categoryNameSnapshot || 'Miscellaneous';
+
           return {
             id: exp.id,
             date: expenseDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),

@@ -12,6 +12,14 @@ export interface ExtractedReceiptData {
   category?: string;
   notes?: string;
   documentType?: 'receipt' | 'sales_report';
+  // Sales report specific fields
+  grossSales?: string;
+  netSales?: string;
+  cash?: string;
+  tips?: string;
+  tax?: string;
+  discounts?: string;
+  refunds?: string;
 }
 
 /**
@@ -60,18 +68,26 @@ export const extractReceiptData = async (req: Request, res: Response) => {
               text: `Please analyze this document and extract the following information in JSON format:
 {
   "documentType": "receipt or sales_report - determine from the document (receipt=business expense, sales_report=business income)",
-  "merchant": "business name or store name",
-  "amount": "total amount (numbers only, e.g., '45.99')",
+  "merchant": "business name or store name (for receipts only, leave empty for sales reports)",
+  "amount": "total amount (numbers only, e.g., '45.99') - for receipts only",
   "date": "date in YYYY-MM-DD format if visible, otherwise current date",
   "category": "best matching category based on merchant and items"${categoryText},
-  "notes": "brief description of what was purchased or sold, if visible"
+  "notes": "brief 1-line description only if relevant context exists (do NOT put financial figures here)",
+  "grossSales": "gross/total sales amount (numbers only, e.g., '1234.56')",
+  "netSales": "net sales amount after deductions (numbers only)",
+  "cash": "cash sales amount (numbers only)",
+  "tips": "tips/gratuity amount (numbers only)",
+  "tax": "tax collected amount (numbers only)",
+  "discounts": "total discounts amount (numbers only)",
+  "refunds": "total refunds amount (numbers only)"
 }
 
-For documentType:
-- Use "receipt" if this is a purchase receipt, invoice, or expense document
-- Use "sales_report" if this is a daily sales summary, revenue report, or income document
-
-If any field cannot be determined, use empty string for that field. Be concise.`,
+IMPORTANT RULES:
+1. First determine documentType: "receipt" for purchase receipts/invoices/expenses, "sales_report" for daily sales summaries/revenue reports/income documents.
+2. For sales reports: Put ALL financial figures into their specific fields (grossSales, netSales, cash, tips, tax, discounts, refunds). Do NOT put dollar amounts in the notes field. Leave merchant, amount, and category as empty string.
+3. For receipts: Fill merchant, amount, category, and notes. Leave all sales report fields (grossSales, netSales, cash, tips, tax, discounts, refunds) as empty string.
+4. All monetary values must be numbers only (no $ signs, no commas).
+5. If a field cannot be determined, use empty string.`,
             },
           ],
         },
@@ -115,6 +131,17 @@ If any field cannot be determined, use empty string for that field. Be concise.`
     // Validate documentType
     if (!extracted.documentType || !['receipt', 'sales_report'].includes(extracted.documentType)) {
       extracted.documentType = 'receipt';
+    }
+
+    // Clean up sales report numeric fields — Claude may return numbers or strings
+    const numericFields = ['grossSales', 'netSales', 'cash', 'tips', 'tax', 'discounts', 'refunds'] as const;
+    for (const field of numericFields) {
+      const raw = extracted[field];
+      if (raw !== undefined && raw !== null && raw !== '') {
+        extracted[field] = String(raw).replace(/[^\d.]/g, '');
+      } else {
+        extracted[field] = '';
+      }
     }
 
     res.json(extracted);

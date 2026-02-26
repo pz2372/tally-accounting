@@ -1,5 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -17,34 +18,25 @@ interface CategoriesScreenProps {
 
 interface Category {
   id: string;
+  key: string; // Category key (e.g., 'miscellaneous', 'labor')
   name: string;
   icon: string;
   color: string;
   isActive: boolean;
   visibleToEmployees: boolean;
-  presetId?: string; // Added to track preset category ID
 }
 
-// Map category keys to preset IDs (these would come from API in production)
-const CATEGORY_KEYS_TO_PRESET_ID: Record<string, string> = {
-  'miscellaneous': 'preset_misc',
-  'labor': 'preset_labor',
-  'inventory': 'preset_inventory',
-  'operations': 'preset_operations',
-  'tax': 'preset_tax',
-  'transportation': 'preset_transport',
-};
 
 export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesScreenProps) {
   const { t } = useContext(LanguageContext);
   
   const initialCategories: Category[] = [
-    { id: '1', name: t('categories.miscellaneous'), icon: 'apps-outline', color: '#6B7280', isActive: true, visibleToEmployees: true, presetId: 'preset_misc' },
-    { id: '2', name: t('categories.labor'), icon: 'people-outline', color: colors.purple, isActive: true, visibleToEmployees: true, presetId: 'preset_labor' },
-    { id: '3', name: t('categories.inventory'), icon: 'cube-outline', color: '#10B981', isActive: true, visibleToEmployees: true, presetId: 'preset_inventory' },
-    { id: '4', name: t('categories.operations'), icon: 'settings-outline', color: '#F59E0B', isActive: true, visibleToEmployees: true, presetId: 'preset_operations' },
-    { id: '5', name: t('categories.tax'), icon: 'calculator-outline', color: colors.red, isActive: true, visibleToEmployees: true, presetId: 'preset_tax' },
-    { id: '6', name: t('categories.transportation'), icon: 'car-outline', color: colors.blue, isActive: true, visibleToEmployees: true, presetId: 'preset_transport' },
+    { id: '1', key: 'miscellaneous', name: t('categories.miscellaneous'), icon: 'apps-outline', color: '#6B7280', isActive: true, visibleToEmployees: true },
+    { id: '2', key: 'labor', name: t('categories.labor'), icon: 'people-outline', color: colors.purple, isActive: true, visibleToEmployees: true },
+    { id: '3', key: 'inventory', name: t('categories.inventory'), icon: 'cube-outline', color: '#10B981', isActive: true, visibleToEmployees: true },
+    { id: '4', key: 'operations', name: t('categories.operations'), icon: 'settings-outline', color: '#F59E0B', isActive: true, visibleToEmployees: true },
+    { id: '5', key: 'tax', name: t('categories.tax'), icon: 'calculator-outline', color: colors.red, isActive: true, visibleToEmployees: true },
+    { id: '6', key: 'transportation', name: t('categories.transportation'), icon: 'car-outline', color: colors.blue, isActive: true, visibleToEmployees: true },
   ];
   
   const [categories, setCategories] = useState<Category[]>(initialCategories);
@@ -52,9 +44,76 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Load current category settings from cache first, then fetch from server
+  useEffect(() => {
+    const loadCategories = async () => {
+      // Step 1: Try to load from AsyncStorage cache first (instant)
+      if (selectedOrgId) {
+        try {
+          const cached = await AsyncStorage.getItem(`@org_categories_${selectedOrgId}`);
+          if (cached) {
+            const cachedCategories = JSON.parse(cached);
+            const mappedCategories: Category[] = cachedCategories.map((cat: any) => {
+              const initial = initialCategories.find(ic => ic.key === cat.key);
+              return {
+                id: initial?.id || cat.key,
+                key: cat.key,
+                name: cat.name,
+                icon: initial?.icon || 'apps-outline',
+                color: cat.color || initial?.color || '#6B7280',
+                isActive: cat.isEnabled !== false,
+                visibleToEmployees: cat.visibleToEmployees !== false,
+              };
+            });
+            setCategories(mappedCategories);
+            setOriginalCategories(mappedCategories);
+          }
+        } catch {
+          // Silently fail - cache might not exist
+        }
+      }
+
+      // Step 2: Fetch fresh data from server in parallel
+      try {
+        const accessToken = await getAccessToken();
+        if (!accessToken) return;
+
+        const response = await axios.get(`${API_URL}/api/categories`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(selectedOrgId ? { 'x-org-id': selectedOrgId } : {}),
+          }
+        });
+
+        if (response.data.success && response.data.categories) {
+          // Map server response to Category format
+          const serverCategories: Category[] = response.data.categories.map((cat: any) => {
+            // Find the matching initial category to get icon and color
+            const initial = initialCategories.find(ic => ic.key === cat.key);
+            return {
+              id: initial?.id || cat.key,
+              key: cat.key,
+              name: cat.name,
+              icon: initial?.icon || 'apps-outline',
+              color: cat.color || initial?.color || '#6B7280',
+              isActive: cat.isEnabled !== false,
+              visibleToEmployees: cat.visibleToEmployees !== false,
+            };
+          });
+          setCategories(serverCategories);
+          setOriginalCategories(serverCategories);
+        }
+      } catch {
+        // Silently fail - use cache or default categories
+      }
+    };
+
+    loadCategories();
+  }, [selectedOrgId]);
+
   // Check for changes whenever categories update
   useEffect(() => {
-    const changed = categories.some((cat, index) => 
+    const changed = categories.some((cat, index) =>
       cat.isActive !== originalCategories[index].isActive ||
       cat.visibleToEmployees !== originalCategories[index].visibleToEmployees
     );
@@ -85,7 +144,7 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
 
       // Prepare batch update payload
       const updates = categories.map(cat => ({
-        presetCategoryId: cat.presetId,
+        key: cat.key,
         isEnabled: cat.isActive,
         visibleToEmployees: cat.visibleToEmployees
       }));
@@ -103,8 +162,45 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
       );
 
       if (response.data.success) {
-        // Update original state to match current
-        setOriginalCategories([...categories]);
+        // Reload categories from server to ensure UI is in sync
+        const refreshResponse = await axios.get(`${API_URL}/api/categories`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(selectedOrgId ? { 'x-org-id': selectedOrgId } : {}),
+          }
+        });
+
+        if (refreshResponse.data.success && refreshResponse.data.categories) {
+          // Map server response to Category format
+          const serverCategories: Category[] = refreshResponse.data.categories.map((cat: any) => {
+            const initial = initialCategories.find(ic => ic.key === cat.key);
+            return {
+              id: initial?.id || cat.key,
+              key: cat.key,
+              name: cat.name,
+              icon: initial?.icon || 'apps-outline',
+              color: cat.color || initial?.color || '#6B7280',
+              isActive: cat.isEnabled !== false,
+              visibleToEmployees: cat.visibleToEmployees !== false,
+            };
+          });
+          setCategories(serverCategories);
+          setOriginalCategories(serverCategories);
+
+          // Update AsyncStorage cache to keep it in sync with server
+          if (selectedOrgId) {
+            await AsyncStorage.setItem(
+              `@org_categories_${selectedOrgId}`,
+              JSON.stringify(refreshResponse.data.categories)
+            ).catch(() => {
+              // Silently fail - non-critical cache update
+            });
+          }
+        } else {
+          // Fallback: just update original to current
+          setOriginalCategories([...categories]);
+        }
+
         setHasChanges(false);
         Alert.alert('Success', 'Categories updated successfully');
       } else {

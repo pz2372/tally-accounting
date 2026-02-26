@@ -19,10 +19,14 @@ export const createSalesReportWithReceipt: Handler = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Receipt image is required' });
     }
 
-    const { amountCents, businessDate, merchant, notes } = req.body;
+    const {
+      businessDate, merchant, notes,
+      grossSalesCents, netSalesCents, cashCents,
+      tipsCents, taxCents, discountsCents, refundsCents,
+    } = req.body;
 
-    if (!amountCents || !businessDate) {
-      return res.status(400).json({ success: false, error: 'Amount and business date are required' });
+    if (!businessDate) {
+      return res.status(400).json({ success: false, error: 'Business date is required' });
     }
 
     // Upload to S3 - use salereports bucket instead of receipts
@@ -32,6 +36,12 @@ export const createSalesReportWithReceipt: Handler = async (req, res) => {
       req.file.mimetype,
       `salereports/${orgId}`
     );
+
+    const toInt = (val: any): number | null => {
+      if (val === undefined || val === null || val === '') return null;
+      const parsed = Number.parseInt(String(val), 10);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
 
     // Create sales report record with the scanned image
     const report = await prisma.salesReport.create({
@@ -43,8 +53,13 @@ export const createSalesReportWithReceipt: Handler = async (req, res) => {
         fileUrl: s3Result.url,
         fileType: req.file.mimetype,
         fileHash: null,
-        netSalesCents: Number.parseInt(String(amountCents), 10),
-        grossSalesCents: Number.parseInt(String(amountCents), 10),
+        grossSalesCents: toInt(grossSalesCents),
+        netSalesCents: toInt(netSalesCents),
+        cashCents: toInt(cashCents),
+        tipsCents: toInt(tipsCents),
+        taxCents: toInt(taxCents),
+        discountsCents: toInt(discountsCents),
+        refundsCents: toInt(refundsCents),
         currency: 'USD',
         notes: notes || merchant || null,
         status: 'PENDING'

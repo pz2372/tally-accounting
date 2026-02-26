@@ -264,7 +264,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               resizeMode="contain"
             />
             <Text style={styles.footerText}>Version 1.0.0</Text>
-            <Text style={styles.footerText}>© 2026 StrataLumen Labs</Text>
+            <Text style={styles.footerText}>© 2026 StrataLumen</Text>
           </View>
         </ScrollView>
       </View>

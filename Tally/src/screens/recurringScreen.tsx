@@ -13,6 +13,16 @@ import { useSwipeBack } from '../hooks/useSwipeBack';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
+// Map category keys to display names
+const CATEGORY_KEY_TO_NAME: Record<string, string> = {
+  'miscellaneous': 'Miscellaneous',
+  'labor': 'Labor',
+  'inventory': 'Inventory',
+  'operations': 'Operations',
+  'tax': 'Tax',
+  'transportation': 'Transportation',
+};
+
 interface RecurringScreenProps {
   onBack: () => void;
   selectedOrgId?: string | null;
@@ -46,7 +56,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
 
   useEffect(() => {
     loadRecurringCharges();
-  }, []);
+  }, [selectedOrgId]);
 
   const loadRecurringCharges = async () => {
     let firstOrgId: string | undefined;
@@ -62,17 +72,16 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
       }
       if (!firstOrgId) { setIsLoading(false); return; }
 
-      // Try to load from cache first
+      // Try to load from cache first, but always fetch from server to ensure freshness
       const cachedCharges = await getCachedData(`${CACHE_KEYS.ORG_RECURRING_CHARGES}${firstOrgId}`);
-      
+
       if (cachedCharges && Array.isArray(cachedCharges) && cachedCharges.length > 0) {
         console.log('Loading recurring charges from cache');
         setCharges(cachedCharges);
-        setIsLoading(false);
-        return;
+        // Continue to fetch fresh data from server below
       }
 
-      // If not in cache, fetch from server
+      // Fetch from server to ensure fresh data
       console.log('Fetching recurring charges from server');
       
       const token = await getAccessToken();
@@ -99,7 +108,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
           const transformedCharges: RecurringCharge[] = response.data.charges.map((charge: any) => ({
             id: charge.id,
             vendor: charge.name,
-            category: charge.orgCategory?.customName || charge.orgCategory?.preset?.name || 'Operations',
+            category: charge.categoryKey ? CATEGORY_KEY_TO_NAME[charge.categoryKey] || 'Operations' : 'Operations',
             amount: charge.amountCents / 100,
             frequency: 'monthly', // Server only supports monthly currently
             nextBillingDate: charge.nextRunAt ? new Date(charge.nextRunAt).toLocaleDateString() : '',
@@ -138,7 +147,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
               const transformedCharges: RecurringCharge[] = retryResponse.data.charges.map((charge: any) => ({
                 id: charge.id,
                 vendor: charge.name,
-                category: charge.orgCategory?.customName || charge.orgCategory?.preset?.name || 'Operations',
+                category: charge.categoryKey ? CATEGORY_KEY_TO_NAME[charge.categoryKey] || 'Operations' : 'Operations',
                 amount: charge.amountCents / 100,
                 frequency: 'monthly',
                 nextBillingDate: charge.nextRunAt ? new Date(charge.nextRunAt).toLocaleDateString() : '',
@@ -322,12 +331,6 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
         return;
       }
 
-      // Get category information from cached data
-      const cachedCategories = await getCachedData(`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`);
-      const orgCategory = cachedCategories?.find((cat: any) => 
-        cat.customName === newCategory || cat.preset?.name === newCategory
-      );
-
       // Prepare request data
       const amountCents = Math.round(parseFloat(newAmount) * 100);
       const startDate = new Date();
@@ -341,7 +344,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
         merchant: newVendor.trim(),
         amountCents,
         currency: 'USD',
-        orgCategoryId: orgCategory?.id || null,
+        categoryName: newCategory,
         dayOfMonth,
         useLastDay: false,
         startDate: startDate.toISOString()
@@ -460,7 +463,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
                     <View style={styles.chargeContent}>
                       <Text style={styles.chargeVendor}>{charge.vendor}</Text>
                       <View style={styles.chargeTags}>
-                        <View style={[styles.categoryBadge, { backgroundColor: getFrequencyColor(charge.frequency) }]}>
+                        <View style={[styles.categoryBadge, { backgroundColor: getCategoryColor(charge.category) }]}>
                           <Text style={styles.categoryText}>
                             {CATEGORIES.includes(charge.category)
                               ? t('categories.' + charge.category.toLowerCase())

@@ -63,6 +63,15 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
   const [notes, setNotes] = useState('');
   const [documentType, setDocumentType] = useState<'receipt' | 'sales_report'>('receipt');
   const [showDocumentTypePicker, setShowDocumentTypePicker] = useState(false);
+  // Sales report fields
+  const [grossSales, setGrossSales] = useState('');
+  const [netSales, setNetSales] = useState('');
+  const [cash, setCash] = useState('');
+  const [tips, setTips] = useState('');
+  const [tax, setTax] = useState('');
+  const [discounts, setDiscounts] = useState('');
+  const [refunds, setRefunds] = useState('');
+
 
   useEffect(() => {
     extractData();
@@ -101,6 +110,14 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       if (extracted.date) setSelectedDate(extracted.date);
       if (extracted.notes) setNotes(extracted.notes);
       if (extracted.documentType) setDocumentType(extracted.documentType);
+      // Sales report fields
+      if (extracted.grossSales) setGrossSales(extracted.grossSales);
+      if (extracted.netSales) setNetSales(extracted.netSales);
+      if (extracted.cash) setCash(extracted.cash);
+      if (extracted.tips) setTips(extracted.tips);
+      if (extracted.tax) setTax(extracted.tax);
+      if (extracted.discounts) setDiscounts(extracted.discounts);
+      if (extracted.refunds) setRefunds(extracted.refunds);
     } catch (error) {
       // Alert is shown below
       Alert.alert(
@@ -113,21 +130,28 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
     }
   };
 
+  const toCents = (val: string): string => String(Math.round(parseFloat(val || '0') * 100));
+
   const handleSave = async () => {
-    // Validate required fields
-    if (!merchant.trim()) {
-      Alert.alert(t('common.validationError'), t('reviewScan.enterMerchant'));
-      return;
-    }
-
-    if (!amount.trim()) {
-      Alert.alert(t('common.validationError'), t('reviewScan.enterAmount'));
-      return;
-    }
-
-    if (!selectedCategory) {
-      Alert.alert(t('common.validationError'), t('reviewScan.selectCategory'));
-      return;
+    // Validate required fields based on document type
+    if (documentType === 'sales_report') {
+      if (!grossSales.trim() && !netSales.trim()) {
+        Alert.alert(t('common.validationError'), t('reviewScan.enterGrossOrNetSales'));
+        return;
+      }
+    } else {
+      if (!merchant.trim()) {
+        Alert.alert(t('common.validationError'), t('reviewScan.enterMerchant'));
+        return;
+      }
+      if (!amount.trim()) {
+        Alert.alert(t('common.validationError'), t('reviewScan.enterAmount'));
+        return;
+      }
+      if (!selectedCategory) {
+        Alert.alert(t('common.validationError'), t('reviewScan.selectCategory'));
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -154,7 +178,6 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       }
 
       // Prepare FormData
-      const amountCents = Math.round(parseFloat(amount) * 100);
       const paymentMethodApi = PAYMENT_METHOD_MAP[paymentMethod] || 'CREDIT_CARD';
 
       const formData = new FormData();
@@ -167,7 +190,6 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         type: fileType,
         name: filename,
       } as any);
-      formData.append('amountCents', String(amountCents));
 
       // Route to correct endpoint and add document-type-specific fields
       let endpoint: string;
@@ -176,11 +198,21 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         formData.append('businessDate', selectedDate.toISOString());
         if (merchant.trim()) formData.append('merchant', merchant.trim());
         if (notes.trim()) formData.append('notes', notes.trim());
+        // Append sales report fields as cents
+        if (grossSales.trim()) formData.append('grossSalesCents', toCents(grossSales));
+        if (netSales.trim()) formData.append('netSalesCents', toCents(netSales));
+        if (cash.trim()) formData.append('cashCents', toCents(cash));
+        if (tips.trim()) formData.append('tipsCents', toCents(tips));
+        if (tax.trim()) formData.append('taxCents', toCents(tax));
+        if (discounts.trim()) formData.append('discountsCents', toCents(discounts));
+        if (refunds.trim()) formData.append('refundsCents', toCents(refunds));
       } else {
+        const amountCents = Math.round(parseFloat(amount) * 100);
+        formData.append('amountCents', String(amountCents));
         endpoint = `${API_URL}/api/expenses/with-receipt`;
         formData.append('paymentMethod', paymentMethodApi);
         formData.append('expenseDate', selectedDate.toISOString());
-        formData.append('categoryName', selectedCategory);
+        formData.append('categoryName', selectedCategory!);
         if (merchant.trim()) formData.append('merchant', merchant.trim());
         if (notes.trim()) formData.append('notes', notes.trim());
       }
@@ -310,96 +342,23 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
           </View>
         ) : (
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Merchant Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Merchant</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter merchant name"
-                placeholderTextColor={colors.textSecondary}
-                value={merchant}
-                onChangeText={setMerchant}
-              />
-            </View>
-
-            {/* Amount Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Amount</Text>
-              <View style={styles.amountInputContainer}>
-                <Text style={styles.currencySymbol}>$</Text>
+            {/* Merchant Input — receipts only */}
+            {documentType === 'receipt' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>{t('reviewScan.merchant')}</Text>
                 <TextInput
-                  style={styles.amountInput}
-                  placeholder="0.00"
+                  style={styles.input}
+                  placeholder="Enter merchant name"
                   placeholderTextColor={colors.textSecondary}
-                  value={amount}
-                  onChangeText={setAmount}
-                  keyboardType="decimal-pad"
+                  value={merchant}
+                  onChangeText={setMerchant}
                 />
               </View>
-            </View>
+            )}
 
-            {/* Category Picker */}
-            <View style={[styles.inputGroup, showCategoryPicker && styles.inputGroupActive]}>
-              <Text style={styles.label}>Category</Text>
-              <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-              >
-                <View style={styles.pickerButtonContent}>
-                  {selectedCategory && (
-                    <View style={[
-                      styles.categoryColorDot,
-                      { backgroundColor: getCategoryColor(selectedCategory) }
-                    ]} />
-                  )}
-                  <Text style={[
-                    styles.pickerButtonText,
-                    !selectedCategory && styles.pickerPlaceholder
-                  ]}>
-                    {selectedCategory || t('newExpense.selectCategory')}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-
-              {showCategoryPicker && (
-                <Pressable
-                  style={styles.pickerDropdown}
-                  onPress={(e) => e.stopPropagation()}
-                >
-                  <ScrollView style={styles.pickerDropdownScroll} nestedScrollEnabled>
-                    {CATEGORIES.map((category) => (
-                      <TouchableOpacity
-                        key={category}
-                        style={[
-                          styles.pickerItem,
-                          selectedCategory === category && styles.pickerItemSelected
-                        ]}
-                        onPress={() => {
-                          setSelectedCategory(category);
-                          setShowCategoryPicker(false);
-                        }}
-                      >
-                        <View style={styles.pickerItemContent}>
-                          <View style={[styles.categoryDot, { backgroundColor: getCategoryColor(category) }]} />
-                          <Text style={[
-                            styles.pickerItemText,
-                            selectedCategory === category && styles.pickerItemTextSelected
-                          ]}>{category}</Text>
-                        </View>
-                        {selectedCategory === category && (
-                          <Ionicons name="checkmark" size={18} color={colors.primary} />
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </Pressable>
-              )}
-            </View>
-
-            {/* Document Type Picker */}
+            {/* Document Type Picker — shown early so user can switch */}
             <View style={[styles.inputGroup, showDocumentTypePicker && styles.inputGroupActive]}>
-              <Text style={styles.label}>Document Type</Text>
+              <Text style={styles.label}>{t('reviewScan.documentType')}</Text>
               <TouchableOpacity
                 style={styles.pickerButton}
                 onPress={() => setShowDocumentTypePicker(!showDocumentTypePicker)}
@@ -469,102 +428,294 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
               )}
             </View>
 
-            {/* Payment Method Picker */}
-            <View style={[styles.inputGroup, showPaymentPicker && styles.inputGroupActive]}>
-              <Text style={styles.label}>{t('newExpense.paymentMethod')}</Text>
-              <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowPaymentPicker(!showPaymentPicker)}
-              >
-                <View style={styles.pickerButtonContent}>
-                  <Ionicons 
-                    name={paymentMethod === 'Cash' ? 'cash-outline' : 'card-outline'} 
-                    size={20} 
-                    color={colors.textPrimary}
-                    style={{ marginRight: spacing.xs }}
-                  />
-                  <Text style={styles.pickerButtonText}>
-                    {t(`newExpense.${paymentMethod === 'Credit Card' ? 'creditCard' : paymentMethod === 'Debit Card' ? 'debitCard' : 'cash'}`)}
-                  </Text>
+            {/* Receipt-only fields */}
+            {documentType === 'receipt' && (
+              <>
+                {/* Amount Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.amount')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={amount}
+                      onChangeText={setAmount}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
                 </View>
-                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
 
-              {showPaymentPicker && (
-                <Pressable 
-                  style={styles.pickerDropdown}
-                  onPress={(e) => e.stopPropagation()}
-                >
+                {/* Category Picker */}
+                <View style={[styles.inputGroup, showCategoryPicker && styles.inputGroupActive]}>
+                  <Text style={styles.label}>{t('reviewScan.category')}</Text>
                   <TouchableOpacity
-                    style={[
-                      styles.pickerItem,
-                      paymentMethod === 'Credit Card' && styles.pickerItemSelected
-                    ]}
-                    onPress={() => {
-                      setPaymentMethod('Credit Card');
-                      setShowPaymentPicker(false);
-                    }}
+                    style={styles.pickerButton}
+                    onPress={() => setShowCategoryPicker(!showCategoryPicker)}
                   >
-                    <View style={styles.pickerItemContent}>
-                      <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                    <View style={styles.pickerButtonContent}>
+                      {selectedCategory && (
+                        <View style={[
+                          styles.categoryColorDot,
+                          { backgroundColor: getCategoryColor(selectedCategory) }
+                        ]} />
+                      )}
                       <Text style={[
-                        styles.pickerItemText,
-                        paymentMethod === 'Credit Card' && styles.pickerItemTextSelected
-                      ]}>{t('newExpense.creditCard')}</Text>
+                        styles.pickerButtonText,
+                        !selectedCategory && styles.pickerPlaceholder
+                      ]}>
+                        {selectedCategory || t('newExpense.selectCategory')}
+                      </Text>
                     </View>
-                    {paymentMethod === 'Credit Card' && (
-                      <Ionicons name="checkmark" size={18} color={colors.primary} />
-                    )}
+                    <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
+
+                  {showCategoryPicker && (
+                    <Pressable
+                      style={styles.pickerDropdown}
+                      onPress={(e) => e.stopPropagation()}
+                    >
+                      <ScrollView style={styles.pickerDropdownScroll} nestedScrollEnabled>
+                        {CATEGORIES.map((category) => (
+                          <TouchableOpacity
+                            key={category}
+                            style={[
+                              styles.pickerItem,
+                              selectedCategory === category && styles.pickerItemSelected
+                            ]}
+                            onPress={() => {
+                              setSelectedCategory(category);
+                              setShowCategoryPicker(false);
+                            }}
+                          >
+                            <View style={styles.pickerItemContent}>
+                              <View style={[styles.categoryDot, { backgroundColor: getCategoryColor(category) }]} />
+                              <Text style={[
+                                styles.pickerItemText,
+                                selectedCategory === category && styles.pickerItemTextSelected
+                              ]}>{category}</Text>
+                            </View>
+                            {selectedCategory === category && (
+                              <Ionicons name="checkmark" size={18} color={colors.primary} />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </Pressable>
+                  )}
+                </View>
+
+                {/* Payment Method Picker */}
+                <View style={[styles.inputGroup, showPaymentPicker && styles.inputGroupActive]}>
+                  <Text style={styles.label}>{t('newExpense.paymentMethod')}</Text>
                   <TouchableOpacity
-                    style={[
-                      styles.pickerItem,
-                      paymentMethod === 'Debit Card' && styles.pickerItemSelected
-                    ]}
-                    onPress={() => {
-                      setPaymentMethod('Debit Card');
-                      setShowPaymentPicker(false);
-                    }}
+                    style={styles.pickerButton}
+                    onPress={() => setShowPaymentPicker(!showPaymentPicker)}
                   >
-                    <View style={styles.pickerItemContent}>
-                      <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
-                      <Text style={[
-                        styles.pickerItemText,
-                        paymentMethod === 'Debit Card' && styles.pickerItemTextSelected
-                      ]}>{t('newExpense.debitCard')}</Text>
+                    <View style={styles.pickerButtonContent}>
+                      <Ionicons
+                        name={paymentMethod === 'Cash' ? 'cash-outline' : 'card-outline'}
+                        size={20}
+                        color={colors.textPrimary}
+                        style={{ marginRight: spacing.xs }}
+                      />
+                      <Text style={styles.pickerButtonText}>
+                        {t(`newExpense.${paymentMethod === 'Credit Card' ? 'creditCard' : paymentMethod === 'Debit Card' ? 'debitCard' : 'cash'}`)}
+                      </Text>
                     </View>
-                    {paymentMethod === 'Debit Card' && (
-                      <Ionicons name="checkmark" size={18} color={colors.primary} />
-                    )}
+                    <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.pickerItem,
-                      paymentMethod === 'Cash' && styles.pickerItemSelected
-                    ]}
-                    onPress={() => {
-                      setPaymentMethod('Cash');
-                      setShowPaymentPicker(false);
-                    }}
-                  >
-                    <View style={styles.pickerItemContent}>
-                      <Ionicons name="cash-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
-                      <Text style={[
-                        styles.pickerItemText,
-                        paymentMethod === 'Cash' && styles.pickerItemTextSelected
-                      ]}>{t('newExpense.cash')}</Text>
-                    </View>
-                    {paymentMethod === 'Cash' && (
-                      <Ionicons name="checkmark" size={18} color={colors.primary} />
-                    )}
-                  </TouchableOpacity>
-                </Pressable>
-              )}
-            </View>
+
+                  {showPaymentPicker && (
+                    <Pressable
+                      style={styles.pickerDropdown}
+                      onPress={(e) => e.stopPropagation()}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          styles.pickerItem,
+                          paymentMethod === 'Credit Card' && styles.pickerItemSelected
+                        ]}
+                        onPress={() => {
+                          setPaymentMethod('Credit Card');
+                          setShowPaymentPicker(false);
+                        }}
+                      >
+                        <View style={styles.pickerItemContent}>
+                          <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                          <Text style={[
+                            styles.pickerItemText,
+                            paymentMethod === 'Credit Card' && styles.pickerItemTextSelected
+                          ]}>{t('newExpense.creditCard')}</Text>
+                        </View>
+                        {paymentMethod === 'Credit Card' && (
+                          <Ionicons name="checkmark" size={18} color={colors.primary} />
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.pickerItem,
+                          paymentMethod === 'Debit Card' && styles.pickerItemSelected
+                        ]}
+                        onPress={() => {
+                          setPaymentMethod('Debit Card');
+                          setShowPaymentPicker(false);
+                        }}
+                      >
+                        <View style={styles.pickerItemContent}>
+                          <Ionicons name="card-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                          <Text style={[
+                            styles.pickerItemText,
+                            paymentMethod === 'Debit Card' && styles.pickerItemTextSelected
+                          ]}>{t('newExpense.debitCard')}</Text>
+                        </View>
+                        {paymentMethod === 'Debit Card' && (
+                          <Ionicons name="checkmark" size={18} color={colors.primary} />
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.pickerItem,
+                          paymentMethod === 'Cash' && styles.pickerItemSelected
+                        ]}
+                        onPress={() => {
+                          setPaymentMethod('Cash');
+                          setShowPaymentPicker(false);
+                        }}
+                      >
+                        <View style={styles.pickerItemContent}>
+                          <Ionicons name="cash-outline" size={20} color={colors.textPrimary} style={{ marginRight: spacing.xs }} />
+                          <Text style={[
+                            styles.pickerItemText,
+                            paymentMethod === 'Cash' && styles.pickerItemTextSelected
+                          ]}>{t('newExpense.cash')}</Text>
+                        </View>
+                        {paymentMethod === 'Cash' && (
+                          <Ionicons name="checkmark" size={18} color={colors.primary} />
+                        )}
+                      </TouchableOpacity>
+                    </Pressable>
+                  )}
+                </View>
+              </>
+            )}
+
+            {/* Sales Report fields */}
+            {documentType === 'sales_report' && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.grossSales')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={grossSales}
+                      onChangeText={setGrossSales}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.netSales')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={netSales}
+                      onChangeText={setNetSales}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.cash')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={cash}
+                      onChangeText={setCash}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.tips')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={tips}
+                      onChangeText={setTips}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.tax')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={tax}
+                      onChangeText={setTax}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.discounts')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={discounts}
+                      onChangeText={setDiscounts}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.refunds')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={refunds}
+                      onChangeText={setRefunds}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+              </>
+            )}
 
             {/* Date Picker */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Date</Text>
+              <Text style={styles.label}>
+                {documentType === 'sales_report' ? t('reviewScan.businessDate') : t('reviewScan.date')}
+              </Text>
               <TouchableOpacity
                 style={styles.pickerButton}
                 onPress={() => setShowDatePicker(true)}
@@ -576,7 +727,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
 
             {/* Notes Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Notes (Optional)</Text>
+              <Text style={styles.label}>{t('reviewScan.notes')}</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Add any additional notes"

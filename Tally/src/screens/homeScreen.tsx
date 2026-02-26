@@ -132,6 +132,10 @@ export default function HomeScreen({
     setShowBusinessDropdown(false);
     setIsLoadingOrgData(true);
 
+    // Reset all data immediately to prevent stale data from previous org
+    setMetrics(defaultMetrics);
+    setMissingReceiptExpenses([]);
+
     try {
       const api = await createAuthenticatedAxios();
 
@@ -195,20 +199,15 @@ export default function HomeScreen({
       try {
         let nextMetrics = defaultMetrics;
 
-        // Try to load from cache first
+        // Try to load from cache first (always org-specific)
         const raw = await AsyncStorage.getItem(HOME_METRICS_KEY);
-        if (raw) {
+        if (raw && selectedBusinessId) {
           const parsed = JSON.parse(raw);
 
-          if (selectedBusinessId && parsed?.byOrg?.[selectedBusinessId]) {
+          if (parsed?.byOrg?.[selectedBusinessId]) {
             nextMetrics = {
               ...defaultMetrics,
               ...parsed.byOrg[selectedBusinessId]
-            };
-          } else if (parsed && typeof parsed === 'object') {
-            nextMetrics = {
-              ...defaultMetrics,
-              ...parsed
             };
           }
         }

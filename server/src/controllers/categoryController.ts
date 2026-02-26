@@ -59,7 +59,27 @@ export const updateOrgCategories: Handler = async (req, res) => {
       return res.status(400).json({ success: false, error: 'categories array is required' });
     }
 
-    for (const cat of categories) {
+    // Map presetCategoryId to key for backwards compatibility
+    const normalizedCategories = categories.map(cat => {
+      let key = cat.key;
+
+      // Convert presetCategoryId to key if needed
+      if (!key && cat.presetCategoryId) {
+        const idToKeyMap: Record<string, string> = {
+          'preset_misc': 'miscellaneous',
+          'preset_labor': 'labor',
+          'preset_inventory': 'inventory',
+          'preset_operations': 'operations',
+          'preset_tax': 'tax',
+          'preset_transport': 'transportation',
+        };
+        key = idToKeyMap[cat.presetCategoryId];
+      }
+
+      return { ...cat, key };
+    });
+
+    for (const cat of normalizedCategories) {
       if (!isValidCategoryName(cat.key) && !PRESET_CATEGORIES.find(p => p.key === cat.key)) {
         return res.status(400).json({ success: false, error: `Unknown category key: ${cat.key}` });
       }

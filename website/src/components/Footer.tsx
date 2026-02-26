@@ -31,7 +31,7 @@ export default function Footer() {
         </div>
 
         <div className="footer-bottom">
-          <p>&copy; {new Date().getFullYear()} Tally. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} StrataLumen. All rights reserved.</p>
         </div>
       </div>
     </footer>

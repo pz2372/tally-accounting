@@ -11,6 +11,14 @@ export interface ExtractedReceiptData {
   category: string;
   notes: string;
   documentType: 'receipt' | 'sales_report';
+  // Sales report specific fields
+  grossSales: string;
+  netSales: string;
+  cash: string;
+  tips: string;
+  tax: string;
+  discounts: string;
+  refunds: string;
 }
 
 /**
@@ -75,6 +83,13 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
       category: data.category || '',
       notes: data.notes || '',
       documentType: (data.documentType === 'receipt' || data.documentType === 'sales_report') ? data.documentType : 'receipt',
+      grossSales: data.grossSales || '',
+      netSales: data.netSales || '',
+      cash: data.cash || '',
+      tips: data.tips || '',
+      tax: data.tax || '',
+      discounts: data.discounts || '',
+      refunds: data.refunds || '',
     };
   } catch (error: any) {
     console.error('Error extracting receipt data:', error?.message || error);
@@ -87,6 +102,13 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
       category: '',
       notes: '',
       documentType: 'receipt',
+      grossSales: '',
+      netSales: '',
+      cash: '',
+      tips: '',
+      tax: '',
+      discounts: '',
+      refunds: '',
     };
   }
 };
