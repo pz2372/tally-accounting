@@ -17,6 +17,7 @@ export default function LanguageScreen({ onBack }: LanguageScreenProps) {
     { code: 'en', name: 'English', flag: '🇺🇸' },
     { code: 'es', name: 'Español', flag: '🇪🇸' },
     { code: 'zh', name: '中文', flag: '🇨🇳' },
+    { code: 'id', name: 'Bahasa Indonesia', flag: '🇮🇩' },
   ];
 
   const handleLanguageSelect = (code: string) => {
