@@ -7,7 +7,7 @@ import { LanguageContext } from '../../contexts/LanguageContext';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
 import { getAccessToken } from '../../services/authService';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 interface RolesScreenProps {
   onBack: () => void;

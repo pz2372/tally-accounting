@@ -241,6 +241,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               </TouchableOpacity>
             )}
 
+            {/* Export Data hidden
             {hasOrganization && !isEmployee && (
               <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('export')}>
                 <View style={styles.settingLeft}>
@@ -252,6 +253,7 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
                 <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
+            */}
           </View>
 
           {/* Support Section */}

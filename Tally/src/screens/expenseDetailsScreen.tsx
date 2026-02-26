@@ -12,7 +12,7 @@ import { CACHE_KEYS } from '../services/cacheService';
 import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 interface ExpenseDetailsScreenProps {
     expense: {

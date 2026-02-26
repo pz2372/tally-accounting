@@ -15,7 +15,6 @@ export default function LandingScreen({ onFinish }: LandingScreenProps) {
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    console.log('LandingScreen mounted');
     // Start fade out after 3 seconds
     setTimeout(() => {
       Animated.timing(fadeAnim, {
@@ -24,7 +23,6 @@ export default function LandingScreen({ onFinish }: LandingScreenProps) {
         useNativeDriver: true,
       }).start(() => {
         // Navigate to next screen when fade completes
-        console.log('Fade complete - moving to login');
         onFinish();
       });
     }, 3000);

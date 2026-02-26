@@ -20,7 +20,7 @@ import { getOrgCachedData, CACHE_KEYS } from '../services/cacheService';
 import { getAccessToken } from '../services/authService';
 import { CATEGORIES, CATEGORY_CONFIG } from '../components/categories';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 interface ExpenseItem {
   id: string;
@@ -100,10 +100,8 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
     });
 
     if (expenses && Array.isArray(expenses)) {
-      console.log(`[CategoryScreen] Processing ${expenses.length} expenses for ${selectedMonth.getMonth()+1}/${selectedMonth.getFullYear()}`);
       expenses.forEach((expense: any) => {
         if (!expense.categoryKey || expense.deletedAt) {
-          console.log(`[CategoryScreen] Skipping expense ${expense.id}: no categoryKey=${expense.categoryKey} or deleted=${!!expense.deletedAt}`);
           return;
         }
 
@@ -115,7 +113,6 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
 
         const categoryData = categoryMap.get(expense.categoryKey);
         if (!categoryData) {
-          console.log(`[CategoryScreen] No category match for key: "${expense.categoryKey}", available keys: ${Array.from(categoryMap.keys()).join(', ')}`);
           return;
         }
 

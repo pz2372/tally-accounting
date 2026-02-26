@@ -54,7 +54,7 @@ export default function AlertDetailScreen({ alert, onBack, onResolve }: AlertDet
           setSelectedReceipt(result.assets[0].uri);
         }
       } catch (error) {
-        console.log('Camera cancelled or error:', error);
+        // Handle camera error silently
       }
     }, 300);
   };

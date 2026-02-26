@@ -11,7 +11,7 @@ import { CATEGORIES, getCategoryColor } from '../components/categories';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 import { getAccessToken } from '../services/authService';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 type PaymentMethod = 'Credit Card' | 'Debit Card' | 'Cash' | 'Check';
 

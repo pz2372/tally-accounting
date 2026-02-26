@@ -10,7 +10,7 @@ import { getCachedData, CACHE_KEYS } from '../services/cacheService';
 import { getAccessToken, refreshAccessToken } from '../services/authService';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 interface StatementsScreenProps {
   onBack: () => void;
@@ -104,7 +104,6 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
       
       const token = await getAccessToken();
       if (!token) {
-        console.log('No auth token available');
         setStatements([]);
         setIsLoading(false);
         return;
@@ -196,7 +195,6 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
       } catch (apiError: any) {
         // If 401, try refreshing token and retry once
         if (apiError.response?.status === 401) {
-          console.log('Token expired, refreshing and retrying...');
           const newToken = await refreshAccessToken();
           
           if (newToken) {

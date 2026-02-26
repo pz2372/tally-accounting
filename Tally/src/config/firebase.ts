@@ -29,7 +29,7 @@ const loadPersistedUser = async () => {
       currentUser = JSON.parse(raw);
     }
   } catch (error) {
-    console.warn('Failed to load persisted firebase user:', error);
+    // Failed to load persisted user
   }
 };
 loadPersistedUser();
@@ -42,15 +42,13 @@ const persistUser = async (user: User | null) => {
       await secureDelete(FIREBASE_USER_KEY);
     }
   } catch (error) {
-    console.warn('Failed to persist firebase user:', error);
+    // Failed to persist user
   }
 };
 
 // Sign in with email/password via REST API
 export const signInWithEmail = async (email: string, password: string) => {
   try {
-    console.log('Attempting Firebase REST sign in...');
-    
     const response = await fetch(
       `${AUTH_BASE_URL}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
       {
@@ -84,10 +82,8 @@ export const signInWithEmail = async (email: string, password: string) => {
     currentUser = user;
     await persistUser(user);
 
-    console.log('Firebase REST sign in successful!');
     return { user, error: null };
   } catch (error: any) {
-    console.error('Firebase signIn error:', error);
     return { user: null, error: error.message || 'Firebase authentication failed' };
   }
 };

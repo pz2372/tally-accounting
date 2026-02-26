@@ -11,7 +11,7 @@ import { getAccessToken, refreshAccessToken } from '../services/authService';
 import axios from 'axios';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 // Map category keys to display names
 const CATEGORY_KEY_TO_NAME: Record<string, string> = {
@@ -76,17 +76,13 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
       const cachedCharges = await getCachedData(`${CACHE_KEYS.ORG_RECURRING_CHARGES}${firstOrgId}`);
 
       if (cachedCharges && Array.isArray(cachedCharges) && cachedCharges.length > 0) {
-        console.log('Loading recurring charges from cache');
         setCharges(cachedCharges);
         // Continue to fetch fresh data from server below
       }
 
       // Fetch from server to ensure fresh data
-      console.log('Fetching recurring charges from server');
-      
       const token = await getAccessToken();
       if (!token) {
-        console.log('No auth token available');
         setCharges([]);
         setIsLoading(false);
         return;
@@ -129,7 +125,6 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
       } catch (apiError: any) {
         // If 401, try refreshing token and retry once
         if (apiError.response?.status === 401) {
-          console.log('Token expired, refreshing and retrying...');
           const newToken = await refreshAccessToken();
           
           if (newToken) {

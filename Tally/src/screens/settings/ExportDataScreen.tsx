@@ -53,8 +53,6 @@ export default function ExportDataScreen({ onBack, selectedOrgId }: ExportDataSc
         .filter(([, enabled]) => enabled)
         .map(([key]) => key);
 
-      console.log('Exporting data types:', selected);
-
       // Simulate export delay
       await new Promise(resolve => setTimeout(resolve, 1500));
 

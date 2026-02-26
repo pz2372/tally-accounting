@@ -59,7 +59,6 @@ export default function ScanScreen({ onCancel, onExpenseSaved, selectedOrgId, de
         onCancel();
       }
     } catch (error) {
-      console.log('Scanner cancelled or error:', error);
       onCancel();
     } finally {
       setIsScanning(false);

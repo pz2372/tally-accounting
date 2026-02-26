@@ -11,7 +11,7 @@ import { getCategoryColor, CATEGORIES } from '../components/categories';
 import { getOrgCachedData } from '../services/cacheService';
 import { getAccessToken } from '../services/authService';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 interface Expense {
   id: string;

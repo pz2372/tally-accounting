@@ -5,7 +5,7 @@ import { signInWithEmail as firebaseSignIn, signOut as firebaseSignOut, getIdTok
 import { cacheLoginData, clearCache } from './cacheService';
 
 // Update this with your server URL
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -202,7 +202,6 @@ export const logout = async () => {
     await clearCache();
     return { success: true, error: null };
   } catch (error: any) {
-    console.error('Logout error:', error);
     return { success: false, error: error.message };
   }
 };

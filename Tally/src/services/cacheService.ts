@@ -65,10 +65,8 @@ export const cacheLoginData = async (data: any) => {
     };
     await AsyncStorage.setItem(CACHE_KEYS.SYNC_METADATA, JSON.stringify(syncMetadata));
 
-    console.log('✅ Login data cached successfully');
     return true;
   } catch (error) {
-    console.error('❌ Error caching login data:', error);
     return false;
   }
 };
@@ -84,9 +82,8 @@ export const clearCache = async () => {
       key === CACHE_KEYS.SYNC_METADATA
     );
     await AsyncStorage.multiRemove(cacheKeys);
-    console.log('✅ Cache cleared successfully');
   } catch (error) {
-    console.error('❌ Error clearing cache:', error);
+    // Cache clear failed silently
   }
 };
 
@@ -96,7 +93,6 @@ export const getCachedData = async (key: string) => {
     const data = await AsyncStorage.getItem(key);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error(`Error getting cached data for key ${key}:`, error);
     return null;
   }
 };
@@ -120,7 +116,6 @@ export const getOrgCachedData = async (orgId: string) => {
       receiptMatches,
     };
   } catch (error) {
-    console.error(`Error getting org cached data for ${orgId}:`, error);
     return null;
   }
 };
@@ -137,7 +132,6 @@ export const isCacheStale = async (maxAgeHours: number = 24): Promise<boolean> =
 
     return hoursSinceSync > maxAgeHours;
   } catch (error) {
-    console.error('Error checking cache staleness:', error);
     return true;
   }
 };
