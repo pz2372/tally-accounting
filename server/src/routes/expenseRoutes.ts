@@ -12,6 +12,9 @@ router.use(requireOrg);
 // GET /api/expenses - Get all expenses with filters
 router.get('/', expenseController.getAllExpenses);
 
+// GET /api/expenses/:id/image - Get expense receipt image (proxy)
+router.get('/:id/image', expenseController.getExpenseImage);
+
 // GET /api/expenses/:id - Get expense by ID
 router.get('/:id', expenseController.getExpenseById);
 

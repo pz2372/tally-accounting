@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,11 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
-import { getOrgCachedData } from '../services/cacheService';
+import { getOrgCachedData, CACHE_KEYS } from '../services/cacheService';
+import { getAccessToken } from '../services/authService';
 import { CATEGORIES, CATEGORY_CONFIG } from '../components/categories';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface ExpenseItem {
   id: string;
@@ -62,17 +65,109 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
             selectedMonth.getMonth() >= now.getMonth());
   };
 
+  const isInitialLoad = useRef(true);
+
   useEffect(() => {
-    loadCategoryData();
+    loadCategoryData(isInitialLoad.current);
+    isInitialLoad.current = false;
   }, [selectedMonth, dataVersion, selectedOrgId]);
 
-  const loadCategoryData = async () => {
+  const buildCategoryView = (expenses: any[], orgOverrides: any[], userRole: string) => {
+    const categoryMap = new Map<string, CategoryData>();
+    let totalSpentAllCategories = 0;
+
+    CATEGORIES.forEach((name) => {
+      const config = CATEGORY_CONFIG[name];
+      if (!config) return;
+
+      const override = orgOverrides?.find((oc: any) => oc.categoryKey === config.key);
+      const isEnabled = !override || override.isEnabled !== false;
+      const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
+      const isVisibleToUser = isEnabled && (userRole === 'ADMIN' || isVisibleToEmployees);
+
+      if (isEnabled) {
+        if (!categoryMap.has(config.key)) {
+          categoryMap.set(config.key, {
+            name: config.name,
+            color: config.color,
+            amount: 0,
+            expenseCount: 0,
+            expenses: [],
+            isVisible: isVisibleToUser,
+          });
+        }
+      }
+    });
+
+    if (expenses && Array.isArray(expenses)) {
+      console.log(`[CategoryScreen] Processing ${expenses.length} expenses for ${selectedMonth.getMonth()+1}/${selectedMonth.getFullYear()}`);
+      expenses.forEach((expense: any) => {
+        if (!expense.categoryKey || expense.deletedAt) {
+          console.log(`[CategoryScreen] Skipping expense ${expense.id}: no categoryKey=${expense.categoryKey} or deleted=${!!expense.deletedAt}`);
+          return;
+        }
+
+        const expenseDate = new Date(expense.expenseDate);
+        if (expenseDate.getMonth() !== selectedMonth.getMonth() ||
+            expenseDate.getFullYear() !== selectedMonth.getFullYear()) {
+          return;
+        }
+
+        const categoryData = categoryMap.get(expense.categoryKey);
+        if (!categoryData) {
+          console.log(`[CategoryScreen] No category match for key: "${expense.categoryKey}", available keys: ${Array.from(categoryMap.keys()).join(', ')}`);
+          return;
+        }
+
+        const amountDollars = expense.amountCents / 100;
+
+        const override = orgOverrides?.find((oc: any) => oc.categoryKey === expense.categoryKey);
+        const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
+        const isVisibleToUser = userRole === 'ADMIN' || isVisibleToEmployees;
+
+        totalSpentAllCategories += amountDollars;
+
+        if (isVisibleToUser) {
+          categoryData.expenses.push({
+            id: expense.id,
+            date: expenseDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
+            day: expenseDate.getDate(),
+            vendor: expense.merchant || 'Unknown',
+            description: expense.notes || expense.categoryNameSnapshot || '',
+            amount: amountDollars,
+            paymentMethod: expense.paymentMethod,
+            categoryKey: expense.categoryKey,
+            notes: expense.notes,
+          });
+
+          categoryData.amount += amountDollars;
+          categoryData.expenseCount++;
+        }
+      });
+    }
+
+    const categoriesArray = Array.from(categoryMap.values())
+      .filter((cat) => cat.isVisible)
+      .sort((a, b) => b.amount - a.amount);
+
+    categoriesArray.forEach(cat => {
+      cat.expenses.sort((a, b) => {
+        const dateA = new Date(`${a.date} ${a.day}`);
+        const dateB = new Date(`${b.date} ${b.day}`);
+        return dateB.getTime() - dateA.getTime();
+      });
+    });
+
+    return { categoriesArray, totalSpentAllCategories };
+  };
+
+  const loadCategoryData = async (showSpinner = false) => {
     try {
-      setIsLoading(true);
+      if (showSpinner) setIsLoading(true);
 
       // Determine org ID and user role
       let orgId = selectedOrgId;
-      let userRole = 'EMPLOYEE'; // default to employee for privacy
+      let userRole = 'EMPLOYEE';
 
       const userStr = await AsyncStorage.getItem('@current_user');
       if (!userStr) return;
@@ -83,108 +178,43 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
       }
       if (!orgId) return;
 
-      // Get user's role for this org
       const org = user.organizations?.find((o: any) => o.id === orgId);
       if (org?.role) {
         userRole = org.role;
       }
 
-      // Load org data from cache (categories here = org overrides only)
+      // Show cached data immediately
       const orgData = await getOrgCachedData(orgId);
       const { categories: orgOverrides, expenses } = orgData || {};
 
-      // Build category data from constants, filtered by org overrides
-      const categoryMap = new Map<string, CategoryData>();
-      let totalSpentAllCategories = 0; // Track total from all categories (including hidden ones)
-
-      CATEGORIES.forEach((name) => {
-        const config = CATEGORY_CONFIG[name];
-        if (!config) return;
-
-        // Check if org has disabled this category
-        const override = orgOverrides?.find((oc: any) => oc.categoryKey === config.key);
-        const isEnabled = !override || override.isEnabled !== false;
-        const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
-
-        // Determine if this category is visible to the current user
-        const isVisibleToUser = isEnabled && (userRole === 'ADMIN' || isVisibleToEmployees);
-
-        // Create entries for all enabled categories (for total calculation)
-        if (isEnabled) {
-          if (!categoryMap.has(config.key)) {
-            categoryMap.set(config.key, {
-              name: config.name,
-              color: config.color,
-              amount: 0,
-              expenseCount: 0,
-              expenses: [],
-              isVisible: isVisibleToUser,
-            });
-          }
-        }
-      });
-
-      // Organize expenses by category (filtered by selected month)
-      if (expenses && Array.isArray(expenses)) {
-        expenses.forEach((expense: any) => {
-          if (!expense.categoryKey || expense.deletedAt) return;
-
-          // Filter by selected month
-          const expenseDate = new Date(expense.expenseDate);
-          if (expenseDate.getMonth() !== selectedMonth.getMonth() ||
-              expenseDate.getFullYear() !== selectedMonth.getFullYear()) {
-            return;
-          }
-
-          const categoryData = categoryMap.get(expense.categoryKey);
-          if (!categoryData) return;
-
-          const amountDollars = expense.amountCents / 100;
-
-          // Check if this category is visible to the user
-          const override = orgOverrides?.find((oc: any) => oc.categoryKey === expense.categoryKey);
-          const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
-          const isVisibleToUser = userRole === 'ADMIN' || isVisibleToEmployees;
-
-          // Always add to total (including hidden categories)
-          totalSpentAllCategories += amountDollars;
-
-          // Only add to displayed expenses if category is visible
-          if (isVisibleToUser) {
-            categoryData.expenses.push({
-              id: expense.id,
-              date: expenseDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
-              day: expenseDate.getDate(),
-              vendor: expense.merchant || 'Unknown',
-              description: expense.notes || expense.categoryNameSnapshot || '',
-              amount: amountDollars,
-              paymentMethod: expense.paymentMethod,
-              categoryKey: expense.categoryKey,
-              notes: expense.notes,
-            });
-
-            categoryData.amount += amountDollars;
-            categoryData.expenseCount++;
-          }
-        });
+      if (expenses && Array.isArray(expenses) && expenses.length > 0) {
+        const { categoriesArray, totalSpentAllCategories } = buildCategoryView(expenses, orgOverrides || [], userRole);
+        setCategories(categoriesArray);
+        setTotalSpent(totalSpentAllCategories);
+        setIsLoading(false);
       }
 
-      // Convert map to array, but only include visible categories
-      const categoriesArray = Array.from(categoryMap.values())
-        .filter((cat) => cat.isVisible)
-        .sort((a, b) => b.amount - a.amount);
+      // Fetch fresh expenses from server and update
+      try {
+        const token = await getAccessToken();
+        if (!token) return;
 
-      // Sort expenses within each category by date (most recent first)
-      categoriesArray.forEach(cat => {
-        cat.expenses.sort((a, b) => {
-          const dateA = new Date(`${a.date} ${a.day}`);
-          const dateB = new Date(`${b.date} ${b.day}`);
-          return dateB.getTime() - dateA.getTime();
+        const res = await fetch(`${API_URL}/api/expenses`, {
+          headers: { Authorization: `Bearer ${token}`, 'x-org-id': orgId },
         });
-      });
+        const data = await res.json();
 
-      setCategories(categoriesArray);
-      setTotalSpent(totalSpentAllCategories);
+        if (data.success && data.expenses) {
+          // Update cache
+          await AsyncStorage.setItem(`${CACHE_KEYS.ORG_EXPENSES}${orgId}`, JSON.stringify(data.expenses));
+
+          // Re-build view with fresh data
+          const freshOverrides = orgOverrides || [];
+          const { categoriesArray, totalSpentAllCategories } = buildCategoryView(data.expenses, freshOverrides, userRole);
+          setCategories(categoriesArray);
+          setTotalSpent(totalSpentAllCategories);
+        }
+      } catch { }
     } catch (error) {
       Alert.alert('Error', 'Failed to load category data. Please try again.');
     } finally {

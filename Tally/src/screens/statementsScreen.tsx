@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Dimensions, Modal, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -60,6 +60,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'statement' | 'sales'>('all');
   const [selectedStatement, setSelectedStatement] = useState<Statement | null>(null);
   const [selectedSalesReport, setSelectedSalesReport] = useState<Statement | null>(null);
+  const [showImageViewer, setShowImageViewer] = useState(false);
   const [statementTransactions, setStatementTransactions] = useState<StatementTransactionItem[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [transactionFilter, setTransactionFilter] = useState<'all' | 'unmatched'>('all');
@@ -564,9 +565,13 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Image */}
+            {/* Image thumbnail — tap to view fullscreen */}
             {selectedSalesReport.fileUrl && (
-              <View style={styles.salesImageContainer}>
+              <TouchableOpacity
+                style={styles.salesImageContainer}
+                activeOpacity={0.8}
+                onPress={() => setShowImageViewer(true)}
+              >
                 <Image
                   source={{
                     uri: selectedSalesReport.fileUrl,
@@ -575,7 +580,11 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
                   style={styles.salesImage}
                   resizeMode="contain"
                 />
-              </View>
+                <View style={styles.tapToZoomBadge}>
+                  <Ionicons name="expand-outline" size={14} color={colors.textSecondary} />
+                  <Text style={styles.tapToZoomText}>Tap to zoom</Text>
+                </View>
+              </TouchableOpacity>
             )}
 
             {/* Date */}
@@ -605,6 +614,45 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
             )}
           </ScrollView>
         </View>
+
+        {/* Fullscreen image viewer with pinch-to-zoom */}
+        {selectedSalesReport.fileUrl && (
+          <Modal
+            visible={showImageViewer}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowImageViewer(false)}
+          >
+            <View style={styles.imageViewerOverlay}>
+              <TouchableOpacity
+                style={styles.imageViewerClose}
+                onPress={() => setShowImageViewer(false)}
+              >
+                <Ionicons name="close" size={28} color="#fff" />
+              </TouchableOpacity>
+
+              <ScrollView
+                style={styles.imageViewerScroll}
+                contentContainerStyle={styles.imageViewerContent}
+                maximumZoomScale={5}
+                minimumZoomScale={1}
+                bouncesZoom
+                centerContent
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+              >
+                <Image
+                  source={{
+                    uri: selectedSalesReport.fileUrl,
+                    headers: (selectedSalesReport as any)._imageHeaders,
+                  }}
+                  style={styles.imageViewerImage}
+                  resizeMode="contain"
+                />
+              </ScrollView>
+            </View>
+          </Modal>
+        )}
       </SafeAreaView>
     );
   }
@@ -1128,5 +1176,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  tapToZoomBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing.sm,
+  },
+  tapToZoomText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  imageViewerClose: {
+    position: 'absolute',
+    top: 54,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerScroll: {
+    flex: 1,
+  },
+  imageViewerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height,
   },
 });

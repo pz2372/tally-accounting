@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
-import { uploadToS3 } from '../services/s3Service';
+import { uploadToS3, getS3Object, extractS3Key } from '../services/s3Service';
 import { PRESET_CATEGORIES, isValidCategoryName, getCategoryKey, getCategoryName } from '../config/categories';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
@@ -287,5 +287,45 @@ export const createExpenseWithReceipt: Handler = async (req, res) => {
   } catch (error) {
     console.error('createExpenseWithReceipt error:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// Get expense receipt image (proxy through server for private S3)
+export const getExpenseImage: Handler = async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    const { id } = req.params;
+
+    if (!orgId) {
+      return res.status(403).json({ success: false, error: 'Organization context required' });
+    }
+
+    const expense = await prisma.expense.findFirst({
+      where: { id, orgId },
+      select: { receiptUrl: true },
+    });
+
+    if (!expense || !expense.receiptUrl) {
+      return res.status(404).json({ success: false, error: 'Receipt image not found' });
+    }
+
+    const s3Key = extractS3Key(expense.receiptUrl);
+    if (!s3Key) {
+      return res.status(404).json({ success: false, error: 'Invalid file reference' });
+    }
+
+    const s3Response = await getS3Object(s3Key);
+
+    res.setHeader('Content-Type', s3Response.ContentType || 'image/jpeg');
+    if (s3Response.ContentLength) {
+      res.setHeader('Content-Length', s3Response.ContentLength);
+    }
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    const stream = s3Response.Body as NodeJS.ReadableStream;
+    stream.pipe(res);
+  } catch (error) {
+    console.error('getExpenseImage error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load image' });
   }
 };

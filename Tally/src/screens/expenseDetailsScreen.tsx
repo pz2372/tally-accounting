@@ -1,5 +1,5 @@
-import React, { useState, useContext, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useContext, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, TextInput, Pressable, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,10 +7,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { CATEGORIES, getCategoryColor as getColorFromCategories } from '../components/categories';
-import { createAuthenticatedAxios } from '../services/authService';
+import { createAuthenticatedAxios, getAccessToken } from '../services/authService';
 import { CACHE_KEYS } from '../services/cacheService';
 import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface ExpenseDetailsScreenProps {
     expense: {
@@ -64,6 +66,34 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
     const [showScanScreen, setShowScanScreen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
+    const [imageHeaders, setImageHeaders] = useState<Record<string, string>>({});
+    const [showImageViewer, setShowImageViewer] = useState(false);
+    const [imageLoading, setImageLoading] = useState(true);
+
+    useEffect(() => {
+        const loadReceiptImage = async () => {
+            try {
+                const orgId = await getOrgId();
+                if (!orgId) return;
+
+                const token = await getAccessToken();
+                if (!token) return;
+
+                // Check if expense has a receipt by fetching from server
+                const res = await fetch(`${API_URL}/api/expenses/${expense.id}`, {
+                    headers: { Authorization: `Bearer ${token}`, 'x-org-id': orgId },
+                });
+                const data = await res.json();
+
+                if (data.success && data.expense?.receiptUrl) {
+                    setReceiptImageUrl(`${API_URL}/api/expenses/${expense.id}/image`);
+                    setImageHeaders({ Authorization: `Bearer ${token}`, 'x-org-id': orgId });
+                }
+            } catch { }
+        };
+        loadReceiptImage();
+    }, [expense.id]);
 
     const hasChanges = editCategory !== savedValues.current.category ||
         editPaymentMethod !== savedValues.current.paymentMethod ||
@@ -298,25 +328,51 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                     </View>
 
                     {/* Receipt Section */}
-                    <View style={styles.receiptSection}>
-                        <Ionicons name="document-outline" size={64} color={colors.textTertiary} />
-                        <Text style={styles.receiptText}>{t('details.noReceipt')}</Text>
-                        <TouchableOpacity style={styles.uploadButton} onPress={() => {
-                            Alert.alert(
-                                t('details.uploadReceipt'),
-                                '',
-                                [
-                                    { text: t('newExpense.takePhoto'), onPress: handleTakePhoto },
-                                    { text: t('newExpense.chooseFromLibrary'), onPress: handleChooseFromLibrary },
-                                    { text: t('common.cancel'), style: 'cancel' },
-                                ],
-                                { cancelable: true }
-                            );
-                        }}>
-                            <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
-                            <Text style={styles.uploadButtonText}>{t('details.uploadReceipt')}</Text>
-                        </TouchableOpacity>
-                    </View>
+                    {receiptImageUrl ? (
+                        <View style={styles.receiptImageSection}>
+                            <TouchableOpacity
+                                activeOpacity={0.8}
+                                onPress={() => setShowImageViewer(true)}
+                            >
+                                {imageLoading && (
+                                    <View style={styles.imageLoadingOverlay}>
+                                        <ActivityIndicator size="small" color={colors.primary} />
+                                    </View>
+                                )}
+                                <Image
+                                    source={{ uri: receiptImageUrl, headers: imageHeaders }}
+                                    style={styles.receiptImage}
+                                    resizeMode="contain"
+                                    onLoadStart={() => setImageLoading(true)}
+                                    onLoadEnd={() => setImageLoading(false)}
+                                />
+                                <View style={styles.tapToZoomBadge}>
+                                    <Ionicons name="expand-outline" size={14} color={colors.surface} />
+                                    <Text style={styles.tapToZoomText}>{t('details.tapToZoom') || 'Tap to zoom'}</Text>
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={styles.receiptSection}>
+                            <Ionicons name="document-outline" size={64} color={colors.textTertiary} />
+                            <Text style={styles.receiptText}>{t('details.noReceipt')}</Text>
+                            <TouchableOpacity style={styles.uploadButton} onPress={() => {
+                                Alert.alert(
+                                    t('details.uploadReceipt'),
+                                    '',
+                                    [
+                                        { text: t('newExpense.takePhoto'), onPress: handleTakePhoto },
+                                        { text: t('newExpense.chooseFromLibrary'), onPress: handleChooseFromLibrary },
+                                        { text: t('common.cancel'), style: 'cancel' },
+                                    ],
+                                    { cancelable: true }
+                                );
+                            }}>
+                                <Ionicons name="cloud-upload-outline" size={20} color={colors.primary} />
+                                <Text style={styles.uploadButtonText}>{t('details.uploadReceipt')}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
 
                     {/* Action Buttons */}
                     <View style={styles.actionButtons}>
@@ -581,6 +637,40 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                                 <Text style={styles.saveButtonText}>{isSaving ? t('details.saving') : t('common.saveChanges')}</Text>
                             </TouchableOpacity>
                         </Pressable>
+                    </View>
+                </Modal>
+
+                {/* Fullscreen Image Viewer */}
+                <Modal
+                    visible={showImageViewer}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setShowImageViewer(false)}
+                >
+                    <View style={styles.imageViewerOverlay}>
+                        <TouchableOpacity
+                            style={styles.imageViewerClose}
+                            onPress={() => setShowImageViewer(false)}
+                        >
+                            <Ionicons name="close-circle" size={36} color="white" />
+                        </TouchableOpacity>
+                        <ScrollView
+                            style={styles.imageViewerScroll}
+                            contentContainerStyle={styles.imageViewerContent}
+                            maximumZoomScale={5}
+                            minimumZoomScale={1}
+                            showsVerticalScrollIndicator={false}
+                            showsHorizontalScrollIndicator={false}
+                            bouncesZoom={true}
+                        >
+                            {receiptImageUrl && (
+                                <Image
+                                    source={{ uri: receiptImageUrl, headers: imageHeaders }}
+                                    style={styles.fullscreenImage}
+                                    resizeMode="contain"
+                                />
+                            )}
+                        </ScrollView>
                     </View>
                 </Modal>
 
@@ -947,5 +1037,67 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: colors.surface,
+    },
+    receiptImageSection: {
+        marginTop: spacing.lg,
+        marginHorizontal: spacing.xxl,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.border,
+        overflow: 'hidden',
+        backgroundColor: colors.surface,
+    },
+    receiptImage: {
+        width: '100%',
+        height: 300,
+    },
+    imageLoadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1,
+    },
+    tapToZoomBadge: {
+        position: 'absolute',
+        bottom: spacing.md,
+        right: spacing.md,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 4,
+        borderRadius: borderRadius.sm,
+    },
+    tapToZoomText: {
+        fontSize: 11,
+        color: colors.surface,
+        fontWeight: '500',
+    },
+    imageViewerOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.95)',
+    },
+    imageViewerClose: {
+        position: 'absolute',
+        top: 60,
+        right: 20,
+        zIndex: 10,
+    },
+    imageViewerScroll: {
+        flex: 1,
+    },
+    imageViewerContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fullscreenImage: {
+        width: '100%',
+        height: '100%',
     },
 });
