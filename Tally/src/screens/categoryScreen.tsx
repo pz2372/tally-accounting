@@ -194,21 +194,20 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
         setIsLoading(false);
       }
 
-      // Fetch fresh expenses from server and update
+      // Fetch fresh expenses from server for the selected month only
       try {
         const token = await getAccessToken();
         if (!token) return;
 
-        const res = await fetch(`${API_URL}/api/expenses`, {
+        const startDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1).toISOString();
+        const endDate = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+
+        const res = await fetch(`${API_URL}/api/expenses?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`, {
           headers: { Authorization: `Bearer ${token}`, 'x-org-id': orgId },
         });
         const data = await res.json();
 
         if (data.success && data.expenses) {
-          // Update cache
-          await AsyncStorage.setItem(`${CACHE_KEYS.ORG_EXPENSES}${orgId}`, JSON.stringify(data.expenses));
-
-          // Re-build view with fresh data
           const freshOverrides = orgOverrides || [];
           const { categoriesArray, totalSpentAllCategories } = buildCategoryView(data.expenses, freshOverrides, userRole);
           setCategories(categoriesArray);

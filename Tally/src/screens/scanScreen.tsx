@@ -9,9 +9,10 @@ interface ScanScreenProps {
   onCancel: () => void;
   onExpenseSaved?: () => void;
   selectedOrgId?: string | null;
+  defaultDocumentType?: 'receipt' | 'sales_report';
 }
 
-export default function ScanScreen({ onCancel, onExpenseSaved, selectedOrgId }: ScanScreenProps) {
+export default function ScanScreen({ onCancel, onExpenseSaved, selectedOrgId, defaultDocumentType }: ScanScreenProps) {
   const [scannedImage, setScannedImage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [showReview, setShowReview] = useState(false);
@@ -78,6 +79,7 @@ export default function ScanScreen({ onCancel, onExpenseSaved, selectedOrgId }: 
           imageUri={scannedImage}
           onBack={handleReviewBack}
           selectedOrgId={selectedOrgId}
+          defaultDocumentType={defaultDocumentType}
           onSuccess={() => {
             setShowReview(false);
             setScannedImage(null);

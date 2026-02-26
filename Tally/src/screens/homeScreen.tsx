@@ -238,7 +238,7 @@ export default function HomeScreen({
 
             const missingReceiptsData: any[] = [];
             const missingReceiptCount = orgData.expenses.reduce((count: number, expense: any) => {
-              if (expense.deletedAt || expense.receiptNotNeeded) return count;
+              if (expense.deletedAt || expense.receiptNotNeeded || expense.receiptUrl) return count;
               const expenseDate = new Date(expense.expenseDate);
               if (expenseDate.getMonth() !== currentMonth || expenseDate.getFullYear() !== currentYear) {
                 return count;

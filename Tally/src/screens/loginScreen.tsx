@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { Image } from 'react-native';
-import { login } from '../services/authService';
+import { login, isBiometricAvailable, setBiometricEnabled, getBiometricType } from '../services/authService';
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -45,7 +45,31 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       if (error) {
         Alert.alert('Authentication Failed', error);
       } else if (success) {
-        onLogin(user);
+        // Check if device supports biometrics and offer to enable
+        const biometricAvailable = await isBiometricAvailable();
+        if (biometricAvailable) {
+          const biometricType = await getBiometricType();
+          Alert.alert(
+            `Enable ${biometricType}`,
+            `Would you like to use ${biometricType} to sign in next time?`,
+            [
+              {
+                text: 'Not Now',
+                style: 'cancel',
+                onPress: () => onLogin(user),
+              },
+              {
+                text: 'Enable',
+                onPress: async () => {
+                  await setBiometricEnabled(true);
+                  onLogin(user);
+                },
+              },
+            ]
+          );
+        } else {
+          onLogin(user);
+        }
       }
     } catch (error) {
       Alert.alert('Authentication Failed', 'An unexpected error occurred');

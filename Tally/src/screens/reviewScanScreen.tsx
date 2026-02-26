@@ -46,9 +46,10 @@ interface ReviewScanScreenProps {
   }) => void;
   selectedOrgId?: string | null;
   onSuccess?: () => void;
+  defaultDocumentType?: 'receipt' | 'sales_report';
 }
 
-export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _isSaving = false, selectedOrgId, onSuccess }: ReviewScanScreenProps) {
+export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _isSaving = false, selectedOrgId, onSuccess, defaultDocumentType }: ReviewScanScreenProps) {
   const { t } = useContext(LanguageContext);
   const [isExtracting, setIsExtracting] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,7 +62,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [notes, setNotes] = useState('');
-  const [documentType, setDocumentType] = useState<'receipt' | 'sales_report'>('receipt');
+  const [documentType, setDocumentType] = useState<'receipt' | 'sales_report'>(defaultDocumentType || 'receipt');
   const [showDocumentTypePicker, setShowDocumentTypePicker] = useState(false);
   // Sales report fields
   const [grossSales, setGrossSales] = useState('');

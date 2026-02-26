@@ -42,6 +42,12 @@
         {
           "cameraPermission": "Allow Tally to use the camera to scan receipts and sales reports"
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Tally to use Face ID to quickly sign you in."
+        }
       ]
     ],
     "extra": {

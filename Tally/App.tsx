@@ -14,7 +14,14 @@ import LoginScreen from './src/screens/loginScreen';
 import LandingScreen from './src/screens/landingScreen';
 import BottomNavigation from './src/components/BottomNavigation';
 import { LanguageProvider } from './src/contexts/LanguageContext';
-import { checkAuth, getStoredUser } from './src/services/authService';
+import {
+  checkAuth,
+  getStoredUser,
+  isBiometricEnabled,
+  isBiometricAvailable,
+  authenticateWithBiometric,
+  setBiometricEnabled,
+} from './src/services/authService';
 
 interface Expense {
   id: string;
@@ -31,6 +38,7 @@ interface Expense {
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(true);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'expenses' | 'capture' | 'category'>('home');
@@ -67,11 +75,41 @@ export default function App() {
   // Check for existing auth session on app start — validates against server
   useEffect(() => {
     const checkAuthStatus = async () => {
-      const { valid } = await checkAuth();
-      if (valid) {
-        setIsAuthenticated(true);
-        const storedUser = await getStoredUser();
-        setCurrentUser(storedUser);
+      try {
+        const { valid } = await checkAuth();
+
+        if (!valid) {
+          setIsCheckingAuth(false);
+          return;
+        }
+
+        const biometricOn = await isBiometricEnabled();
+
+        if (biometricOn) {
+          const deviceHasBiometric = await isBiometricAvailable();
+
+          if (deviceHasBiometric) {
+            const success = await authenticateWithBiometric();
+            if (success) {
+              const storedUser = await getStoredUser();
+              setCurrentUser(storedUser);
+              setIsAuthenticated(true);
+            }
+            // If biometric fails, fall through to login screen
+          } else {
+            // Device no longer has biometric — disable flag
+            await setBiometricEnabled(false);
+          }
+        } else {
+          // Biometric not enabled — restore session silently
+          const storedUser = await getStoredUser();
+          setCurrentUser(storedUser);
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+      } finally {
+        setIsCheckingAuth(false);
       }
     };
 
@@ -125,7 +163,9 @@ export default function App() {
     <LanguageProvider>
       <SafeAreaProvider>
         <View style={{ flex: 1 }}>
-        {!isAuthenticated ? (
+        {isCheckingAuth ? (
+          <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
+        ) : !isAuthenticated ? (
           <>
             <LoginScreen onLogin={handleLogin} />
             {showLanding && <LandingScreen onFinish={handleLandingFinish} />}

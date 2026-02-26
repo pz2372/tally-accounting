@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions, Switch } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +16,7 @@ import RolesScreen from './settings/RolesScreen';
 import PrivacyPolicyScreen from './settings/PrivacyPolicyScreen';
 import TermsConditionsScreen from './settings/TermsConditionsScreen';
 import { Image } from 'react-native';
-import { logout } from '../services/authService';
+import { logout, isBiometricAvailable, isBiometricEnabled, setBiometricEnabled, getBiometricType } from '../services/authService';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
 interface SettingsScreenProps {
@@ -40,7 +40,30 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
     ? currentUser?.organizations?.find(o => o.id === selectedOrgId)
     : currentUser?.organizations?.[0];
   const isEmployee = selectedOrg?.role === 'EMPLOYEE';
-  
+
+  const [biometricAvailable, setBiometricAvailableState] = useState(false);
+  const [biometricEnabled, setBiometricEnabledState] = useState(false);
+  const [biometricType, setBiometricType] = useState('Face ID');
+
+  useEffect(() => {
+    const loadBiometricState = async () => {
+      const available = await isBiometricAvailable();
+      setBiometricAvailableState(available);
+      if (available) {
+        const enabled = await isBiometricEnabled();
+        setBiometricEnabledState(enabled);
+        const type = await getBiometricType();
+        setBiometricType(type);
+      }
+    };
+    loadBiometricState();
+  }, []);
+
+  const handleBiometricToggle = async (value: boolean) => {
+    setBiometricEnabledState(value);
+    await setBiometricEnabled(value);
+  };
+
   const handleLogout = async () => {
     await logout();
     if (onLogout) {
@@ -171,6 +194,28 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
+
+            {biometricAvailable && (
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconContainer, { backgroundColor: '#E0F2FE' }]}>
+                    <Ionicons
+                      name={biometricType === 'Face ID' ? 'scan-outline' : 'finger-print-outline'}
+                      size={22}
+                      color="#0284C7"
+                    />
+                  </View>
+                  <Text style={styles.settingLabel}>{biometricType}</Text>
+                </View>
+                <Switch
+                  value={biometricEnabled}
+                  onValueChange={handleBiometricToggle}
+                  trackColor={{ false: '#E5E7EB', true: '#93C5FD' }}
+                  thumbColor={biometricEnabled ? '#3B82F6' : '#F9FAFB'}
+                  ios_backgroundColor="#E5E7EB"
+                />
+              </View>
+            )}
 
             {hasOrganization && !isEmployee && (
               <TouchableOpacity style={styles.settingItem} onPress={() => setActiveSubScreen('categories')}>

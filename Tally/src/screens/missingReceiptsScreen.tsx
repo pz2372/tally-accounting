@@ -159,14 +159,14 @@ function SwipeableExpenseCard({
 export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress, isAdmin, selectedOrgId, onDismiss }: MissingReceiptsScreenProps) {
   const { t } = useContext(LanguageContext);
   const swipeHandlers = useSwipeBack(onBack);
-  const [visibleCategoryKeys, setVisibleCategoryKeys] = useState<Set<string>>(new Set());
+  const [visibleCategoryKeys, setVisibleCategoryKeys] = useState<Set<string> | null>(null);
 
   // Load visible categories for employees
   useEffect(() => {
     const loadVisibleCategories = async () => {
       // Admins see all categories
       if (isAdmin) {
-        setVisibleCategoryKeys(new Set()); // Empty set means show all
+        setVisibleCategoryKeys(null); // null means show all
         return;
       }
 
@@ -203,7 +203,7 @@ export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress
         }
       } catch {
         // Silently fail - show all categories if API fails
-        setVisibleCategoryKeys(new Set());
+        setVisibleCategoryKeys(null);
       }
     };
 
@@ -228,7 +228,7 @@ export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress
   };
 
   // Filter expenses based on category visibility
-  const filteredExpenses = isAdmin || visibleCategoryKeys.size === 0
+  const filteredExpenses = isAdmin || visibleCategoryKeys === null
     ? expenses
     : expenses.filter((exp: any) => visibleCategoryKeys.has(exp.categoryKey));
 
@@ -246,7 +246,11 @@ export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {filteredExpenses.length === 0 ? (
+          {!isAdmin && visibleCategoryKeys === null ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : filteredExpenses.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="receipt-outline" size={48} color={colors.textSecondary} style={{ marginBottom: spacing.lg }} />
               <Text style={styles.emptyTitle}>No Missing Receipts</Text>

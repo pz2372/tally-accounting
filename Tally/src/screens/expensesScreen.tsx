@@ -232,20 +232,24 @@ export default function ExpensesScreen({ onExpensePress, dataVersion = 0, select
       return acc;
     }, {});
 
-    // Convert to ExpenseGroup array with formatted date labels
-    const groups: ExpenseGroup[] = Object.entries(grouped).map(([dateKey, expenses]: [string, any]) => {
-      const date = new Date(dateKey);
-      const dateLabel = date.toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      }).toUpperCase();
-      
-      return {
-        dateLabel,
-        expenses,
-      };
-    });
+    // Convert to ExpenseGroup array with formatted date labels, sorted most recent first
+    const groups: ExpenseGroup[] = Object.entries(grouped)
+      .map(([dateKey, expenses]: [string, any]) => {
+        const date = new Date(dateKey);
+        const dateLabel = date.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric'
+        }).toUpperCase();
+
+        return {
+          dateLabel,
+          expenses,
+          _sortDate: date,
+        };
+      })
+      .sort((a: any, b: any) => b._sortDate.getTime() - a._sortDate.getTime())
+      .map(({ _sortDate, ...group }: any) => group);
 
     setExpenseGroups(groups);
   };

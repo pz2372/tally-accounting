@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { secureGet, secureSet, secureDelete } from '../utils/secureStorage';
 import { signInWithEmail as firebaseSignIn, signOut as firebaseSignOut, getIdToken } from '../config/firebase';
 import { cacheLoginData, clearCache } from './cacheService';
@@ -9,6 +10,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_KEY = 'current_user';
+const BIOMETRIC_ENABLED_KEY = 'biometric_enabled';
 
 // Store tokens securely
 export const storeTokens = async (accessToken: string, refreshToken?: string) => {
@@ -84,6 +86,7 @@ export const clearTokens = async () => {
     await secureDelete(ACCESS_TOKEN_KEY);
     await secureDelete(REFRESH_TOKEN_KEY);
     await secureDelete(USER_KEY);
+    await secureDelete(BIOMETRIC_ENABLED_KEY);
   } catch (error) {
     // Silently fail on token clearing
   }
@@ -240,4 +243,65 @@ export const createAuthenticatedAxios = async () => {
       Authorization: `Bearer ${accessToken}`,
     },
   });
+};
+
+// ---- Biometric helpers ----
+
+export const isBiometricAvailable = async (): Promise<boolean> => {
+  try {
+    const compatible = await LocalAuthentication.hasHardwareAsync();
+    if (!compatible) return false;
+    return await LocalAuthentication.isEnrolledAsync();
+  } catch {
+    return false;
+  }
+};
+
+export const getBiometricType = async (): Promise<string> => {
+  try {
+    const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+    if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+      return 'Face ID';
+    }
+    if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+      return 'Touch ID';
+    }
+    return 'Biometrics';
+  } catch {
+    return 'Biometrics';
+  }
+};
+
+export const authenticateWithBiometric = async (): Promise<boolean> => {
+  try {
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Sign in to Tally',
+      cancelLabel: 'Use Password',
+      disableDeviceFallback: true,
+    });
+    return result.success;
+  } catch {
+    return false;
+  }
+};
+
+export const setBiometricEnabled = async (enabled: boolean): Promise<void> => {
+  try {
+    if (enabled) {
+      await secureSet(BIOMETRIC_ENABLED_KEY, 'true');
+    } else {
+      await secureDelete(BIOMETRIC_ENABLED_KEY);
+    }
+  } catch {
+    // Silently fail
+  }
+};
+
+export const isBiometricEnabled = async (): Promise<boolean> => {
+  try {
+    const value = await secureGet(BIOMETRIC_ENABLED_KEY);
+    return value === 'true';
+  } catch {
+    return false;
+  }
 };

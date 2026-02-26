@@ -8,7 +8,7 @@ import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { getAccessToken } from '../services/authService';
 import DatePickerModal from '../components/DatePickerModal';
-import ScanScreen from './scanScreen';
+// import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
@@ -18,18 +18,18 @@ interface UploadStatementScreenProps {
   selectedOrgId?: string | null;
 }
 
-type UploadType = 'dailySales' | 'monthlyStatement';
+// type UploadType = 'dailySales' | 'monthlyStatement';
 
 export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadStatementScreenProps) {
   const { t } = useContext(LanguageContext);
-  const [uploadType, setUploadType] = useState<UploadType>('dailySales');
+  // const [uploadType, setUploadType] = useState<UploadType>('monthlyStatement');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [statementName, setStatementName] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [showScanScreen, setShowScanScreen] = useState(false);
+  // const [showScanScreen, setShowScanScreen] = useState(false);
   const isPickingFileRef = useRef(false);
 
   const getOrgId = async (): Promise<string | null> => {
@@ -67,30 +67,12 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
     }
   };
 
-  const handleScanStatement = () => {
-    setShowScanScreen(true);
-  };
+  // const handleScanStatement = () => {
+  //   setShowScanScreen(true);
+  // };
 
   const handleStatementPress = () => {
-    Alert.alert(
-      t('uploadStatement.selectStatement'),
-      t('uploadStatement.chooseOption'),
-      [
-        {
-          text: t('uploadStatement.scanStatement'),
-          onPress: handleScanStatement,
-        },
-        {
-          text: t('uploadStatement.uploadFromFiles'),
-          onPress: handleFilePick,
-        },
-        {
-          text: t('common.cancel'),
-          style: 'cancel',
-        },
-      ],
-      { cancelable: true }
-    );
+    handleFilePick();
   };
 
   const handleSave = async () => {
@@ -99,7 +81,7 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
       return;
     }
 
-    if (uploadType === 'monthlyStatement' && !statementName.trim()) {
+    if (!statementName.trim()) {
       Alert.alert(t('common.validationError'), t('uploadStatement.pleaseEnterName'));
       return;
     }
@@ -126,36 +108,8 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         if (progress <= 80) setUploadProgress(progress);
       }, 150);
 
-      if (uploadType === 'dailySales') {
-        // Upload daily sales report with file
-        const formData = new FormData();
-        formData.append('file', {
-          uri: selectedFile.uri,
-          type: selectedFile.mimeType || 'application/octet-stream',
-          name: selectedFile.name,
-        } as any);
-        formData.append('businessDate', selectedDate.toISOString());
-        formData.append('source', 'POS_UPLOAD');
-
-        await fetch(`${API_URL}/api/sales-reports/with-receipt`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'x-org-id': orgId,
-          },
-          body: formData,
-        });
-
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-
-        setTimeout(() => {
-          setIsUploading(false);
-          Alert.alert(t('common.success'), t('uploadStatement.dailySalesSuccess'), [
-            { text: t('common.ok'), onPress: onBack }
-          ]);
-        }, 300);
-      } else {
+      // Daily sales handled via scan screen
+      {
         // Upload monthly bank statement with file
         const formData = new FormData();
         formData.append('file', {
@@ -201,6 +155,20 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
 
   const swipeHandlers = useSwipeBack(onBack);
 
+  // if (showScanScreen) {
+  //   return (
+  //     <ScanScreen
+  //       onCancel={() => setShowScanScreen(false)}
+  //       onExpenseSaved={() => {
+  //         setShowScanScreen(false);
+  //         onBack();
+  //       }}
+  //       selectedOrgId={selectedOrgId}
+  //       defaultDocumentType={uploadType === 'dailySales' ? 'sales_report' : undefined}
+  //     />
+  //   );
+  // }
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container} {...swipeHandlers}>
@@ -214,7 +182,7 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Upload Type Selector */}
+          {/* Upload Type Selector - daily sales handled via scan screen
           <View style={styles.inputGroup}>
             <Text style={styles.label}>{t('uploadStatement.uploadType')}</Text>
             <View style={styles.typeSelectorContainer}>
@@ -248,25 +216,24 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
               </TouchableOpacity>
             </View>
           </View>
+          */}
 
-          {/* Name Field (Monthly Statement only) */}
-          {uploadType === 'monthlyStatement' && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>{t('uploadStatement.statementName')}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={t('uploadStatement.enterStatementName')}
-                placeholderTextColor={colors.textSecondary}
-                value={statementName}
-                onChangeText={setStatementName}
-              />
-            </View>
-          )}
+          {/* Name Field */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>{t('uploadStatement.statementName')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('uploadStatement.enterStatementName')}
+              placeholderTextColor={colors.textSecondary}
+              value={statementName}
+              onChangeText={setStatementName}
+            />
+          </View>
 
           {/* Date Field */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              {uploadType === 'dailySales' ? t('uploadStatement.businessDate') : t('common.date')}
+              {t('common.date')}
             </Text>
             <TouchableOpacity
               style={styles.dateButton}
@@ -352,14 +319,6 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         onClose={() => setShowDatePicker(false)}
       />
 
-      {/* Scan Screen */}
-      {showScanScreen && (
-        <ScanScreen
-          onCancel={() => setShowScanScreen(false)}
-          onExpenseSaved={() => setShowScanScreen(false)}
-          selectedOrgId={selectedOrgId}
-        />
-      )}
     </SafeAreaView>
   );
 }
@@ -609,5 +568,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: colors.surface,
+  },
+  scanOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
   },
 });
