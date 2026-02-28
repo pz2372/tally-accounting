@@ -130,6 +130,19 @@
   color: var(--text);
 }
 
+.forgot-password-link {
+  font-size: 0.8rem;
+  color: var(--primary-light);
+  text-decoration: none;
+  text-align: right;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.forgot-password-link:hover {
+  text-decoration: underline;
+}
+
 .login-btn {
   margin-top: 8px;
   width: 100%;

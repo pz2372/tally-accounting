@@ -117,7 +117,13 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
         SubScreenComponent = <RolesScreen onBack={handleSubScreenBack} currentUser={currentUser} selectedOrgId={selectedOrgId} />;
         break;
       case 'contact':
-        SubScreenComponent = <ContactSupportScreen onBack={handleSubScreenBack} />;
+        SubScreenComponent = (
+          <ContactSupportScreen
+            onBack={handleSubScreenBack}
+            onLogout={onLogout}
+            currentUser={currentUser}
+          />
+        );
         break;
       case 'privacy':
         SubScreenComponent = <PrivacyPolicyScreen onBack={handleSubScreenBack} />;

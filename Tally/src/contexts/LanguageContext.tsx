@@ -39,7 +39,9 @@ const translations: Record<string, Record<string, string>> = {
     'common.ok': 'OK',
     'common.validationError': 'Validation Error',
     'common.error': 'Error',
-    
+    'common.continue': 'Continue',
+    'common.password': 'Password',
+
     // Months
     'month.january': 'January',
     'month.february': 'February',
@@ -395,7 +397,22 @@ const translations: Record<string, Record<string, string>> = {
     'contactSupport.fillAllFields': 'Please fill in all fields',
     'contactSupport.messageSent': 'Message Sent',
     'contactSupport.responseTime': 'Our support team will get back to you within 24 hours',
-    
+    'contactSupport.faq': 'Frequently Asked Questions',
+    'contactSupport.faq1': 'How do I add a team member?',
+    'contactSupport.faq1Answer': 'Go to Settings > Roles & Permissions and tap the + button.',
+    'contactSupport.faq2': 'How do I scan a receipt?',
+    'contactSupport.faq2Answer': 'Tap the camera icon on the home screen and point it at your receipt.',
+    'contactSupport.faq3': 'How do I edit an expense?',
+    'contactSupport.faq3Answer': 'Tap any expense in the list to open its details and make changes.',
+    'contactSupport.faq4': 'How do I change the app language?',
+    'contactSupport.faq4Answer': 'Go to Settings > Language and select your preferred language.',
+    'contactSupport.faq5': 'I forgot my password, what do I do?',
+    'contactSupport.faq5Answer': 'Tap \'Forgot Password\' on the login screen to reset via email.',
+    'contactSupport.deleteAccount': 'Delete Account',
+    'contactSupport.deleteWarning': 'This will permanently deactivate your account and you will be logged out. This action cannot be undone.',
+    'contactSupport.confirmPassword': 'Confirm Password',
+    'contactSupport.enterPassword': 'Enter your password',
+
     // Rate App Screen
     'rateApp.title': 'Rate Our App',
     'rateApp.enjoying': 'Enjoying Tally?',
@@ -459,7 +476,9 @@ const translations: Record<string, Record<string, string>> = {
     'common.ok': 'OK',
     'common.validationError': 'Error de Validación',
     'common.error': 'Error',
-    
+    'common.continue': 'Continuar',
+    'common.password': 'Contraseña',
+
     // Months
     'month.january': 'Enero',
     'month.february': 'Febrero',
@@ -781,6 +800,49 @@ const translations: Record<string, Record<string, string>> = {
     'roles.emailPlaceholder': 'empleado@empresa.com',
     'roles.addMemberButton': 'Añadir miembro',
     'roles.save': 'Guardar',
+
+    // Business Details Screen
+    'businessDetails.title': 'Detalles de Negocio',
+    'businessDetails.businessName': 'Nombre del Negocio',
+    'businessDetails.taxId': 'NIF / CIF',
+    'businessDetails.address': 'Dirección del Negocio',
+    'businessDetails.industry': 'Industria',
+    'businessDetails.enterBusinessName': 'Ingrese nombre del negocio',
+    'businessDetails.enterTaxId': 'Ingrese NIF',
+    'businessDetails.enterAddress': 'Ingrese dirección del negocio',
+    'businessDetails.enterIndustry': 'Ingrese industria',
+    'businessDetails.saveChanges': 'Guardar Cambios',
+
+    // Contact Support Screen
+    'contactSupport.title': 'Contactar Soporte',
+    'contactSupport.email': 'Correo Electrónico',
+    'contactSupport.liveChat': 'Chat en Vivo',
+    'contactSupport.available': 'Disponible 9am-5pm EST',
+    'contactSupport.sendMessage': 'Envíanos un mensaje',
+    'contactSupport.subject': 'Asunto',
+    'contactSupport.message': 'Mensaje',
+    'contactSupport.subjectPlaceholder': '¿En qué podemos ayudarte?',
+    'contactSupport.messagePlaceholder': 'Describe tu problema o pregunta...',
+    'contactSupport.submit': 'Enviar Mensaje',
+    'contactSupport.missingInfo': 'Información Faltante',
+    'contactSupport.fillAllFields': 'Por favor completa todos los campos',
+    'contactSupport.messageSent': 'Mensaje Enviado',
+    'contactSupport.responseTime': 'Nuestro equipo de soporte te responderá dentro de 24 horas',
+    'contactSupport.faq': 'Preguntas Frecuentes',
+    'contactSupport.faq1': '¿Cómo agrego un miembro del equipo?',
+    'contactSupport.faq1Answer': 'Ve a Configuración > Roles y Permisos y toca el botón +.',
+    'contactSupport.faq2': '¿Cómo escaneo un recibo?',
+    'contactSupport.faq2Answer': 'Toca el ícono de cámara en la pantalla principal y apunta al recibo.',
+    'contactSupport.faq3': '¿Cómo edito un gasto?',
+    'contactSupport.faq3Answer': 'Toca cualquier gasto en la lista para abrir sus detalles y hacer cambios.',
+    'contactSupport.faq4': '¿Cómo cambio el idioma de la aplicación?',
+    'contactSupport.faq4Answer': 'Ve a Configuración > Idioma y selecciona tu idioma preferido.',
+    'contactSupport.faq5': 'Olvidé mi contraseña, ¿qué hago?',
+    'contactSupport.faq5Answer': 'Toca "Olvidé mi Contraseña" en la pantalla de inicio de sesión para restablecerla por correo.',
+    'contactSupport.deleteAccount': 'Eliminar Cuenta',
+    'contactSupport.deleteWarning': 'Esto desactivará permanentemente tu cuenta y se cerrará tu sesión. Esta acción no se puede deshacer.',
+    'contactSupport.confirmPassword': 'Confirmar Contraseña',
+    'contactSupport.enterPassword': 'Ingresa tu contraseña',
   },
   zh: {
     // Navigation
@@ -804,7 +866,9 @@ const translations: Record<string, Record<string, string>> = {
     'common.ok': '确定',
     'common.validationError': '验证错误',
     'common.error': '错误',
-    
+    'common.continue': '继续',
+    'common.password': '密码',
+
     // Months
     'month.january': '一月',
     'month.february': '二月',
@@ -1151,7 +1215,22 @@ const translations: Record<string, Record<string, string>> = {
     'contactSupport.fillAllFields': '请填写所有字段',
     'contactSupport.messageSent': '消息已发送',
     'contactSupport.responseTime': '我们的支持团队将在24小时内回复您',
-    
+    'contactSupport.faq': '常见问题',
+    'contactSupport.faq1': '如何添加团队成员？',
+    'contactSupport.faq1Answer': '前往设置 > 角色与权限，然后点击 + 按钮。',
+    'contactSupport.faq2': '如何扫描收据？',
+    'contactSupport.faq2Answer': '点击主屏幕上的相机图标，将其对准收据。',
+    'contactSupport.faq3': '如何编辑支出？',
+    'contactSupport.faq3Answer': '点击列表中的任何支出，打开其详情并进行更改。',
+    'contactSupport.faq4': '如何更改应用语言？',
+    'contactSupport.faq4Answer': '前往设置 > 语言，选择您偏好的语言。',
+    'contactSupport.faq5': '忘记密码怎么办？',
+    'contactSupport.faq5Answer': '在登录页面点击"忘记密码"，通过邮件重置。',
+    'contactSupport.deleteAccount': '删除账户',
+    'contactSupport.deleteWarning': '这将永久停用您的账户并退出登录。此操作无法撤销。',
+    'contactSupport.confirmPassword': '确认密码',
+    'contactSupport.enterPassword': '输入您的密码',
+
     // Rate App Screen
     'rateApp.title': '评价我们的应用',
     'rateApp.enjoying': '喜欢 Tally 吗？',
@@ -1215,6 +1294,8 @@ const translations: Record<string, Record<string, string>> = {
     'common.ok': 'OK',
     'common.validationError': 'Kesalahan Validasi',
     'common.error': 'Kesalahan',
+    'common.continue': 'Lanjutkan',
+    'common.password': 'Kata Sandi',
 
     // Months
     'month.january': 'Januari',
@@ -1571,6 +1652,21 @@ const translations: Record<string, Record<string, string>> = {
     'contactSupport.fillAllFields': 'Silakan isi semua kolom',
     'contactSupport.messageSent': 'Pesan Terkirim',
     'contactSupport.responseTime': 'Tim dukungan kami akan membalas dalam 24 jam',
+    'contactSupport.faq': 'Pertanyaan yang Sering Diajukan',
+    'contactSupport.faq1': 'Bagaimana cara menambahkan anggota tim?',
+    'contactSupport.faq1Answer': 'Buka Pengaturan > Peran & Izin dan ketuk tombol +.',
+    'contactSupport.faq2': 'Bagaimana cara memindai struk?',
+    'contactSupport.faq2Answer': 'Ketuk ikon kamera di layar utama dan arahkan ke struk Anda.',
+    'contactSupport.faq3': 'Bagaimana cara mengedit pengeluaran?',
+    'contactSupport.faq3Answer': 'Ketuk pengeluaran mana pun dalam daftar untuk membuka detail dan melakukan perubahan.',
+    'contactSupport.faq4': 'Bagaimana cara mengubah bahasa aplikasi?',
+    'contactSupport.faq4Answer': 'Buka Pengaturan > Bahasa dan pilih bahasa yang Anda inginkan.',
+    'contactSupport.faq5': 'Saya lupa kata sandi, apa yang harus dilakukan?',
+    'contactSupport.faq5Answer': 'Ketuk "Lupa Kata Sandi" di layar masuk untuk mengatur ulang melalui email.',
+    'contactSupport.deleteAccount': 'Hapus Akun',
+    'contactSupport.deleteWarning': 'Ini akan menonaktifkan akun Anda secara permanen dan Anda akan keluar. Tindakan ini tidak dapat dibatalkan.',
+    'contactSupport.confirmPassword': 'Konfirmasi Kata Sandi',
+    'contactSupport.enterPassword': 'Masukkan kata sandi Anda',
 
     // Rate App Screen
     'rateApp.title': 'Beri Nilai Aplikasi Kami',

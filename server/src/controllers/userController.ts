@@ -126,6 +126,45 @@ export const verifyEmail: Handler = async (req, res) => {
   }
 };
 
+// Deactivate account
+export const deactivateAccount: Handler = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get user to find Firebase UID
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    // Soft delete in database
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isActive: false },
+    });
+
+    // Delete from Firebase Auth
+    if (user.firebaseUid) {
+      try {
+        await getAuth().deleteUser(user.firebaseUid);
+      } catch (firebaseError) {
+        console.error('Firebase delete error:', firebaseError);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Account deactivated successfully'
+    });
+  } catch (error) {
+    console.error('deactivateAccount error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+};
+
 // Admin only - Get all users
 export const getAllUsers: Handler = async (req, res) => {
   try {

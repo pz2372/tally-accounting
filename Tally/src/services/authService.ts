@@ -1,5 +1,10 @@
 import axios from 'axios';
-import * as LocalAuthentication from 'expo-local-authentication';
+let LocalAuthentication: typeof import('expo-local-authentication') | null = null;
+try {
+  LocalAuthentication = require('expo-local-authentication');
+} catch (e) {
+  // expo-local-authentication not available (e.g. Expo Go)
+}
 import { secureGet, secureSet, secureDelete } from '../utils/secureStorage';
 import { signInWithEmail as firebaseSignIn, signOut as firebaseSignOut, getIdToken } from '../config/firebase';
 import { cacheLoginData, clearCache } from './cacheService';
@@ -248,6 +253,7 @@ export const createAuthenticatedAxios = async () => {
 
 export const isBiometricAvailable = async (): Promise<boolean> => {
   try {
+    if (!LocalAuthentication) return false;
     const compatible = await LocalAuthentication.hasHardwareAsync();
     if (!compatible) return false;
     return await LocalAuthentication.isEnrolledAsync();
@@ -258,6 +264,7 @@ export const isBiometricAvailable = async (): Promise<boolean> => {
 
 export const getBiometricType = async (): Promise<string> => {
   try {
+    if (!LocalAuthentication) return 'Biometrics';
     const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
     if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
       return 'Face ID';
@@ -273,6 +280,7 @@ export const getBiometricType = async (): Promise<string> => {
 
 export const authenticateWithBiometric = async (): Promise<boolean> => {
   try {
+    if (!LocalAuthentication) return false;
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: 'Sign in to Tally',
       cancelLabel: 'Use Password',

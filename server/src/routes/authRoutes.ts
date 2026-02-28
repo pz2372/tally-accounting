@@ -33,6 +33,9 @@ router.post('/verify-code', verificationController.verifyCode);
 // PUT /api/auth/profile - Update user profile
 router.put('/profile', userController.updateProfile);
 
+// DELETE /api/auth/account - Deactivate account
+router.delete('/account', userController.deactivateAccount);
+
 // POST /api/auth/verify-email - Verify email
 router.post('/verify-email', userController.verifyEmail);
 

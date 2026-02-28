@@ -173,6 +173,13 @@ export const firebaseLogin: Handler = async (req, res) => {
       }
     });
     
+    if (user && !user.isActive) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid login credentials'
+      });
+    }
+
     if (!user) {
       // Create new user
       user = await prisma.user.create({

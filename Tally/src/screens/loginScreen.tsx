@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -166,7 +167,12 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             <View style={styles.footer}>
               <Text style={styles.footerText}>
                 Don't have an account?{' '}
-                <Text style={styles.footerLink}>Register</Text>
+                <Text
+                  style={styles.footerLink}
+                  onPress={() => Linking.openURL('https://tally-accounting.netlify.app/register')}
+                >
+                  Register
+                </Text>
               </Text>
             </View>
           </View>
