@@ -370,7 +370,7 @@ export const registerCheckout: PublicHandler = async (req, res) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
-      payment_method_types: ['card'],
+      payment_method_collection: 'if_required',
       line_items: [
         { price: process.env.STRIPE_PRICE_ID!, quantity: 1 },
       ],
