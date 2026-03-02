@@ -396,6 +396,7 @@ export const registerCheckout: PublicHandler = async (req, res) => {
         name: name?.trim() || '',
         orgName: orgName.trim(),
       },
+      allow_promotion_codes: true,
       success_url: `${frontendUrl}/register?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontendUrl}/register?checkout_canceled=true`,
     });

@@ -108,6 +108,7 @@ export const createCheckoutSession: Handler = async (req, res) => {
         orgDba: dba?.trim() || '',
         orgEin: ein?.trim() || '',
       },
+      allow_promotion_codes: true,
       success_url: `${frontendUrl}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${frontendUrl}/dashboard?checkout_canceled=true`,
     });
