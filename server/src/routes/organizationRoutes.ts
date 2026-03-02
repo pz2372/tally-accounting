@@ -4,8 +4,9 @@ import { requireOrg, verifyToken } from '../middleware/auth';
 
 const router = Router();
 
-// Create organization (no org context needed)
-router.post('/', verifyToken, organizationController.createOrganization);
+// Stripe Checkout flow (no org context needed)
+router.post('/checkout', verifyToken, organizationController.createCheckoutSession);
+router.post('/complete-checkout', verifyToken, organizationController.completeCheckout);
 
 // All other routes require organization context
 router.get('/', verifyToken, requireOrg, organizationController.getOrganization);

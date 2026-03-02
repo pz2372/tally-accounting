@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Link2,
   Plus,
@@ -8,19 +8,36 @@ import {
   Landmark,
   ShieldCheck,
   X,
+  Mail,
 } from 'lucide-react';
 import { usePlaidLink } from 'react-plaid-link';
 import { API_BASE, getAuthHeaders } from '../utils/dashboardApi';
 import type { PlaidItemData } from '../utils/dashboardApi';
 
-export default function ConnectCardsSection({ orgId }: { orgId: string }) {
+interface ConnectCardsSectionProps {
+  orgId: string;
+  emailVerified: boolean;
+  userEmail: string;
+  onVerified: () => void;
+}
+
+export default function ConnectCardsSection({ orgId, emailVerified, userEmail, onVerified }: ConnectCardsSectionProps) {
   const [items, setItems] = useState<PlaidItemData[]>([]);
   const [loading, setLoading] = useState(true);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [exchanging, setExchanging] = useState(false);
   const [error, setError] = useState('');
 
+  // Verification state
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
+  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   useEffect(() => {
+    if (!emailVerified) return;
     let cancelled = false;
     const fetchAccounts = async () => {
       setLoading(true);
@@ -39,7 +56,7 @@ export default function ConnectCardsSection({ orgId }: { orgId: string }) {
     };
     fetchAccounts();
     return () => { cancelled = true; };
-  }, [orgId]);
+  }, [orgId, emailVerified]);
 
   const { open, ready } = usePlaidLink({
     token: linkToken ?? '',
@@ -103,11 +120,174 @@ export default function ConnectCardsSection({ orgId }: { orgId: string }) {
     }
   };
 
+  const handleSendCode = async () => {
+    setSendingCode(true);
+    setVerifyError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-verification-code`, {
+        method: 'POST',
+        headers: getAuthHeaders(orgId),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send code');
+      setCodeSent(true);
+    } catch (err: unknown) {
+      setVerifyError(err instanceof Error ? err.message : 'Failed to send verification code');
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleCodeChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return;
+    const newCode = [...code];
+    newCode[index] = value.slice(-1);
+    setCode(newCode);
+    setVerifyError('');
+
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleCodeKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleCodePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const newCode = [...code];
+    for (let i = 0; i < 6; i++) {
+      newCode[i] = pasted[i] || '';
+    }
+    setCode(newCode);
+    const focusIndex = Math.min(pasted.length, 5);
+    inputRefs.current[focusIndex]?.focus();
+  };
+
+  const handleVerifyCode = async () => {
+    const fullCode = code.join('');
+    if (fullCode.length !== 6) {
+      setVerifyError('Please enter the 6-digit code');
+      return;
+    }
+    setVerifyingCode(true);
+    setVerifyError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(orgId),
+        },
+        body: JSON.stringify({ code: fullCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Verification failed');
+      onVerified();
+    } catch (err: unknown) {
+      setVerifyError(err instanceof Error ? err.message : 'Verification failed');
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
   const allAccounts = items.flatMap(item =>
     item.accounts.map(acc => ({ ...acc, institutionName: item.institutionName, itemId: item.id }))
   );
 
   const isConnecting = exchanging || (linkToken !== null && !ready);
+
+  // Email verification gate
+  if (!emailVerified) {
+    return (
+      <>
+        <div className="dash-section-header">
+          <div>
+            <h2>Cards & Accounts</h2>
+            <p className="dash-section-sub">
+              Link bank accounts and credit cards via Plaid to automatically import transactions.
+            </p>
+          </div>
+        </div>
+
+        <div className="dash-verify-gate">
+          <div className="dash-verify-icon">
+            <Mail size={40} />
+          </div>
+          <h3>Verify your email to continue</h3>
+          <p>
+            For security, we need to verify your email before you can connect bank accounts.
+          </p>
+
+          {verifyError && (
+            <div className="dash-verify-error">
+              <AlertCircle size={14} />{verifyError}
+            </div>
+          )}
+
+          {!codeSent ? (
+            <>
+              <p className="dash-verify-email">{userEmail}</p>
+              <button className="dash-btn-primary" onClick={handleSendCode} disabled={sendingCode}>
+                {sendingCode ? (
+                  <><Loader2 size={14} className="dash-spinner" /> Sending…</>
+                ) : (
+                  <><Mail size={14} /> Send Verification Code</>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="dash-verify-sent">
+                We sent a 6-digit code to <strong>{userEmail}</strong>
+              </p>
+              <div className="dash-verify-code-inputs" onPaste={handleCodePaste}>
+                {code.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={el => { inputRefs.current[i] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    className="dash-verify-code-input"
+                    value={digit}
+                    onChange={e => handleCodeChange(i, e.target.value)}
+                    onKeyDown={e => handleCodeKeyDown(i, e)}
+                    autoFocus={i === 0}
+                  />
+                ))}
+              </div>
+              <div className="dash-verify-actions">
+                <button
+                  className="dash-btn-primary"
+                  onClick={handleVerifyCode}
+                  disabled={verifyingCode || code.join('').length !== 6}
+                >
+                  {verifyingCode ? (
+                    <><Loader2 size={14} className="dash-spinner" /> Verifying…</>
+                  ) : (
+                    'Verify'
+                  )}
+                </button>
+                <button
+                  className="dash-verify-resend"
+                  onClick={handleSendCode}
+                  disabled={sendingCode}
+                >
+                  {sendingCode ? 'Sending…' : 'Resend Code'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

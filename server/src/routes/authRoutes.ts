@@ -12,6 +12,10 @@ const router = Router();
 router.post('/firebase-login', authController.firebaseLogin);
 // POST /api/auth/register - Register new user
 router.post('/register', authController.register);
+// POST /api/auth/register-checkout - Create Stripe Checkout for registration
+router.post('/register-checkout', authController.registerCheckout);
+// POST /api/auth/complete-registration - Complete registration after Stripe payment
+router.post('/complete-registration', authController.completeRegistration);
 // GET /api/auth/invite/:token - Validate invite token
 router.get('/invite/:token', authController.validateInvite);
 // POST /api/auth/accept-invite - Accept invite and create account

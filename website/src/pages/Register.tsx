@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import '../css/Register.css';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/api\/?$/, '').replace(/\/$/, '') + '/api';
@@ -19,9 +19,11 @@ interface FormErrors {
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [completingRegistration, setCompletingRegistration] = useState(false);
 
   const [form, setForm] = useState<FormData>({
     name: '',
@@ -32,6 +34,63 @@ export default function Register() {
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
+
+  // Handle return from Stripe
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id');
+    const canceled = searchParams.get('checkout_canceled');
+
+    if (canceled) {
+      window.history.replaceState({}, '', '/register');
+      setApiError('Payment was canceled. Please try again.');
+      const saved = localStorage.getItem('registerFormData');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setForm(parsed);
+        setStep(2);
+      }
+      return;
+    }
+
+    if (sessionId) {
+      setCompletingRegistration(true);
+      const saved = localStorage.getItem('registerFormData');
+      if (!saved) {
+        setCompletingRegistration(false);
+        setApiError('Registration data not found. Please try again.');
+        window.history.replaceState({}, '', '/register');
+        return;
+      }
+
+      const parsed = JSON.parse(saved);
+
+      fetch(`${API_BASE}/auth/complete-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          password: parsed.password,
+        }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success) {
+            localStorage.removeItem('registerFormData');
+            localStorage.setItem('accessToken', data.accessToken);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            window.history.replaceState({}, '', '/register');
+            navigate('/dashboard');
+          } else {
+            throw new Error(data.error || 'Registration failed');
+          }
+        })
+        .catch((err) => {
+          setCompletingRegistration(false);
+          setApiError(err instanceof Error ? err.message : 'Registration failed');
+          window.history.replaceState({}, '', '/register');
+        });
+    }
+  }, []);
 
   const update = (field: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -72,61 +131,47 @@ export default function Register() {
     setApiError('');
 
     try {
-      // 1. Register the user
-      const registerRes = await fetch(`${API_BASE}/auth/register`, {
+      // Save form data to localStorage before Stripe redirect
+      localStorage.setItem('registerFormData', JSON.stringify(form));
+
+      const res = await fetch(`${API_BASE}/auth/register-checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: form.email,
-          password: form.password,
           name: form.name,
+          email: form.email,
+          orgName: form.orgName,
         }),
       });
 
-      const registerData = await registerRes.json();
+      const data = await res.json();
 
-      if (!registerRes.ok) {
-        throw new Error(registerData.error || 'Registration failed');
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to start checkout');
       }
 
-      const { accessToken } = registerData;
-
-      // 2. Create the organization
-      const orgRes = await fetch(`${API_BASE}/organizations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          name: form.orgName,
-        }),
-      });
-
-      const orgData = await orgRes.json();
-
-      if (!orgRes.ok) {
-        throw new Error(orgData.error || 'Failed to create organization');
-      }
-
-      // Store user with org so Dashboard has the org ID available
-      const userWithOrg = {
-        ...registerData.user,
-        organizations: [{
-          id: orgData.organization.id,
-          name: orgData.organization.name,
-          role: 'ADMIN',
-        }],
-      };
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('user', JSON.stringify(userWithOrg));
-      navigate('/dashboard');
+      // Redirect to Stripe Checkout
+      window.location.href = data.checkoutUrl;
     } catch (err: unknown) {
+      localStorage.removeItem('registerFormData');
       setApiError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
       setLoading(false);
     }
   };
+
+  if (completingRegistration) {
+    return (
+      <section className="register-page">
+        <div className="register-container">
+          <div className="register-card card animate-in" style={{ textAlign: 'center', padding: '3rem' }}>
+            <Loader2 size={40} className="spinner" style={{ margin: '0 auto 1rem' }} />
+            <h2 className="register-title">Setting up your account...</h2>
+            <p className="register-subtitle">Please wait while we complete your registration.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="register-page">
@@ -151,7 +196,7 @@ export default function Register() {
             <form onSubmit={handleNext}>
               <h2 className="register-title">Create your account</h2>
               <p className="register-subtitle">
-                Start your 14-day free trial. No credit card required.
+                Get started with Tally for $49.
               </p>
 
               <div className="form-group">
@@ -254,11 +299,11 @@ export default function Register() {
                   {loading ? (
                     <>
                       <Loader2 size={18} className="spinner" />
-                      Creating...
+                      Redirecting...
                     </>
                   ) : (
                     <>
-                      Create Account
+                      Continue to Payment — $49/mo
                       <ArrowRight size={18} />
                     </>
                   )}

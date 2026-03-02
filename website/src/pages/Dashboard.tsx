@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   CreditCard,
+  Loader2,
 } from 'lucide-react';
 import logo from '../assets/logo.png';
 import type { OrgInfo } from '../utils/dashboardApi';
@@ -25,6 +26,7 @@ interface User {
   id: string;
   name: string;
   email: string;
+  emailVerified?: boolean;
   organizations?: OrgInfo[];
 }
 
@@ -40,6 +42,7 @@ export default function Dashboard() {
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [showEditOrg, setShowEditOrg] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [completingCheckout, setCompletingCheckout] = useState(false);
 
   const logout = useCallback(() => {
     localStorage.removeItem('accessToken');
@@ -102,6 +105,54 @@ export default function Dashboard() {
     setShowCreateOrg(false);
     setActiveTab('cards');
   };
+
+  // Handle return from Stripe Checkout
+  useEffect(() => {
+    if (!user || completingCheckout) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const canceled = params.get('checkout_canceled');
+
+    if (canceled) {
+      window.history.replaceState({}, '', '/dashboard');
+      return;
+    }
+
+    if (!sessionId) return;
+
+    setCompletingCheckout(true);
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    fetch(`${API_BASE}/organizations/complete-checkout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ sessionId }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.organization) {
+          const newOrg = data.organization;
+          handleOrgCreated({
+            id: newOrg.id,
+            name: newOrg.name,
+            role: 'ADMIN',
+            dba: newOrg.dba,
+            ein: newOrg.ein,
+          });
+        }
+        window.history.replaceState({}, '', '/dashboard');
+        setCompletingCheckout(false);
+      })
+      .catch(() => {
+        window.history.replaceState({}, '', '/dashboard');
+        setCompletingCheckout(false);
+      });
+  }, [user]);
 
   if (!user) return null;
 
@@ -208,7 +259,13 @@ export default function Dashboard() {
         </header>
 
         <div className="dash-content">
-          {showCreateOrg ? (
+          {completingCheckout ? (
+            <div className="dash-connect-empty">
+              <Loader2 size={32} className="dash-spinner" />
+              <h3>Setting up your organization...</h3>
+              <p>Please wait while we confirm your payment.</p>
+            </div>
+          ) : showCreateOrg ? (
             <CreateOrgForm
               onCreated={handleOrgCreated}
               onCancel={() => {
@@ -235,7 +292,18 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {activeTab === 'cards' && <ConnectCardsSection orgId={selectedOrg.id} />}
+              {activeTab === 'cards' && (
+                <ConnectCardsSection
+                  orgId={selectedOrg.id}
+                  emailVerified={user.emailVerified || false}
+                  userEmail={user.email}
+                  onVerified={() => {
+                    const updatedUser = { ...user!, emailVerified: true };
+                    setUser(updatedUser);
+                    localStorage.setItem('user', JSON.stringify(updatedUser));
+                  }}
+                />
+              )}
               {activeTab === 'roles' && <RolesSection orgId={selectedOrg.id} orgName={selectedOrg.name} />}
 
               {showEditOrg && (

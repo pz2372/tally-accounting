@@ -4,6 +4,7 @@ import jwt, { SignOptions, Secret } from 'jsonwebtoken';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types/http';
 import { PRESET_CATEGORIES } from '../config/categories';
+import { stripe } from '../config/stripe';
 
 import { Request } from 'express';
 
@@ -343,6 +344,226 @@ export const validateInvite: PublicHandler = async (req, res) => {
   } catch (error) {
     console.error('validateInvite error:', error);
     res.status(500).json({ success: false, error: 'Failed to validate invite' });
+  }
+};
+
+// Register checkout — validate email & create Stripe Checkout Session (public)
+export const registerCheckout: PublicHandler = async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(503).json({ success: false, error: 'Payment service unavailable' });
+    }
+
+    const { name, email, orgName } = req.body;
+
+    if (!email || !orgName?.trim()) {
+      return res.status(400).json({ success: false, error: 'Email and organization name are required' });
+    }
+
+    // Check if email already taken
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser && existingUser.firebaseUid) {
+      return res.status(409).json({ success: false, error: 'Email already in use' });
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || req.headers.origin || 'http://localhost:5173';
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product: process.env.STRIPE_PRODUCT_ID!,
+            unit_amount: 4900,
+            recurring: { interval: 'month' },
+          },
+          quantity: 1,
+        },
+      ],
+      subscription_data: {
+        metadata: {
+          type: 'registration',
+          email,
+          name: name?.trim() || '',
+          orgName: orgName.trim(),
+        },
+      },
+      metadata: {
+        type: 'registration',
+        email,
+        name: name?.trim() || '',
+        orgName: orgName.trim(),
+      },
+      success_url: `${frontendUrl}/register?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${frontendUrl}/register?checkout_canceled=true`,
+    });
+
+    res.json({ success: true, checkoutUrl: session.url });
+  } catch (error) {
+    console.error('registerCheckout error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// Complete registration — verify Stripe payment, create user + org (public)
+export const completeRegistration: PublicHandler = async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(503).json({ success: false, error: 'Payment service unavailable' });
+    }
+
+    const { sessionId, password } = req.body;
+
+    if (!sessionId || !password) {
+      return res.status(400).json({ success: false, error: 'Session ID and password are required' });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ success: false, error: 'Payment not completed' });
+    }
+
+    if (session.metadata?.type !== 'registration') {
+      return res.status(400).json({ success: false, error: 'Invalid session type' });
+    }
+
+    const email = session.metadata.email;
+    const name = session.metadata.name || null;
+    const orgName = session.metadata.orgName;
+
+    if (!email || !orgName) {
+      return res.status(400).json({ success: false, error: 'Invalid session metadata' });
+    }
+
+    // Idempotency: if org already created for this subscription, return existing data
+    const stripeSubId = session.subscription as string;
+    const existingSub = await prisma.organizationSubscription.findFirst({
+      where: { stripeSubscriptionId: stripeSubId },
+    });
+
+    if (existingSub) {
+      const user = await prisma.user.findUnique({
+        where: { email },
+        include: {
+          memberships: {
+            include: { org: { include: { subscription: true } } },
+          },
+        },
+      });
+
+      if (user) {
+        const accessToken = jwt.sign(
+          { id: user.id, firebaseUid: user.firebaseUid, email: user.email, emailVerified: false },
+          JWT_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        return res.json({
+          success: true,
+          accessToken,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            emailVerified: false,
+            createdAt: user.createdAt,
+            organizations: user.memberships.map((m) => ({
+              id: m.orgId,
+              name: m.org.name,
+              dba: m.org.dba,
+              role: m.role,
+              permissions: m.permissions,
+              subscription: m.org.subscription,
+            })),
+          },
+        });
+      }
+    }
+
+    // Create Firebase user
+    let userRecord;
+    try {
+      userRecord = await getAuth().createUser({
+        email,
+        password,
+        displayName: name || undefined,
+      });
+    } catch (error) {
+      if (error.code === 'auth/email-already-exists') {
+        return res.status(409).json({ success: false, error: 'Email already in use' });
+      }
+      return res.status(400).json({ success: false, error: error.message || 'Failed to create account' });
+    }
+
+    // Create DB user
+    const user = await prisma.user.create({
+      data: {
+        firebaseUid: userRecord.uid,
+        email,
+        name,
+      },
+    });
+
+    // Create org with subscription
+    const org = await prisma.organization.create({
+      data: {
+        name: orgName,
+        billingOwnerId: user.id,
+        members: {
+          create: {
+            userId: user.id,
+            role: 'ADMIN',
+            permissions: [],
+          },
+        },
+        subscription: {
+          create: {
+            status: 'ACTIVE',
+            plan: 'basic',
+            stripeCustomerId: (session.customer as string) || null,
+            stripeSubscriptionId: stripeSubId,
+          },
+        },
+      },
+      include: {
+        members: { include: { user: true } },
+        subscription: true,
+      },
+    });
+
+    const accessToken = jwt.sign(
+      { id: user.id, firebaseUid: userRecord.uid, email: user.email, emailVerified: false },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.status(201).json({
+      success: true,
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: false,
+        createdAt: user.createdAt,
+        organizations: [
+          {
+            id: org.id,
+            name: org.name,
+            dba: org.dba,
+            role: 'ADMIN',
+            permissions: [],
+            subscription: org.subscription,
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    console.error('completeRegistration error:', error);
+    res.status(500).json({ success: false, error: 'Registration failed' });
   }
 };
 

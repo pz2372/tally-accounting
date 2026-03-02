@@ -20,7 +20,7 @@ export default function CreateOrgForm({ onCreated, onCancel }: CreateOrgFormProp
     setSubmitting(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/organizations`, {
+      const res = await fetch(`${API_BASE}/organizations/checkout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -33,13 +33,12 @@ export default function CreateOrgForm({ onCreated, onCancel }: CreateOrgFormProp
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create organization');
+      if (!res.ok) throw new Error(data.error || 'Failed to start checkout');
 
-      const newOrg = data.organization;
-      onCreated({ id: newOrg.id, name: newOrg.name, role: 'ADMIN', dba: newOrg.dba, ein: newOrg.ein });
+      // Redirect to Stripe Checkout
+      window.location.href = data.checkoutUrl;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create organization');
-    } finally {
       setSubmitting(false);
     }
   };
@@ -91,7 +90,7 @@ export default function CreateOrgForm({ onCreated, onCancel }: CreateOrgFormProp
               onClick={handleCreate}
               disabled={submitting || !orgName.trim()}
             >
-              {submitting ? <><Loader2 size={14} className="dash-spinner" /> Creating…</> : 'Create'}
+              {submitting ? <><Loader2 size={14} className="dash-spinner" /> Redirecting to payment…</> : 'Continue to Payment — $49'}
             </button>
           </div>
         </div>

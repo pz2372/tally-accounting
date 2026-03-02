@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
 import { sendInviteEmail } from '../config/email';
+import { stripe } from '../config/stripe';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
@@ -60,6 +61,146 @@ export const createOrganization: Handler = async (req, res) => {
       success: false,
       error: 'Internal server error'
     });
+  }
+};
+
+// Create Stripe Checkout session for org creation
+export const createCheckoutSession: Handler = async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(503).json({ success: false, error: 'Payment service unavailable' });
+    }
+
+    const { name, dba, ein } = req.body;
+    const userId = req.user.id;
+
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Organization name is required' });
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || req.headers.origin || 'http://localhost:5173';
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product: process.env.STRIPE_PRODUCT_ID!,
+            unit_amount: 4900,
+            recurring: { interval: 'month' },
+          },
+          quantity: 1,
+        },
+      ],
+      subscription_data: {
+        metadata: {
+          userId,
+          orgName: name.trim(),
+          orgDba: dba?.trim() || '',
+          orgEin: ein?.trim() || '',
+        },
+      },
+      metadata: {
+        userId,
+        orgName: name.trim(),
+        orgDba: dba?.trim() || '',
+        orgEin: ein?.trim() || '',
+      },
+      success_url: `${frontendUrl}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${frontendUrl}/dashboard?checkout_canceled=true`,
+    });
+
+    res.json({ success: true, checkoutUrl: session.url });
+  } catch (error) {
+    console.error('createCheckoutSession error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// Complete checkout — verify payment and create organization
+export const completeCheckout: Handler = async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(503).json({ success: false, error: 'Payment service unavailable' });
+    }
+
+    const { sessionId } = req.body;
+    const userId = req.user.id;
+
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'Session ID is required' });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ success: false, error: 'Payment not completed' });
+    }
+
+    if (session.metadata?.userId !== userId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+
+    // Idempotency check — don't create duplicate org for same subscription
+    const stripeSubId = session.subscription as string;
+    const existingSub = await prisma.organizationSubscription.findFirst({
+      where: { stripeSubscriptionId: stripeSubId },
+      include: {
+        org: {
+          include: {
+            members: { include: { user: true } },
+            subscription: true,
+          },
+        },
+      },
+    });
+
+    if (existingSub) {
+      return res.json({ success: true, organization: existingSub.org });
+    }
+
+    const orgName = session.metadata?.orgName;
+    const orgDba = session.metadata?.orgDba || null;
+    const orgEin = session.metadata?.orgEin || null;
+
+    if (!orgName) {
+      return res.status(400).json({ success: false, error: 'Invalid session metadata' });
+    }
+
+    const org = await prisma.organization.create({
+      data: {
+        name: orgName,
+        dba: orgDba,
+        ein: orgEin,
+        billingOwnerId: userId,
+        members: {
+          create: {
+            userId,
+            role: 'ADMIN',
+            permissions: [],
+          },
+        },
+        subscription: {
+          create: {
+            status: 'ACTIVE',
+            plan: 'basic',
+            stripeCustomerId: (session.customer as string) || null,
+            stripeSubscriptionId: stripeSubId,
+          },
+        },
+      },
+      include: {
+        members: { include: { user: true } },
+        subscription: true,
+      },
+    });
+
+    res.status(201).json({ success: true, organization: org });
+  } catch (error) {
+    console.error('completeCheckout error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 
