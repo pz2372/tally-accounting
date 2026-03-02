@@ -372,15 +372,7 @@ export const registerCheckout: PublicHandler = async (req, res) => {
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product: process.env.STRIPE_PRODUCT_ID!,
-            unit_amount: 4900,
-            recurring: { interval: 'month' },
-          },
-          quantity: 1,
-        },
+        { price: process.env.STRIPE_PRICE_ID!, quantity: 1 },
       ],
       subscription_data: {
         metadata: {
