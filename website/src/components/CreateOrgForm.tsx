@@ -8,7 +8,7 @@ interface CreateOrgFormProps {
   onCancel: () => void;
 }
 
-export default function CreateOrgForm({ onCreated, onCancel }: CreateOrgFormProps) {
+export default function CreateOrgForm({ onCancel }: CreateOrgFormProps) {
   const [orgName, setOrgName] = useState('');
   const [orgDBA, setOrgDBA] = useState('');
   const [orgEIN, setOrgEIN] = useState('');
