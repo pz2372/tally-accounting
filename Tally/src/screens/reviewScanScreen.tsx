@@ -182,12 +182,14 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       const paymentMethodApi = PAYMENT_METHOD_MAP[paymentMethod] || 'CREDIT_CARD';
 
       const formData = new FormData();
-      const filename = imageUri.split('/').pop() || 'receipt.jpg';
+      // React Native fetch requires file:// prefix for local URIs on iOS
+      const fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
+      const filename = fileUri.split('/').pop() || 'receipt.jpg';
       const match = /\.(\w+)$/.exec(filename);
       const fileType = match ? `image/${match[1]}` : 'image/jpeg';
 
       formData.append('file', {
-        uri: imageUri,
+        uri: fileUri,
         type: fileType,
         name: filename,
       } as any);
