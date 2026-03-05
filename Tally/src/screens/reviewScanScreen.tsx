@@ -21,6 +21,7 @@ import { extractReceiptData } from '../services/aiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getOrgCachedData } from '../services/cacheService';
 import { getAccessToken } from '../services/authService';
+// @ts-ignore — legacy subpath has no type declarations but works at runtime
 import * as FileSystem from 'expo-file-system/legacy';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';

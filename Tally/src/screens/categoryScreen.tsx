@@ -211,8 +211,8 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
           setTotalSpent(totalSpentAllCategories);
         }
       } catch (err) {
-        
-            }
+
+        }
     } catch (error) {
       Alert.alert('Error', 'Failed to load category data. Please try again.');
     } finally {
