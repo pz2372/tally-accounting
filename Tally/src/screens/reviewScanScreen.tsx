@@ -21,6 +21,7 @@ import { extractReceiptData } from '../services/aiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getOrgCachedData } from '../services/cacheService';
 import { getAccessToken } from '../services/authService';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -178,60 +179,53 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         return;
       }
 
-      // Prepare FormData
+      // Prepare upload parameters
       const paymentMethodApi = PAYMENT_METHOD_MAP[paymentMethod] || 'CREDIT_CARD';
 
-      const formData = new FormData();
-      // React Native fetch requires file:// prefix for local URIs on iOS
+      // Ensure file:// prefix for iOS
       const fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
-      const filename = fileUri.split('/').pop() || 'receipt.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const fileType = match ? `image/${match[1]}` : 'image/jpeg';
 
-      formData.append('file', {
-        uri: fileUri,
-        type: fileType,
-        name: filename,
-      } as any);
-
-      // Route to correct endpoint and add document-type-specific fields
+      // Build endpoint and form fields
       let endpoint: string;
+      const parameters: Record<string, string> = {};
+
       if (documentType === 'sales_report') {
         endpoint = `${API_URL}/api/sales-reports/with-receipt`;
-        formData.append('businessDate', selectedDate.toISOString());
-        if (merchant.trim()) formData.append('merchant', merchant.trim());
-        if (notes.trim()) formData.append('notes', notes.trim());
-        // Append sales report fields as cents
-        if (grossSales.trim()) formData.append('grossSalesCents', toCents(grossSales));
-        if (netSales.trim()) formData.append('netSalesCents', toCents(netSales));
-        if (cash.trim()) formData.append('cashCents', toCents(cash));
-        if (tips.trim()) formData.append('tipsCents', toCents(tips));
-        if (tax.trim()) formData.append('taxCents', toCents(tax));
-        if (discounts.trim()) formData.append('discountsCents', toCents(discounts));
-        if (refunds.trim()) formData.append('refundsCents', toCents(refunds));
+        parameters.businessDate = selectedDate.toISOString();
+        if (merchant.trim()) parameters.merchant = merchant.trim();
+        if (notes.trim()) parameters.notes = notes.trim();
+        if (grossSales.trim()) parameters.grossSalesCents = toCents(grossSales);
+        if (netSales.trim()) parameters.netSalesCents = toCents(netSales);
+        if (cash.trim()) parameters.cashCents = toCents(cash);
+        if (tips.trim()) parameters.tipsCents = toCents(tips);
+        if (tax.trim()) parameters.taxCents = toCents(tax);
+        if (discounts.trim()) parameters.discountsCents = toCents(discounts);
+        if (refunds.trim()) parameters.refundsCents = toCents(refunds);
       } else {
         const amountCents = Math.round(parseFloat(amount) * 100);
-        formData.append('amountCents', String(amountCents));
+        parameters.amountCents = String(amountCents);
         endpoint = `${API_URL}/api/expenses/with-receipt`;
-        formData.append('paymentMethod', paymentMethodApi);
-        formData.append('expenseDate', selectedDate.toISOString());
-        formData.append('categoryName', selectedCategory!);
-        if (merchant.trim()) formData.append('merchant', merchant.trim());
-        if (notes.trim()) formData.append('notes', notes.trim());
+        parameters.paymentMethod = paymentMethodApi;
+        parameters.expenseDate = selectedDate.toISOString();
+        parameters.categoryName = selectedCategory!;
+        if (merchant.trim()) parameters.merchant = merchant.trim();
+        if (notes.trim()) parameters.notes = notes.trim();
       }
 
-      // Send to backend
-      const response = await fetch(endpoint, {
-        method: 'POST',
+      // Use FileSystem.uploadAsync for reliable native file uploads
+      const uploadResult = await FileSystem.uploadAsync(endpoint, fileUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        parameters,
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'x-org-id': orgId,
         },
-        body: formData,
       });
 
-      const responseData = await response.json();
-      if (!response.ok) {
+      const responseData = JSON.parse(uploadResult.body);
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
         throw new Error(responseData.error || `Failed to save ${documentType === 'sales_report' ? 'sales report' : 'expense'}`);
       }
 
