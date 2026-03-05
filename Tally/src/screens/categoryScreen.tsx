@@ -80,7 +80,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
       const config = CATEGORY_CONFIG[name];
       if (!config) return;
 
-      const override = orgOverrides?.find((oc: any) => oc.categoryKey === config.key);
+      const override = orgOverrides?.find((oc: any) => (oc.categoryKey || oc.key) === config.key);
       const isEnabled = !override || override.isEnabled !== false;
       const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
       const isVisibleToUser = isEnabled && (userRole === 'ADMIN' || isVisibleToEmployees);
@@ -118,7 +118,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
 
         const amountDollars = expense.amountCents / 100;
 
-        const override = orgOverrides?.find((oc: any) => oc.categoryKey === expense.categoryKey);
+        const override = orgOverrides?.find((oc: any) => (oc.categoryKey || oc.key) === expense.categoryKey);
         const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
         const isVisibleToUser = userRole === 'ADMIN' || isVisibleToEmployees;
 
@@ -210,7 +210,9 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
           setCategories(categoriesArray);
           setTotalSpent(totalSpentAllCategories);
         }
-      } catch { }
+      } catch (err) {
+        
+            }
     } catch (error) {
       Alert.alert('Error', 'Failed to load category data. Please try again.');
     } finally {

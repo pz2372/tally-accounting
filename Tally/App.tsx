@@ -14,6 +14,7 @@ import LoginScreen from './src/screens/loginScreen';
 import LandingScreen from './src/screens/landingScreen';
 import BottomNavigation from './src/components/BottomNavigation';
 import { LanguageProvider } from './src/contexts/LanguageContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   checkAuth,
   getStoredUser,
@@ -91,9 +92,23 @@ export default function App() {
           if (deviceHasBiometric) {
             const success = await authenticateWithBiometric();
             if (success) {
+              // Load cached user immediately so UI appears fast
               const storedUser = await getStoredUser();
               setCurrentUser(storedUser);
               setIsAuthenticated(true);
+
+              // Sync user to AsyncStorage so all screens can read it
+              if (storedUser) {
+                await AsyncStorage.setItem('@current_user', JSON.stringify(storedUser));
+              }
+
+              // Fetch fresh user data from server in background
+              checkAuth().then(async ({ valid, user: freshUser }) => {
+                if (valid && freshUser) {
+                  setCurrentUser(freshUser);
+                  await AsyncStorage.setItem('@current_user', JSON.stringify(freshUser));
+                }
+              }).catch(() => { /* use cached user */ });
             }
             // If biometric fails, fall through to login screen
           } else {
@@ -105,6 +120,11 @@ export default function App() {
           const storedUser = await getStoredUser();
           setCurrentUser(storedUser);
           setIsAuthenticated(true);
+
+          // Sync user to AsyncStorage so all screens can read it
+          if (storedUser) {
+            await AsyncStorage.setItem('@current_user', JSON.stringify(storedUser));
+          }
         }
       } catch (error) {
         console.error('Auth check error:', error);

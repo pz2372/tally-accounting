@@ -23,7 +23,7 @@ import { getOrgCachedData } from '../services/cacheService';
 import { getAccessToken } from '../services/authService';
 import * as FileSystem from 'expo-file-system/legacy';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
 const PAYMENT_METHOD_MAP: Record<string, string> = {
   'Credit Card': 'CREDIT_CARD',
@@ -182,11 +182,55 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       // Prepare upload parameters
       const paymentMethodApi = PAYMENT_METHOD_MAP[paymentMethod] || 'CREDIT_CARD';
 
-      // Copy scanned file to app cache (native scanner saves to restricted temp dir)
+      // TEMP DIAGNOSTIC — remove after debugging TestFlight issue
+      const debugInfo: string[] = [];
+      try {
+        const rawUri = imageUri;
+        const prefixedUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
+        debugInfo.push(`rawUri: ${rawUri}`);
+        debugInfo.push(`prefixedUri: ${prefixedUri}`);
+        debugInfo.push(`cacheDir: ${FileSystem.cacheDirectory}`);
+        debugInfo.push(`docDir: ${FileSystem.documentDirectory}`);
+        debugInfo.push(`accessToken: ${accessToken ? 'yes(' + accessToken.length + ')' : 'NO'}`);
+        debugInfo.push(`orgId: ${orgId}`);
+        debugInfo.push(`category: ${selectedCategory}`);
+        debugInfo.push(`amount: ${amount}`);
+        debugInfo.push(`docType: ${documentType}`);
+        debugInfo.push(`endpoint: ${API_URL}/api/expenses/with-receipt`);
+
+        // Check file with raw URI
+        try {
+          const rawInfo = await FileSystem.getInfoAsync(rawUri);
+          debugInfo.push(`rawExists: ${rawInfo.exists}, size: ${(rawInfo as any).size || 'n/a'}`);
+        } catch (e: any) {
+          debugInfo.push(`rawCheck err: ${e.message}`);
+        }
+
+        // Check file with prefixed URI
+        try {
+          const prefInfo = await FileSystem.getInfoAsync(prefixedUri);
+          debugInfo.push(`prefixedExists: ${prefInfo.exists}, size: ${(prefInfo as any).size || 'n/a'}`);
+        } catch (e: any) {
+          debugInfo.push(`prefixedCheck err: ${e.message}`);
+        }
+      } catch (e: any) {
+        debugInfo.push(`diagnostic err: ${e.message}`);
+      }
+      Alert.alert('DEBUG SAVE', debugInfo.join('\n'));
+
+      // Prepare file URI with file:// prefix for iOS
       let fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
       const filename = fileUri.split('/').pop() || 'scan.jpg';
       const cachedUri = `${FileSystem.cacheDirectory}${filename}`;
-      await FileSystem.copyAsync({ from: fileUri, to: cachedUri });
+
+      // Copy to cache with timeout (copyAsync can hang on invalid URIs)
+      const copyWithTimeout = Promise.race([
+        FileSystem.copyAsync({ from: fileUri, to: cachedUri }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('File copy timed out. Please scan again.')), 15000)
+        ),
+      ]);
+      await copyWithTimeout;
       fileUri = cachedUri;
 
       // Build endpoint and form fields
@@ -216,17 +260,22 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         if (notes.trim()) parameters.notes = notes.trim();
       }
 
-      // Use FileSystem.uploadAsync for reliable native file uploads
-      const uploadResult = await FileSystem.uploadAsync(endpoint, fileUri, {
-        httpMethod: 'POST',
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: 'file',
-        parameters,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'x-org-id': orgId,
-        },
-      });
+      // Upload with timeout
+      const uploadResult = await Promise.race([
+        FileSystem.uploadAsync(endpoint, fileUri, {
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: 'file',
+          parameters,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'x-org-id': orgId,
+          },
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Upload timed out. Please check your connection and try again.')), 90000)
+        ),
+      ]);
 
       const responseData = JSON.parse(uploadResult.body);
       if (uploadResult.status < 200 || uploadResult.status >= 300) {
@@ -301,7 +350,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         onSave({
           merchant,
           amount,
-          category: selectedCategory,
+          category: selectedCategory!,
           paymentMethod,
           date: selectedDate,
           notes,
@@ -314,23 +363,15 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       Alert.alert(
         'Success',
         `${documentType === 'sales_report' ? 'Sales report' : 'Expense'} saved successfully!`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setIsSaving(false);
-              onSuccess?.();
-            },
-          },
-        ]
+        [{ text: 'OK', onPress: () => onSuccess?.() }]
       );
     } catch (error: any) {
-      // Alert is shown below
       Alert.alert(
         'Error',
         error?.message || 'Failed to save. Please try again.',
-        [{ text: 'OK', onPress: () => setIsSaving(false) }]
       );
+    } finally {
+      setIsSaving(false);
     }
   };
 

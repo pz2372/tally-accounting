@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Dimensions, ActivityIndicator, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Animated, Dimensions, ActivityIndicator, Modal, Alert, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,7 +72,10 @@ export default function HomeScreen({
   const [metrics, setMetrics] = useState<HomeMetrics>(defaultMetrics);
   const [missingReceiptExpenses, setMissingReceiptExpenses] = useState<any[]>([]);
   const [isLoadingOrgData, setIsLoadingOrgData] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  const hasRefreshedOnMount = useRef(false);
 
   useEffect(() => {
     if (activeScreen !== 'home') {
@@ -128,52 +131,48 @@ export default function HomeScreen({
     });
   };
 
+  // Fetch all org data from server and update cache
+  // Only overwrites cache for endpoints that succeed — failed calls keep existing cache
+  const refreshOrgData = async (orgId: string) => {
+    const api = await createAuthenticatedAxios();
+
+    const [expensesRes, categoriesRes, statementsRes, recurringRes, receiptsRes, matchesRes, salesRes] = await Promise.all([
+      api.get('/api/expenses', { headers: { 'x-org-id': orgId } }).catch(() => null),
+      api.get('/api/categories', { headers: { 'x-org-id': orgId } }).catch(() => null),
+      api.get('/api/statements', { headers: { 'x-org-id': orgId } }).catch(() => null),
+      api.get('/api/recurring-charges', { headers: { 'x-org-id': orgId } }).catch(() => null),
+      api.get('/api/receipts', { headers: { 'x-org-id': orgId } }).catch(() => null),
+      api.get('/api/matches', { headers: { 'x-org-id': orgId } }).catch(() => null),
+      api.get('/api/sales-reports', { headers: { 'x-org-id': orgId } }).catch(() => null),
+    ]);
+
+    const cacheUpdates: [string, string][] = [];
+    if (expensesRes?.data?.expenses)     cacheUpdates.push([`@org_expenses_${orgId}`, JSON.stringify(expensesRes.data.expenses)]);
+    if (categoriesRes?.data?.categories) cacheUpdates.push([`@org_categories_${orgId}`, JSON.stringify(categoriesRes.data.categories)]);
+    if (statementsRes?.data?.statements) cacheUpdates.push([`@org_statements_${orgId}`, JSON.stringify(statementsRes.data.statements)]);
+    if (recurringRes?.data?.charges)     cacheUpdates.push([`@org_recurring_charges_${orgId}`, JSON.stringify(recurringRes.data.charges)]);
+    if (receiptsRes?.data?.receipts)     cacheUpdates.push([`@org_receipts_${orgId}`, JSON.stringify(receiptsRes.data.receipts)]);
+    if (matchesRes?.data?.matches)       cacheUpdates.push([`@org_receipt_matches_${orgId}`, JSON.stringify(matchesRes.data.matches)]);
+    if (salesRes?.data?.reports)         cacheUpdates.push([`@org_sales_reports_${orgId}`, JSON.stringify(salesRes.data.reports)]);
+
+    if (cacheUpdates.length > 0) {
+      await AsyncStorage.multiSet(cacheUpdates);
+    }
+
+    // Clear home metrics cache so loadMetrics recomputes from fresh data
+    await AsyncStorage.removeItem(HOME_METRICS_KEY);
+  };
+
   const handleOrgSwitch = async (orgId: string) => {
     if (orgId === selectedBusinessId) return;
 
     setShowBusinessDropdown(false);
     setIsLoadingOrgData(true);
-
-    // Reset all data immediately to prevent stale data from previous org
-    setMetrics(defaultMetrics);
+    setMetrics({ ...defaultMetrics });
     setMissingReceiptExpenses([]);
 
     try {
-      const api = await createAuthenticatedAxios();
-
-      // Fetch all org data in parallel
-      const [expensesRes, categoriesRes, statementsRes, recurringRes, receiptsRes, matchesRes, salesRes] = await Promise.all([
-        api.get('/api/expenses', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { expenses: [] } })),
-        api.get('/api/categories', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { categories: [] } })),
-        api.get('/api/statements', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { statements: [] } })),
-        api.get('/api/recurring-charges', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { charges: [] } })),
-        api.get('/api/receipts', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { receipts: [] } })),
-        api.get('/api/matches', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { matches: [] } })),
-        api.get('/api/sales-reports', { headers: { 'x-org-id': orgId } }).catch(() => ({ data: { reports: [] } })),
-      ]);
-
-      // Cache the org data
-      const CACHE_KEYS = {
-        ORG_EXPENSES: '@org_expenses_',
-        ORG_CATEGORIES: '@org_categories_',
-        ORG_STATEMENTS: '@org_statements_',
-        ORG_RECURRING_CHARGES: '@org_recurring_charges_',
-        ORG_RECEIPTS: '@org_receipts_',
-        ORG_RECEIPT_MATCHES: '@org_receipt_matches_',
-        ORG_SALES_REPORTS: '@org_sales_reports_',
-      };
-
-      await Promise.all([
-        AsyncStorage.setItem(`${CACHE_KEYS.ORG_EXPENSES}${orgId}`, JSON.stringify(expensesRes.data.expenses || [])),
-        AsyncStorage.setItem(`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`, JSON.stringify(categoriesRes.data.categories || [])),
-        AsyncStorage.setItem(`${CACHE_KEYS.ORG_STATEMENTS}${orgId}`, JSON.stringify(statementsRes.data.statements || [])),
-        AsyncStorage.setItem(`${CACHE_KEYS.ORG_RECURRING_CHARGES}${orgId}`, JSON.stringify(recurringRes.data.charges || [])),
-        AsyncStorage.setItem(`${CACHE_KEYS.ORG_RECEIPTS}${orgId}`, JSON.stringify(receiptsRes.data.receipts || [])),
-        AsyncStorage.setItem(`${CACHE_KEYS.ORG_RECEIPT_MATCHES}${orgId}`, JSON.stringify(matchesRes.data.matches || [])),
-        AsyncStorage.setItem(`${CACHE_KEYS.ORG_SALES_REPORTS}${orgId}`, JSON.stringify(salesRes.data.reports || [])),
-      ]);
-
-      // Switch org and trigger refresh
+      await refreshOrgData(orgId);
       setSelectedBusinessId(orgId);
       onOrgChange?.(orgId);
       onDataChanged?.();
@@ -181,6 +180,20 @@ export default function HomeScreen({
       Alert.alert('Error', 'Failed to switch organization. Please try again.');
     } finally {
       setIsLoadingOrgData(false);
+    }
+  };
+
+  // Pull-to-refresh handler
+  const handleRefresh = async () => {
+    if (!selectedBusinessId) return;
+    setRefreshing(true);
+    try {
+      await refreshOrgData(selectedBusinessId);
+      onDataChanged?.();
+    } catch {
+      // silently fail — user can try again
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -194,12 +207,24 @@ export default function HomeScreen({
     }
   }, [businesses, selectedBusinessId]);
 
+  // Auto-refresh on mount (ensures fresh data after Face ID / biometric login)
+  useEffect(() => {
+    if (hasRefreshedOnMount.current || !selectedBusinessId) return;
+    hasRefreshedOnMount.current = true;
+
+    setIsInitialLoading(true);
+    refreshOrgData(selectedBusinessId)
+      .then(() => onDataChanged?.())
+      .catch(() => { /* cache data still available */ })
+      .finally(() => setIsInitialLoading(false));
+  }, [selectedBusinessId]);
+
   useEffect(() => {
     let isActive = true;
 
     const loadMetrics = async () => {
       try {
-        let nextMetrics = defaultMetrics;
+        let nextMetrics: HomeMetrics = { ...defaultMetrics };
 
         // Try to load from cache first (always org-specific)
         const raw = await AsyncStorage.getItem(HOME_METRICS_KEY);
@@ -299,7 +324,7 @@ export default function HomeScreen({
         }
 
         if (isActive) {
-          setMetrics(nextMetrics);
+          setMetrics({ ...nextMetrics });
         }
       } catch (error) {
         // silently fail - non-critical metrics load
@@ -437,7 +462,17 @@ export default function HomeScreen({
   return (
     <>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.container}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+        >
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -599,9 +634,9 @@ export default function HomeScreen({
       </SafeAreaView>
       {renderOverlayScreen()}
 
-      {/* Loading Overlay for Org Switch */}
+      {/* Loading Overlay for Org Switch or Initial Load */}
       <Modal
-        visible={isLoadingOrgData}
+        visible={isLoadingOrgData || isInitialLoading}
         transparent
         animationType="fade"
       >

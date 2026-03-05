@@ -197,21 +197,9 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                 notes: editDescription,
             };
 
-            // If category changed, find the matching orgCategory
+            // If category changed, send categoryName (server resolves to categoryKey)
             if (editCategory !== expense.category) {
-                // Load org categories from cache to find the orgCategoryId
-                const orgCatsRaw = await AsyncStorage.getItem(`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`);
-                if (orgCatsRaw) {
-                    const orgCats = JSON.parse(orgCatsRaw);
-                    // Find org category whose preset name or custom name matches
-                    const matchingOrgCat = orgCats.find((oc: any) => {
-                        const name = oc.customName || oc.preset?.name;
-                        return name === editCategory;
-                    });
-                    if (matchingOrgCat) {
-                        updatePayload.orgCategoryId = matchingOrgCat.id;
-                    }
-                }
+                updatePayload.categoryName = editCategory;
             }
 
             const response = await api.put(`/api/expenses/${expense.id}`, updatePayload, {

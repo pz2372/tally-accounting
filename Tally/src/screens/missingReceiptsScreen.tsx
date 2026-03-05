@@ -10,7 +10,7 @@ import { LanguageContext } from '../contexts/LanguageContext';
 import { getCategoryColor, CATEGORIES } from '../components/categories';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 const DISMISS_BUTTON_WIDTH = 90;
 
 interface MissingReceiptsScreenProps {
