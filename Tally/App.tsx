@@ -175,6 +175,11 @@ export default function App() {
             expense={selectedExpense}
             onBack={() => setSelectedExpense(null)}
             selectedOrgId={selectedOrgId}
+            onExpenseDeleted={() => {
+              handleDataChanged();
+              setSelectedExpense(null);
+            }}
+            onExpenseUpdated={handleDataChanged}
           />
         ) : (
           <>

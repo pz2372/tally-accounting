@@ -257,6 +257,11 @@ export default function HomeScreen({
             }
           }
 
+          // Show cache-based metrics immediately (totalSpent, unmatchedItems)
+          if (isActive) {
+            setMetrics({ ...nextMetrics });
+          }
+
           // Fetch gross/net sales and statement matching data
           try {
             const api = await createAuthenticatedAxios();
@@ -379,7 +384,7 @@ export default function HomeScreen({
         ScreenComponent = <NewExpenseScreen onBack={() => { onDataChanged?.(); handleBack(); }} selectedOrgId={selectedBusinessId} />;
         break;
       case 'uploadStatement':
-        ScreenComponent = <UploadStatementScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;
+        ScreenComponent = <UploadStatementScreen onBack={() => { onDataChanged?.(); handleBack(); }} selectedOrgId={selectedBusinessId} />;
         break;
       case 'needsAttention':
         ScreenComponent = <NeedsAttentionScreen onBack={handleBack} />;

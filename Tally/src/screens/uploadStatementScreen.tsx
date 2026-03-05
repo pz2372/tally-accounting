@@ -122,7 +122,7 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         formData.append('statementMonth', statementMonth);
         formData.append('sourceType', selectedFile.mimeType?.includes('pdf') ? 'pdf' : 'csv');
 
-        await fetch(`${API_URL}/api/statements/with-file`, {
+        const res = await fetch(`${API_URL}/api/statements/with-file`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -133,6 +133,17 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
 
         clearInterval(progressInterval);
         setUploadProgress(100);
+
+        // Update statements cache
+        try {
+          const data = await res.json();
+          if (data.success && data.statement) {
+            const cacheKey = `@org_statements_${orgId}`;
+            const cached = await AsyncStorage.getItem(cacheKey);
+            const cachedList = cached ? JSON.parse(cached) : [];
+            await AsyncStorage.setItem(cacheKey, JSON.stringify([data.statement, ...cachedList]));
+          }
+        } catch { }
 
         setTimeout(() => {
           setIsUploading(false);

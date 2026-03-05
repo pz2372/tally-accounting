@@ -169,6 +169,26 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
         const cached = await AsyncStorage.getItem(cacheKey);
         const cachedList = cached ? JSON.parse(cached) : [];
         await AsyncStorage.setItem(cacheKey, JSON.stringify([savedExpense, ...cachedList]));
+
+        // Clear monthly cache to force refresh
+        const monthKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
+        await AsyncStorage.removeItem(`${cacheKey}_${monthKey}`);
+
+        // Update home metrics cache
+        try {
+          const now = new Date();
+          const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          if (monthKey === currentMonthKey) {
+            const metricsRaw = await AsyncStorage.getItem('@home_metrics');
+            const metricsData = metricsRaw ? JSON.parse(metricsRaw) : {};
+            if (!metricsData.byOrg) metricsData.byOrg = {};
+            if (!metricsData.byOrg[orgId]) metricsData.byOrg[orgId] = {};
+            const orgMetrics = metricsData.byOrg[orgId];
+            const expenseAmount = savedExpense.amountCents ? savedExpense.amountCents / 100 : (parseFloat(amount) || 0);
+            orgMetrics.totalSpent = (orgMetrics.totalSpent || 0) + expenseAmount;
+            await AsyncStorage.setItem('@home_metrics', JSON.stringify(metricsData));
+          }
+        } catch { }
       }
 
       Alert.alert('Saved', 'Expense saved successfully.', [{ text: 'OK', onPress: onBack }]);

@@ -159,6 +159,20 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                 expenses.filter((e: any) => e.id !== expense.id)
             );
 
+            // Update home metrics cache
+            try {
+                const now = new Date();
+                const expenseDate = new Date(expense.date);
+                if (expenseDate.getMonth() === now.getMonth() && expenseDate.getFullYear() === now.getFullYear()) {
+                    const metricsRaw = await AsyncStorage.getItem('@home_metrics');
+                    const metricsData = metricsRaw ? JSON.parse(metricsRaw) : {};
+                    if (metricsData?.byOrg?.[orgId]) {
+                        metricsData.byOrg[orgId].totalSpent = Math.max(0, (metricsData.byOrg[orgId].totalSpent || 0) - expense.amount);
+                        await AsyncStorage.setItem('@home_metrics', JSON.stringify(metricsData));
+                    }
+                }
+            } catch { }
+
             setShowDeleteModal(false);
             Alert.alert(t('common.success'), t('details.deleteSuccess'));
             onExpenseDeleted?.();
@@ -204,20 +218,13 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                 headers: { 'x-org-id': orgId }
             });
 
-            // Update cache
-            if (response.data.success) {
+            // Update cache with full server response
+            if (response.data.success && response.data.expense) {
+                const updatedExpense = response.data.expense;
                 await updateExpenseCache(orgId, (expenses) =>
                     expenses.map((e: any) => {
                         if (e.id !== expense.id) return e;
-                        return {
-                            ...e,
-                            paymentMethod: editPaymentMethod,
-                            notes: editDescription,
-                            ...(response.data.expense?.orgCategoryId && {
-                                orgCategoryId: response.data.expense.orgCategoryId,
-                                categoryNameSnapshot: response.data.expense.categoryNameSnapshot,
-                            }),
-                        };
+                        return { ...e, ...updatedExpense };
                     })
                 );
             }

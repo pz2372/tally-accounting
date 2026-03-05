@@ -182,8 +182,12 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       // Prepare upload parameters
       const paymentMethodApi = PAYMENT_METHOD_MAP[paymentMethod] || 'CREDIT_CARD';
 
-      // Ensure file:// prefix for iOS
-      const fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
+      // Copy scanned file to app cache (native scanner saves to restricted temp dir)
+      let fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
+      const filename = fileUri.split('/').pop() || 'scan.jpg';
+      const cachedUri = `${FileSystem.cacheDirectory}${filename}`;
+      await FileSystem.copyAsync({ from: fileUri, to: cachedUri });
+      fileUri = cachedUri;
 
       // Build endpoint and form fields
       let endpoint: string;

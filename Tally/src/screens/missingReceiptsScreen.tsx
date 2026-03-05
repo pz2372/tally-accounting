@@ -86,6 +86,26 @@ function SwipeableExpenseCard({
         }
       );
 
+      // Update expense cache to mark receipt as not needed
+      try {
+        const orgId = selectedOrgId || await (async () => {
+          const userStr = await AsyncStorage.getItem('@current_user');
+          if (!userStr) return null;
+          return JSON.parse(userStr).organizations?.[0]?.id;
+        })();
+        if (orgId) {
+          const cacheKey = `@org_expenses_${orgId}`;
+          const cached = await AsyncStorage.getItem(cacheKey);
+          if (cached) {
+            const expenses = JSON.parse(cached);
+            const updated = expenses.map((e: any) =>
+              e.id === expense.id ? { ...e, receiptNotNeeded: true } : e
+            );
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(updated));
+          }
+        }
+      } catch { }
+
       // Animate out then remove
       Animated.timing(translateX, {
         toValue: 400,
