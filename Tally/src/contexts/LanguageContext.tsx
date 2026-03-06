@@ -342,7 +342,10 @@ const translations: Record<string, Record<string, string>> = {
     'salesReport.utilities': 'Utilities',
     'salesReport.other': 'Other',
     'salesReport.noData': 'No data available for this month',
-    
+    'salesReport.deleteTitle': 'Delete Sales Report?',
+    'salesReport.deleteConfirm': 'Are you sure you want to delete this sales report? This action cannot be undone.',
+    'salesReport.deleteError': 'Failed to delete sales report',
+
     // Scan Screen
     'scan.title': 'Scan Receipt',
     'scan.capture': 'Capture',
@@ -775,6 +778,9 @@ const translations: Record<string, Record<string, string>> = {
     'salesReport.utilities': 'Servicios Públicos',
     'salesReport.other': 'Otro',
     'salesReport.noData': 'No hay datos disponibles para este mes',
+    'salesReport.deleteTitle': '¿Eliminar Informe de Ventas?',
+    'salesReport.deleteConfirm': '¿Estás seguro de que quieres eliminar este informe de ventas? Esta acción no se puede deshacer.',
+    'salesReport.deleteError': 'Error al eliminar el informe de ventas',
     
     // Scan Screen
     'scan.title': 'Escanear Recibo',
@@ -1160,6 +1166,9 @@ const translations: Record<string, Record<string, string>> = {
     'salesReport.utilities': '公用事业',
     'salesReport.other': '其他',
     'salesReport.noData': '此月没有可用数据',
+    'salesReport.deleteTitle': '删除销售报告？',
+    'salesReport.deleteConfirm': '确定要删除此销售报告吗？此操作无法撤消。',
+    'salesReport.deleteError': '删除销售报告失败',
     
     // Scan Screen
     'scan.title': '扫描收据',
@@ -1597,6 +1606,9 @@ const translations: Record<string, Record<string, string>> = {
     'salesReport.utilities': 'Utilitas',
     'salesReport.other': 'Lainnya',
     'salesReport.noData': 'Tidak ada data tersedia untuk bulan ini',
+    'salesReport.deleteTitle': 'Hapus Laporan Penjualan?',
+    'salesReport.deleteConfirm': 'Apakah Anda yakin ingin menghapus laporan penjualan ini? Tindakan ini tidak dapat dibatalkan.',
+    'salesReport.deleteError': 'Gagal menghapus laporan penjualan',
 
     // Scan Screen
     'scan.title': 'Pindai Struk',

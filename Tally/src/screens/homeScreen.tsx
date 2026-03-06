@@ -415,7 +415,7 @@ export default function HomeScreen({
         ScreenComponent = <NeedsAttentionScreen onBack={handleBack} />;
         break;
       case 'statements':
-        ScreenComponent = <StatementsScreen onBack={handleBack} onNavigate={(screen) => setActiveScreen(screen as any)} selectedOrgId={selectedBusinessId} />;
+        ScreenComponent = <StatementsScreen onBack={handleBack} onNavigate={(screen) => setActiveScreen(screen as any)} selectedOrgId={selectedBusinessId} onDataChanged={onDataChanged} />;
         break;
       case 'recurring':
         ScreenComponent = <RecurringScreen onBack={handleBack} selectedOrgId={selectedBusinessId} />;

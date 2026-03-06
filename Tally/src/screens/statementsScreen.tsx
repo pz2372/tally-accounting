@@ -16,6 +16,7 @@ interface StatementsScreenProps {
   onBack: () => void;
   onNavigate: (screen: string) => void;
   selectedOrgId?: string | null;
+  onDataChanged?: () => void;
 }
 
 interface Statement {
@@ -52,7 +53,7 @@ interface StatementTransactionItem {
   matches: any[];
 }
 
-export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: StatementsScreenProps) {
+export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, onDataChanged }: StatementsScreenProps) {
   const { t } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [statements, setStatements] = useState<Statement[]>([]);
@@ -64,6 +65,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
   const [statementTransactions, setStatementTransactions] = useState<StatementTransactionItem[]>([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [transactionFilter, setTransactionFilter] = useState<'all' | 'unmatched'>('all');
+  const [isDeletingSalesReport, setIsDeletingSalesReport] = useState(false);
   
   // Check if selected month is current month or later
   const isCurrentOrFutureMonth = () => {
@@ -418,6 +420,72 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
     setStatementTransactions([]);
   };
 
+  const handleDeleteSalesReport = () => {
+    if (!selectedSalesReport) return;
+    Alert.alert(
+      t('salesReport.deleteTitle'),
+      t('salesReport.deleteConfirm'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeletingSalesReport(true);
+            try {
+              const token = await getAccessToken();
+              let orgId = selectedOrgId;
+              if (!orgId) {
+                const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+                if (userDataStr) {
+                  const userData = JSON.parse(userDataStr);
+                  orgId = userData?.organizations?.[0]?.id;
+                }
+              }
+              await axios.delete(
+                `${API_URL}/api/sales-reports/${selectedSalesReport.id}`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-Org-Id': orgId || '',
+                  },
+                }
+              );
+
+              // Update sales reports cache
+              if (orgId) {
+                try {
+                  const salesCacheKey = `${CACHE_KEYS.ORG_SALES_REPORTS}${orgId}`;
+                  const raw = await AsyncStorage.getItem(salesCacheKey);
+                  if (raw) {
+                    const reports = JSON.parse(raw);
+                    const updated = reports.filter((r: any) => r.id !== selectedSalesReport.id);
+                    await AsyncStorage.setItem(salesCacheKey, JSON.stringify(updated));
+                  }
+                  // Clear statements cache for this month so it refetches
+                  const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
+                  await AsyncStorage.removeItem(`${CACHE_KEYS.ORG_STATEMENTS}${orgId}_${monthKey}`);
+                  // Clear home metrics so they recompute
+                  await AsyncStorage.removeItem('@home_metrics');
+                } catch {
+                  // non-critical cache update
+                }
+              }
+
+              handleBackFromDetail();
+              loadStatements();
+              onDataChanged?.();
+            } catch {
+              Alert.alert(t('common.error'), t('salesReport.deleteError'));
+            } finally {
+              setIsDeletingSalesReport(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const swipeHandlers = useSwipeBack(selectedStatement || selectedSalesReport ? handleBackFromDetail : onBack);
 
   // Statement detail view
@@ -559,7 +627,13 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId }: 
               <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Sales Report</Text>
-            <View style={{ width: 32 }} />
+            <TouchableOpacity onPress={handleDeleteSalesReport} style={styles.backButton} disabled={isDeletingSalesReport}>
+              {isDeletingSalesReport ? (
+                <ActivityIndicator size="small" color={colors.red} />
+              ) : (
+                <Ionicons name="trash-outline" size={22} color={colors.red} />
+              )}
+            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

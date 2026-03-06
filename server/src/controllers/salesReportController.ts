@@ -2,7 +2,7 @@ import { Prisma, SalesReportSource, SalesReportStatus } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
-import { uploadToS3, getPresignedUrl, extractS3Key, getS3Object } from '../services/s3Service';
+import { uploadToS3, deleteFromS3, getPresignedUrl, extractS3Key, getS3Object } from '../services/s3Service';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
@@ -476,10 +476,23 @@ const report = await prisma.salesReport.findFirst({
       });
     }
 
+    // Delete S3 file if exists
+    if (report.fileUrl) {
+      const s3Key = extractS3Key(report.fileUrl);
+      if (s3Key) {
+        try {
+          await deleteFromS3(s3Key);
+        } catch (s3Error) {
+          console.error('Failed to delete S3 file:', s3Error);
+          // Continue with DB deletion even if S3 fails
+        }
+      }
+    }
+
     await prisma.salesReport.delete({
       where: { id }
     });
-    
+
     res.json({
       success: true,
       message: 'Sales report deleted successfully'
