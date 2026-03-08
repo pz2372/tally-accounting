@@ -296,7 +296,8 @@ export const updateSalesReport: Handler = async (req, res) => {
       taxCents,
       discountsCents,
       refundsCents,
-      notes
+      notes,
+      businessDate
     } = req.body;
     
     if (!orgId) {
@@ -340,6 +341,9 @@ export const updateSalesReport: Handler = async (req, res) => {
       updateData.refundsCents = Number.parseInt(String(refundsCents), 10);
     }
     if (notes !== undefined) updateData.notes = notes;
+    if (businessDate !== undefined) {
+      updateData.businessDate = new Date(businessDate);
+    }
     
     const report = await prisma.salesReport.update({
       where: { id },
