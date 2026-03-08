@@ -73,7 +73,10 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
     return {
       merchant: data.merchant || '',
       amount: data.amount || '',
-      date: data.date ? new Date(data.date) : new Date(),
+      date: data.date ? (() => {
+        const parts = String(data.date).split('-').map(Number);
+        return parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date(data.date);
+      })() : new Date(),
       category: data.category || '',
       notes: data.notes || '',
       documentType: (data.documentType === 'receipt' || data.documentType === 'sales_report') ? data.documentType : 'receipt',

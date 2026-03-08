@@ -9,6 +9,7 @@ import { LanguageContext } from '../contexts/LanguageContext';
 import { CATEGORIES, getCategoryColor as getColorFromCategories } from '../components/categories';
 import { createAuthenticatedAxios, getAccessToken } from '../services/authService';
 import { CACHE_KEYS } from '../services/cacheService';
+import DatePickerModal from '../components/DatePickerModal';
 import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 
@@ -61,7 +62,17 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
     const [editCategory, setEditCategory] = useState(expense.category);
     const [editPaymentMethod, setEditPaymentMethod] = useState<'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK'>(expense.paymentMethod || 'CREDIT_CARD');
     const [editDescription, setEditDescription] = useState(expense.notes || '');
-    const savedValues = useRef({ category: expense.category, paymentMethod: expense.paymentMethod || 'CREDIT_CARD', notes: expense.notes || '' });
+    const initialDate = (() => {
+        const monthAbbrs: Record<string, number> = {
+            JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+            JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+        };
+        const monthIndex = monthAbbrs[expense.date?.toUpperCase()] ?? 0;
+        return new Date(new Date().getFullYear(), monthIndex, expense.day || 1);
+    })();
+    const [editDate, setEditDate] = useState(initialDate);
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const savedValues = useRef({ category: expense.category, paymentMethod: expense.paymentMethod || 'CREDIT_CARD', notes: expense.notes || '', date: initialDate.getTime() });
     const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
     const [showScanScreen, setShowScanScreen] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -97,13 +108,18 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
 
     const hasChanges = editCategory !== savedValues.current.category ||
         editPaymentMethod !== savedValues.current.paymentMethod ||
-        editDescription !== savedValues.current.notes;
+        editDescription !== savedValues.current.notes ||
+        editDate.getTime() !== savedValues.current.date;
 
     const formatDate = (dateStr: string, day: number): string => {
         const monthKeys = ['january', 'february', 'march', 'april', 'may', 'june',
             'july', 'august', 'september', 'october', 'november', 'december'];
-        const monthIndex = dateStr === 'JAN' ? 0 : dateStr === 'FEB' ? 1 : 0; // Simplified
-        const date = new Date(2026, monthIndex, day);
+        const monthAbbrs: Record<string, number> = {
+            JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+            JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+        };
+        const monthIndex = monthAbbrs[dateStr.toUpperCase()] ?? 0;
+        const date = new Date(new Date().getFullYear(), monthIndex, day);
         return `${t('month.' + monthKeys[monthIndex])} ${day}, ${date.getFullYear()}`;
     };
 
@@ -195,6 +211,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
             const updatePayload: any = {
                 paymentMethod: editPaymentMethod,
                 notes: editDescription,
+                expenseDate: editDate.toISOString(),
             };
 
             // If category changed, send categoryName (server resolves to categoryKey)
@@ -217,7 +234,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                 );
             }
 
-            savedValues.current = { category: editCategory, paymentMethod: editPaymentMethod, notes: editDescription };
+            savedValues.current = { category: editCategory, paymentMethod: editPaymentMethod, notes: editDescription, date: editDate.getTime() };
             setShowEditModal(false);
             setShowCategoryPicker(false);
             setShowPaymentPicker(false);
@@ -319,7 +336,11 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
 
 
                         <Text style={styles.description}>{editDescription}</Text>
-                                                <Text style={styles.expenseDate}>{formatDate(expense.date, expense.day)}</Text>
+                                                <Text style={styles.expenseDate}>{(() => {
+                                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                            return `${months[editDate.getMonth()]} ${editDate.getDate()}, ${editDate.getFullYear()}`;
+                                        })()}</Text>
                     </View>
 
                     {/* Receipt Section */}
@@ -422,7 +443,7 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
 
                 {/* Edit Expense Modal */}
                 <Modal
-                    visible={showEditModal}
+                    visible={showEditModal && !showDatePicker}
                     transparent={true}
                     animationType="slide"
                     onRequestClose={() => setShowEditModal(false)}
@@ -614,6 +635,24 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                                 )}
                             </View>
 
+                            {/* Date Picker */}
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>{t('details.date') || 'Date'}</Text>
+                                <TouchableOpacity
+                                    style={styles.categoryPickerButton}
+                                    onPress={() => setShowDatePicker(true)}
+                                >
+                                    <Text style={styles.categoryPickerText}>
+                                        {(() => {
+                                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                                           'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                            return `${months[editDate.getMonth()]} ${editDate.getDate()}, ${editDate.getFullYear()}`;
+                                        })()}
+                                    </Text>
+                                    <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
                             <View style={styles.inputGroup}>
                                 <Text style={styles.inputLabel}>{t('details.note')}</Text>
                                 <TextInput
@@ -634,6 +673,13 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                         </Pressable>
                     </View>
                 </Modal>
+
+                <DatePickerModal
+                    visible={showDatePicker}
+                    selectedDate={editDate}
+                    onDateChange={(date) => setEditDate(date)}
+                    onClose={() => setShowDatePicker(false)}
+                />
 
                 {/* Fullscreen Image Viewer */}
                 <Modal

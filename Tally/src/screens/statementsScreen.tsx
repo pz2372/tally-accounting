@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Dimensions, Modal, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Image, Dimensions, Modal, StatusBar, TextInput, Pressable, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -9,6 +9,7 @@ import { LanguageContext } from '../contexts/LanguageContext';
 import { getCachedData, CACHE_KEYS } from '../services/cacheService';
 import { getAccessToken, refreshAccessToken } from '../services/authService';
 import { useSwipeBack } from '../hooks/useSwipeBack';
+import DatePickerModal from '../components/DatePickerModal';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
@@ -40,6 +41,7 @@ interface Statement {
   discountsCents?: number;
   refundsCents?: number;
   notes?: string;
+  businessDate?: string; // Raw ISO date string for sales reports
 }
 
 interface StatementTransactionItem {
@@ -66,6 +68,19 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [transactionFilter, setTransactionFilter] = useState<'all' | 'unmatched'>('all');
   const [isDeletingSalesReport, setIsDeletingSalesReport] = useState(false);
+  const [isDeletingStatement, setIsDeletingStatement] = useState(false);
+  const [listImageHeaders, setListImageHeaders] = useState<Record<string, string> | null>(null);
+  const [listImageViewerUri, setListImageViewerUri] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editDate, setEditDate] = useState(new Date());
+  const [editGrossSales, setEditGrossSales] = useState('');
+  const [editNetSales, setEditNetSales] = useState('');
+  const [editCash, setEditCash] = useState('');
+  const [editTips, setEditTips] = useState('');
+  const [editTax, setEditTax] = useState('');
+  const [editDiscounts, setEditDiscounts] = useState('');
   
   // Check if selected month is current month or later
   const isCurrentOrFutureMonth = () => {
@@ -111,6 +126,11 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
         return;
       }
 
+      // Store headers for list thumbnail images
+      if (token && firstOrgId) {
+        setListImageHeaders({ Authorization: `Bearer ${token}`, 'X-Org-Id': firstOrgId });
+      }
+
       try {
         const [statementsResponse, salesResponse] = await Promise.all([
           axios.get(
@@ -141,7 +161,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
           const transformedStatements: Statement[] = statementsResponse.data.statements.map((stmt: any) => ({
             id: stmt.id,
             name: stmt.provider || 'Bank Statement',
-            period: stmt.statementMonth || '',
+            period: stmt.statementMonth ? stmt.statementMonth.split('-').reverse().join('-') : '',
             uploadDate: new Date(stmt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             totalTransactions: stmt._count?.transactions || 0,
             matchedTransactions: stmt.matchedTransactions || 0,
@@ -149,7 +169,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
             totalAmount: 0,
             type: 'statement' as const,
             sourceType: stmt.sourceType || 'csv',
-            status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing'
+            status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing',
+            fileUrl: stmt.fileUrl || undefined,
           }));
           transformedDocuments.push(...transformedStatements);
         }
@@ -183,6 +204,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               discountsCents: report.discountsCents ?? undefined,
               refundsCents: report.refundsCents ?? undefined,
               notes: report.notes || undefined,
+              businessDate: report.businessDate,
             }));
           transformedDocuments.push(...transformedSales);
         }
@@ -228,7 +250,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               const transformedStatements: Statement[] = retryStatementsResponse.data.statements.map((stmt: any) => ({
                 id: stmt.id,
                 name: stmt.provider || 'Bank Statement',
-                period: stmt.statementMonth || '',
+                period: stmt.statementMonth ? stmt.statementMonth.split('-').reverse().join('-') : '',
                 uploadDate: new Date(stmt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                 totalTransactions: stmt._count?.transactions || 0,
                 matchedTransactions: stmt.matchedTransactions || 0,
@@ -236,7 +258,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                 totalAmount: 0,
                 type: 'statement' as const,
                 sourceType: stmt.sourceType || 'csv',
-                status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing'
+                status: stmt.processingStatus === 'COMPLETED' ? 'processed' : stmt.processingStatus === 'FAILED' ? 'error' : 'processing',
+                fileUrl: stmt.fileUrl || undefined,
               }));
               transformedDocuments.push(...transformedStatements);
             }
@@ -269,6 +292,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                   discountsCents: report.discountsCents ?? undefined,
                   refundsCents: report.refundsCents ?? undefined,
                   notes: report.notes || undefined,
+                  businessDate: report.businessDate,
                 }));
               transformedDocuments.push(...transformedSales);
             }
@@ -285,7 +309,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to load statements. Please try again.');
+      Alert.alert(t('common.error') || 'Error', t('statements.loadError'));
       // If there's an error fetching, still show cached data if available
       let fallbackOrgId = selectedOrgId;
       if (!fallbackOrgId) {
@@ -335,13 +359,13 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
   const getStatusText = (status: Statement['status']) => {
     switch (status) {
       case 'processed':
-        return 'Processed';
+        return t('statements.processed');
       case 'processing':
-        return 'Processing...';
+        return t('statements.processing');
       case 'error':
-        return 'Error';
+        return t('statements.error');
       default:
-        return 'Unknown';
+        return t('statements.unknown');
     }
   };
   // Filter statements based on selected type
@@ -384,7 +408,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
         setStatementTransactions(response.data.transactions || []);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to load transactions. Please try again.');
+      Alert.alert(t('common.error') || 'Error', t('statements.transactionLoadError'));
     } finally {
       setIsLoadingTransactions(false);
     }
@@ -394,6 +418,31 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
     setSelectedStatement(statement);
     setTransactionFilter('all');
     loadStatementTransactions(statement.id);
+  };
+
+  const handleOpenStatementFile = async (statementId: string) => {
+    try {
+      const token = await getAccessToken();
+      let orgId = selectedOrgId;
+      if (!orgId) {
+        const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+        if (userDataStr) {
+          const userData = JSON.parse(userDataStr);
+          orgId = userData?.organizations?.[0]?.id;
+        }
+      }
+      const response = await axios.get(`${API_URL}/api/statements/${statementId}/file-url`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Org-Id': orgId || '',
+        },
+      });
+      if (response.data.success && response.data.url) {
+        await Linking.openURL(response.data.url);
+      }
+    } catch {
+      Alert.alert(t('common.error') || 'Error', t('statements.fileNotAvailable') || 'File not available');
+    }
   };
 
   const handleSalesReportPress = async (statement: Statement) => {
@@ -486,6 +535,169 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
     );
   };
 
+  const handleDeleteStatement = () => {
+    if (!selectedStatement) return;
+    Alert.alert(
+      t('statements.deleteTitle') || 'Delete Statement',
+      t('statements.deleteConfirm') || 'Are you sure you want to delete this statement and all its transactions?',
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeletingStatement(true);
+            try {
+              const token = await getAccessToken();
+              let orgId = selectedOrgId;
+              if (!orgId) {
+                const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+                if (userDataStr) {
+                  const userData = JSON.parse(userDataStr);
+                  orgId = userData?.organizations?.[0]?.id;
+                }
+              }
+              await axios.delete(
+                `${API_URL}/api/statements/${selectedStatement.id}`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-Org-Id': orgId || '',
+                  },
+                }
+              );
+
+              // Clear statements cache for this month
+              if (orgId) {
+                try {
+                  const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
+                  await AsyncStorage.removeItem(`${CACHE_KEYS.ORG_STATEMENTS}${orgId}_${monthKey}`);
+                  await AsyncStorage.removeItem('@home_metrics');
+                } catch {
+                  // non-critical
+                }
+              }
+
+              handleBackFromDetail();
+              loadStatements();
+              onDataChanged?.();
+            } catch {
+              Alert.alert(t('common.error'), t('statements.deleteError') || 'Failed to delete statement');
+            } finally {
+              setIsDeletingStatement(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const centsToDollarStr = (cents?: number) => {
+    if (cents === undefined || cents === null) return '';
+    return (cents / 100).toFixed(2);
+  };
+
+  const handleOpenEdit = () => {
+    if (!selectedSalesReport) return;
+    // Use raw businessDate ISO string for accurate date
+    if (selectedSalesReport.businessDate) {
+      const [y, m, d] = selectedSalesReport.businessDate.split('T')[0].split('-').map(Number);
+      setEditDate(new Date(y, m - 1, d));
+    } else {
+      setEditDate(new Date());
+    }
+    setEditGrossSales(centsToDollarStr(selectedSalesReport.grossSalesCents));
+    setEditNetSales(centsToDollarStr(selectedSalesReport.netSalesCents));
+    setEditCash(centsToDollarStr(selectedSalesReport.cashCents));
+    setEditTips(centsToDollarStr(selectedSalesReport.tipsCents));
+    setEditTax(centsToDollarStr(selectedSalesReport.taxCents));
+    setEditDiscounts(centsToDollarStr(selectedSalesReport.discountsCents));
+    setShowEditModal(true);
+  };
+
+  const dollarsToCents = (val: string): number | undefined => {
+    if (!val || val.trim() === '') return undefined;
+    const num = parseFloat(val);
+    if (isNaN(num)) return undefined;
+    return Math.round(num * 100);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedSalesReport) return;
+    setIsSavingEdit(true);
+    try {
+      const token = await getAccessToken();
+      let orgId = selectedOrgId;
+      if (!orgId) {
+        const userDataStr = await AsyncStorage.getItem(CACHE_KEYS.USER);
+        if (userDataStr) {
+          const userData = JSON.parse(userDataStr);
+          orgId = userData?.organizations?.[0]?.id;
+        }
+      }
+
+      const body: any = {};
+      const grossCents = dollarsToCents(editGrossSales);
+      const netCents = dollarsToCents(editNetSales);
+      const cashCents = dollarsToCents(editCash);
+      const tipsCents = dollarsToCents(editTips);
+      const taxCents = dollarsToCents(editTax);
+      const discountsCents = dollarsToCents(editDiscounts);
+
+      if (grossCents !== undefined) body.grossSalesCents = grossCents;
+      if (netCents !== undefined) body.netSalesCents = netCents;
+      if (cashCents !== undefined) body.cashCents = cashCents;
+      if (tipsCents !== undefined) body.tipsCents = tipsCents;
+      if (taxCents !== undefined) body.taxCents = taxCents;
+      if (discountsCents !== undefined) body.discountsCents = discountsCents;
+
+      // Send business date
+      body.businessDate = editDate.toISOString();
+
+      await axios.put(
+        `${API_URL}/api/sales-reports/${selectedSalesReport.id}`,
+        body,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Org-Id': orgId || '',
+          },
+        }
+      );
+
+      // Update cache
+      if (orgId) {
+        try {
+          const salesCacheKey = `${CACHE_KEYS.ORG_SALES_REPORTS}${orgId}`;
+          const raw = await AsyncStorage.getItem(salesCacheKey);
+          if (raw) {
+            const reports = JSON.parse(raw);
+            const updated = reports.map((r: any) =>
+              r.id === selectedSalesReport.id
+                ? { ...r, ...body }
+                : r
+            );
+            await AsyncStorage.setItem(salesCacheKey, JSON.stringify(updated));
+          }
+          const monthKey = `${selectedMonth.getFullYear()}-${String(selectedMonth.getMonth() + 1).padStart(2, '0')}`;
+          await AsyncStorage.removeItem(`${CACHE_KEYS.ORG_STATEMENTS}${orgId}_${monthKey}`);
+          await AsyncStorage.removeItem('@home_metrics');
+        } catch {
+          // non-critical
+        }
+      }
+
+      setShowEditModal(false);
+      handleBackFromDetail();
+      loadStatements();
+      onDataChanged?.();
+    } catch {
+      Alert.alert(t('common.error'), t('salesReport.editError'));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const swipeHandlers = useSwipeBack(selectedStatement || selectedSalesReport ? handleBackFromDetail : onBack);
 
   // Statement detail view
@@ -498,7 +710,13 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{selectedStatement.name}</Text>
-            <View style={{ width: 32 }} />
+            <TouchableOpacity onPress={handleDeleteStatement} style={styles.headerActionButton} disabled={isDeletingStatement}>
+              {isDeletingStatement ? (
+                <ActivityIndicator size="small" color={colors.red} />
+              ) : (
+                <Ionicons name="trash-outline" size={22} color={colors.red} />
+              )}
+            </TouchableOpacity>
           </View>
 
           {/* Statement summary */}
@@ -507,17 +725,17 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
             <View style={styles.detailStats}>
               <View style={styles.detailStat}>
                 <Text style={styles.detailStatValue}>{selectedStatement.totalTransactions}</Text>
-                <Text style={styles.detailStatLabel}>Total</Text>
+                <Text style={styles.detailStatLabel}>{t('statements.total')}</Text>
               </View>
               <View style={styles.detailStat}>
                 <Text style={[styles.detailStatValue, { color: colors.primary }]}>{selectedStatement.matchedTransactions}</Text>
-                <Text style={styles.detailStatLabel}>Matched</Text>
+                <Text style={styles.detailStatLabel}>{t('statements.matchedLabel')}</Text>
               </View>
               <View style={styles.detailStat}>
                 <Text style={[styles.detailStatValue, { color: selectedStatement.unmatchedTransactions > 0 ? colors.red : colors.textPrimary }]}>
                   {selectedStatement.unmatchedTransactions}
                 </Text>
-                <Text style={styles.detailStatLabel}>Unmatched</Text>
+                <Text style={styles.detailStatLabel}>{t('statements.unmatched')}</Text>
               </View>
             </View>
           </View>
@@ -532,7 +750,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               }}
             >
               <Text style={[styles.filterButtonText, transactionFilter === 'all' && styles.filterButtonTextActive]}>
-                All
+                {t('statements.all')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -543,7 +761,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               }}
             >
               <Text style={[styles.filterButtonText, transactionFilter === 'unmatched' && styles.filterButtonTextActive]}>
-                Unmatched
+                {t('statements.unmatched')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -557,7 +775,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               <View style={styles.emptyContainer}>
                 <Ionicons name="checkmark-circle-outline" size={48} color={colors.primary} />
                 <Text style={styles.emptyText}>
-                  {transactionFilter === 'unmatched' ? 'All transactions matched!' : 'No transactions found'}
+                  {transactionFilter === 'unmatched' ? t('statements.allMatched') : t('statements.noTransactions')}
                 </Text>
               </View>
             ) : (
@@ -610,13 +828,13 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
     };
 
     const salesFields = [
-      { label: 'Gross Sales', value: selectedSalesReport.grossSalesCents },
-      { label: 'Net Sales', value: selectedSalesReport.netSalesCents },
-      { label: 'Cash', value: selectedSalesReport.cashCents },
-      { label: 'Tips', value: selectedSalesReport.tipsCents },
-      { label: 'Tax', value: selectedSalesReport.taxCents },
-      { label: 'Discounts', value: selectedSalesReport.discountsCents },
-      { label: 'Refunds', value: selectedSalesReport.refundsCents },
+      { label: t('salesReport.grossSales'), value: selectedSalesReport.grossSalesCents },
+      { label: t('salesReport.netSales'), value: selectedSalesReport.netSalesCents },
+      { label: t('statements.cash'), value: selectedSalesReport.cashCents },
+      { label: t('salesReport.tips'), value: selectedSalesReport.tipsCents },
+      { label: t('salesReport.tax'), value: selectedSalesReport.taxCents },
+      { label: t('salesReport.discounts'), value: selectedSalesReport.discountsCents },
+      { label: t('salesReport.refunds'), value: selectedSalesReport.refundsCents },
     ].filter(f => f.value !== undefined && f.value !== null);
 
     return (
@@ -626,14 +844,19 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
             <TouchableOpacity onPress={handleBackFromDetail} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Sales Report</Text>
-            <TouchableOpacity onPress={handleDeleteSalesReport} style={styles.backButton} disabled={isDeletingSalesReport}>
-              {isDeletingSalesReport ? (
-                <ActivityIndicator size="small" color={colors.red} />
-              ) : (
-                <Ionicons name="trash-outline" size={22} color={colors.red} />
-              )}
-            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{t('statements.salesReport')}</Text>
+            <View style={styles.headerActions}>
+              <TouchableOpacity onPress={handleOpenEdit} style={styles.headerActionButton}>
+                <Ionicons name="create-outline" size={22} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleDeleteSalesReport} style={styles.headerActionButton} disabled={isDeletingSalesReport}>
+                {isDeletingSalesReport ? (
+                  <ActivityIndicator size="small" color={colors.red} />
+                ) : (
+                  <Ionicons name="trash-outline" size={22} color={colors.red} />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -654,14 +877,14 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                 />
                 <View style={styles.tapToZoomBadge}>
                   <Ionicons name="expand-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.tapToZoomText}>Tap to zoom</Text>
+                  <Text style={styles.tapToZoomText}>{t('statements.tapToZoom')}</Text>
                 </View>
               </TouchableOpacity>
             )}
 
             {/* Date */}
             <View style={styles.salesInfoCard}>
-              <Text style={styles.salesInfoLabel}>Business Date</Text>
+              <Text style={styles.salesInfoLabel}>{t('salesReport.businessDate')}</Text>
               <Text style={styles.salesInfoValue}>{selectedSalesReport.period}</Text>
             </View>
 
@@ -680,12 +903,140 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
             {/* Notes */}
             {selectedSalesReport.notes && (
               <View style={styles.salesInfoCard}>
-                <Text style={styles.salesInfoLabel}>Notes</Text>
+                <Text style={styles.salesInfoLabel}>{t('statements.notes')}</Text>
                 <Text style={styles.salesInfoValue}>{selectedSalesReport.notes}</Text>
               </View>
             )}
           </ScrollView>
         </View>
+
+        {/* Edit modal */}
+        <Modal
+          visible={showEditModal && !showDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowEditModal(false)}
+        >
+          <View style={styles.editModalOverlay}>
+            <Pressable style={styles.editModalContent}>
+              <View style={styles.editModalHeader}>
+                <Text style={styles.editModalTitle}>{t('salesReport.editReport')}</Text>
+                <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Date Picker */}
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.businessDate')}</Text>
+                  <TouchableOpacity
+                    style={styles.editDateButton}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <Text style={styles.editDateButtonText}>
+                      {(() => {
+                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        return `${months[editDate.getMonth()]} ${editDate.getDate()}, ${editDate.getFullYear()}`;
+                      })()}
+                    </Text>
+                    <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.grossSales')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editGrossSales}
+                    onChangeText={setEditGrossSales}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.netSales')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editNetSales}
+                    onChangeText={setEditNetSales}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.cashRevenue')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editCash}
+                    onChangeText={setEditCash}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.tips')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editTips}
+                    onChangeText={setEditTips}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.tax')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editTax}
+                    onChangeText={setEditTax}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.discounts')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editDiscounts}
+                    onChangeText={setEditDiscounts}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.editSaveButton, isSavingEdit && { opacity: 0.6 }]}
+                  onPress={handleSaveEdit}
+                  disabled={isSavingEdit}
+                >
+                  <Text style={styles.editSaveButtonText}>
+                    {isSavingEdit ? t('details.saving') || 'Saving...' : t('common.saveChanges') || 'Save Changes'}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </Pressable>
+          </View>
+        </Modal>
+
+        <DatePickerModal
+          visible={showDatePicker}
+          selectedDate={editDate}
+          onDateChange={(date) => setEditDate(date)}
+          onClose={() => setShowDatePicker(false)}
+        />
 
         {/* Fullscreen image viewer with pinch-to-zoom */}
         {selectedSalesReport.fileUrl && (
@@ -788,7 +1139,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               styles.filterButtonText,
               selectedFilter === 'all' && styles.filterButtonTextActive,
             ]}>
-              All
+              {t('statements.all')}
             </Text>
           </TouchableOpacity>
           
@@ -803,10 +1154,10 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               styles.filterButtonText,
               selectedFilter === 'statement' && styles.filterButtonTextActive,
             ]}>
-              Statements
+              {t('statements.statementsFilter')}
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
               styles.filterButton,
@@ -818,7 +1169,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               styles.filterButtonText,
               selectedFilter === 'sales' && styles.filterButtonTextActive,
             ]}>
-              Sales
+              {t('statements.salesFilter')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -827,19 +1178,19 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading statements...</Text>
+              <Text style={styles.loadingText}>{t('statements.loading')}</Text>
             </View>
           ) : statements.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="document-outline" size={64} color={colors.textTertiary} />
-              <Text style={styles.emptyText}>No statements found</Text>
-              <Text style={styles.emptySubtext}>Upload a statement to get started</Text>
+              <Text style={styles.emptyText}>{t('statements.noStatements')}</Text>
+              <Text style={styles.emptySubtext}>{t('statements.uploadToStart')}</Text>
             </View>
           ) : filteredStatements.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="document-text-outline" size={64} color={colors.textSecondary} />
-              <Text style={styles.emptyText}>No {selectedFilter === 'all' ? 'documents' : selectedFilter === 'statement' ? 'statements' : 'sales reports'} found</Text>
-              <Text style={styles.emptySubtext}>Try selecting a different filter or month.</Text>
+              <Text style={styles.emptyText}>{selectedFilter === 'all' ? t('statements.noDocuments') : selectedFilter === 'statement' ? t('statements.noStatements') : t('statements.noSalesReports')}</Text>
+              <Text style={styles.emptySubtext}>{t('statements.tryDifferentFilter')}</Text>
             </View>
           ) : (
             <View style={styles.statementsList}>
@@ -857,31 +1208,77 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                     }
                   }}
                 >
-                  <View style={styles.statementIconContainer}>
-                    <Ionicons
-                      name={getFileIcon(statement.type) as any}
-                      size={28}
-                      color={colors.primary}
-                    />
-                  </View>
+                  {statement.type === 'sales' && listImageHeaders ? (
+                    <TouchableOpacity
+                      style={styles.statementThumbnailContainer}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setListImageViewerUri(`${API_URL}/api/sales-reports/${statement.id}/image`);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{
+                          uri: `${API_URL}/api/sales-reports/${statement.id}/image`,
+                          headers: listImageHeaders,
+                        }}
+                        style={styles.statementThumbnail}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  ) : statement.type === 'statement' && statement.fileUrl ? (
+                    <TouchableOpacity
+                      style={styles.statementFileThumbnail}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleOpenStatementFile(statement.id);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={statement.sourceType === 'pdf' ? 'document-text' : 'document'}
+                        size={24}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.statementFileLabel}>
+                        {(statement.sourceType || 'pdf').toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.statementIconContainer}>
+                      <Ionicons
+                        name={getFileIcon(statement.type) as any}
+                        size={28}
+                        color={colors.primary}
+                      />
+                    </View>
+                  )}
                   <View style={styles.statementContent}>
                     <Text style={styles.statementName}>{statement.name}</Text>
-                    <Text style={styles.statementDate}>{statement.uploadDate}</Text>
+                    <Text style={styles.statementDate}>
+                      {statement.type === 'sales' ? statement.period : statement.uploadDate}
+                    </Text>
                   </View>
                   <View style={styles.statementRight}>
-                    <View style={[styles.fileTypeBadge, statement.sourceType === 'plaid' && styles.plaidBadge]}>
-                      <Text style={styles.fileTypeText}>
-                        {statement.sourceType === 'plaid' ? 'PLAID' : statement.type === 'statement' ? 'STATEMENT' : 'SALES'}
+                    {statement.type === 'sales' && statement.netSalesCents !== undefined ? (
+                      <Text style={styles.netSalesText}>
+                        ${(statement.netSalesCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </Text>
-                    </View>
+                    ) : (
+                      <View style={[styles.fileTypeBadge, statement.sourceType === 'plaid' && styles.plaidBadge]}>
+                        <Text style={styles.fileTypeText}>
+                          {statement.sourceType === 'plaid' ? 'PLAID' : 'STATEMENT'}
+                        </Text>
+                      </View>
+                    )}
                     {statement.type === 'statement' && (
                       <View>
                         <Text style={styles.statementInfo}>
-                          {statement.matchedTransactions}/{statement.totalTransactions} matched
+                          {statement.matchedTransactions}/{statement.totalTransactions} {t('statements.matched')}
                         </Text>
                         {statement.unmatchedTransactions > 0 && (
                           <Text style={[styles.statementInfo, { color: colors.red }]}>
-                            {statement.unmatchedTransactions} unmatched
+                            {statement.unmatchedTransactions} {t('statements.unmatched').toLowerCase()}
                           </Text>
                         )}
                       </View>
@@ -893,6 +1290,45 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
           )}
         </ScrollView>
       </View>
+
+      {/* List-level fullscreen image viewer */}
+      {listImageViewerUri && listImageHeaders && (
+        <Modal
+          visible={!!listImageViewerUri}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setListImageViewerUri(null)}
+        >
+          <View style={styles.imageViewerOverlay}>
+            <TouchableOpacity
+              style={styles.imageViewerClose}
+              onPress={() => setListImageViewerUri(null)}
+            >
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+
+            <ScrollView
+              style={styles.imageViewerScroll}
+              contentContainerStyle={styles.imageViewerContent}
+              maximumZoomScale={5}
+              minimumZoomScale={1}
+              bouncesZoom
+              centerContent
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+            >
+              <Image
+                source={{
+                  uri: listImageViewerUri,
+                  headers: listImageHeaders,
+                }}
+                style={styles.imageViewerImage}
+                resizeMode="contain"
+              />
+            </ScrollView>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -1014,6 +1450,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  statementThumbnailContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
+    overflow: 'hidden',
+    backgroundColor: '#EFF6FF',
+  },
+  statementThumbnail: {
+    width: 48,
+    height: 48,
+  },
+  statementFileThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statementFileLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 2,
+  },
   statementContent: {
     flex: 1,
   },
@@ -1031,6 +1492,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: colors.surface,
+  },
+  netSalesText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   statementName: {
     fontSize: 15,
@@ -1098,9 +1564,10 @@ const styles = StyleSheet.create({
   },
   detailStats: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
   },
   detailStat: {
+    width: '33.33%',
     alignItems: 'center',
   },
   detailStatValue: {
@@ -1286,5 +1753,84 @@ const styles = StyleSheet.create({
   imageViewerImage: {
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headerActionButton: {
+    padding: spacing.xs,
+  },
+  editModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  editModalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xxl,
+    width: '100%',
+    maxWidth: 400,
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  editModalTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  editInputGroup: {
+    marginBottom: spacing.lg,
+  },
+  editInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  editInput: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  editDateButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  editDateButtonText: {
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  editSaveButton: {
+    backgroundColor: '#10B981',
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  editSaveButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.surface,
   },
 });

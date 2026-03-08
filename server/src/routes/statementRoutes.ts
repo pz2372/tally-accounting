@@ -15,6 +15,8 @@ router.post('/', statementController.uploadStatement);
 router.get('/', statementController.getAllStatements);
 router.get('/unmatched', statementController.getUnmatchedTransactions);
 router.get('/:id', statementController.getStatementById);
+router.get('/:id/file', statementController.getStatementFile);
+router.get('/:id/file-url', statementController.getStatementFileUrl);
 router.get('/:id/transactions', statementController.getStatementTransactions);
 router.delete('/:id', statementController.deleteStatement);
 

@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthenticatedRequest } from '../types/http';
-import { uploadToS3 } from '../services/s3Service';
+import { uploadToS3, extractS3Key, getS3Object, getPresignedUrl } from '../services/s3Service';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
@@ -407,6 +407,79 @@ export const deleteStatement: Handler = async (req, res) => {
       success: false,
       error: 'Internal server error'
     });
+  }
+};
+
+// Get statement file (PDF/CSV) from S3
+export const getStatementFile: Handler = async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    const { id } = req.params;
+
+    if (!orgId) {
+      return res.status(403).json({ success: false, error: 'Organization context required' });
+    }
+
+    const statement = await prisma.statement.findFirst({
+      where: { id, orgId },
+      select: { fileUrl: true, sourceType: true },
+    });
+
+    if (!statement || !statement.fileUrl) {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+
+    const s3Key = extractS3Key(statement.fileUrl);
+    if (!s3Key) {
+      return res.status(404).json({ success: false, error: 'Invalid file reference' });
+    }
+
+    const s3Response = await getS3Object(s3Key);
+
+    const contentType = statement.sourceType === 'pdf' ? 'application/pdf' : 'text/csv';
+    res.setHeader('Content-Type', contentType);
+    if (s3Response.ContentLength) {
+      res.setHeader('Content-Length', s3Response.ContentLength);
+    }
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    const stream = s3Response.Body as NodeJS.ReadableStream;
+    stream.pipe(res);
+  } catch (error) {
+    console.error('getStatementFile error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load file' });
+  }
+};
+
+// Get a presigned URL for the statement file (for opening in system viewer)
+export const getStatementFileUrl: Handler = async (req, res) => {
+  try {
+    const { orgId } = req.user;
+    const { id } = req.params;
+
+    if (!orgId) {
+      return res.status(403).json({ success: false, error: 'Organization context required' });
+    }
+
+    const statement = await prisma.statement.findFirst({
+      where: { id, orgId },
+      select: { fileUrl: true, sourceType: true },
+    });
+
+    if (!statement || !statement.fileUrl) {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
+
+    const s3Key = extractS3Key(statement.fileUrl);
+    if (!s3Key) {
+      return res.status(404).json({ success: false, error: 'Invalid file reference' });
+    }
+
+    const url = await getPresignedUrl(s3Key, 3600);
+    res.json({ success: true, url, sourceType: statement.sourceType });
+  } catch (error) {
+    console.error('getStatementFileUrl error:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate file URL' });
   }
 };
 

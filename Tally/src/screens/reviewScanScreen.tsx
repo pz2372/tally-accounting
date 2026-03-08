@@ -183,42 +183,6 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       // Prepare upload parameters
       const paymentMethodApi = PAYMENT_METHOD_MAP[paymentMethod] || 'CREDIT_CARD';
 
-      // TEMP DIAGNOSTIC — remove after debugging TestFlight issue
-      const debugInfo: string[] = [];
-      try {
-        const rawUri = imageUri;
-        const prefixedUri = rawUri.startsWith('file://') ? rawUri : `file://${rawUri}`;
-        debugInfo.push(`rawUri: ${rawUri}`);
-        debugInfo.push(`prefixedUri: ${prefixedUri}`);
-        debugInfo.push(`cacheDir: ${FileSystem.cacheDirectory}`);
-        debugInfo.push(`docDir: ${FileSystem.documentDirectory}`);
-        debugInfo.push(`accessToken: ${accessToken ? 'yes(' + accessToken.length + ')' : 'NO'}`);
-        debugInfo.push(`orgId: ${orgId}`);
-        debugInfo.push(`category: ${selectedCategory}`);
-        debugInfo.push(`amount: ${amount}`);
-        debugInfo.push(`docType: ${documentType}`);
-        debugInfo.push(`endpoint: ${API_URL}/api/expenses/with-receipt`);
-
-        // Check file with raw URI
-        try {
-          const rawInfo = await FileSystem.getInfoAsync(rawUri);
-          debugInfo.push(`rawExists: ${rawInfo.exists}, size: ${(rawInfo as any).size || 'n/a'}`);
-        } catch (e: any) {
-          debugInfo.push(`rawCheck err: ${e.message}`);
-        }
-
-        // Check file with prefixed URI
-        try {
-          const prefInfo = await FileSystem.getInfoAsync(prefixedUri);
-          debugInfo.push(`prefixedExists: ${prefInfo.exists}, size: ${(prefInfo as any).size || 'n/a'}`);
-        } catch (e: any) {
-          debugInfo.push(`prefixedCheck err: ${e.message}`);
-        }
-      } catch (e: any) {
-        debugInfo.push(`diagnostic err: ${e.message}`);
-      }
-      Alert.alert('DEBUG SAVE', debugInfo.join('\n'));
-
       // Prepare file URI with file:// prefix for iOS
       let fileUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
       const filename = fileUri.split('/').pop() || 'scan.jpg';
