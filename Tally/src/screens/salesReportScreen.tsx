@@ -178,11 +178,11 @@ export default function SalesReportScreen({ onBack, selectedOrgId }: SalesReport
               <View style={styles.netProfitCard}>
                 <View style={styles.netProfitContent}>
                   <Text style={styles.netProfitLabel}>{t('salesReport.netProfit')}</Text>
-                  <Text style={styles.netProfitValue}>
+                  <Text style={[styles.netProfitValue, { color: summary.netProfitCents < 0 ? '#EF4444' : '#31cc5f' }]}>
                     {formatDollars(summary.netProfitCents)}
                   </Text>
                   {summary.netSalesCents > 0 && (
-                    <Text style={styles.netProfitPercentage}>
+                    <Text style={[styles.netProfitPercentage, summary.netProfitCents < 0 && { color: '#EF4444' }]}>
                       {((summary.netProfitCents / summary.netSalesCents) * 100).toFixed(1)}%
                     </Text>
                   )}
@@ -238,7 +238,7 @@ export default function SalesReportScreen({ onBack, selectedOrgId }: SalesReport
                       return (
                         <View key={index}>
                           <View style={styles.categoryRow}>
-                            <Text style={styles.categoryName}>{category.name}</Text>
+                            <Text style={styles.categoryName}>{t('categories.' + category.name.toLowerCase()) || category.name}</Text>
                             <View style={styles.categoryRight}>
                               <Text style={styles.categoryAmount}>
                                 {formatDollars(category.amountCents)}

@@ -59,11 +59,16 @@ export default function DatePickerModal({
     }
   };
 
+  const parseLocalDate = (dateStr: string): Date => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
+
   const handleDone = () => {
     if (rangeStart && rangeEnd) {
       // Two dates selected: range filter
-      const start = new Date(rangeStart);
-      const end = new Date(rangeEnd);
+      const start = parseLocalDate(rangeStart);
+      const end = parseLocalDate(rangeEnd);
       if (onDateRangeChange) {
         onDateRangeChange({ startDate: start, endDate: end, mode: 'range' });
       } else {
@@ -71,8 +76,7 @@ export default function DatePickerModal({
       }
     } else if (rangeStart) {
       // One date selected: single day filter
-      const date = new Date(rangeStart);
-      onDateChange(date);
+      onDateChange(parseLocalDate(rangeStart));
     }
     setRangeStart(null);
     setRangeEnd(null);
@@ -126,11 +130,11 @@ export default function DatePickerModal({
       return t('datePicker.selectStart') || 'Tap a date to select';
     }
     if (!rangeEnd) {
-      const startFormatted = new Date(rangeStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const startFormatted = parseLocalDate(rangeStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       return `${startFormatted} — ${t('datePicker.selectEnd') || 'tap another for range'}`;
     }
-    const startFormatted = new Date(rangeStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const endFormatted = new Date(rangeEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const startFormatted = parseLocalDate(rangeStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const endFormatted = parseLocalDate(rangeEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return `${startFormatted} — ${endFormatted}`;
   };
 

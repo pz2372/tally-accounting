@@ -190,72 +190,77 @@ export default function App() {
             <LoginScreen onLogin={handleLogin} />
             {showLanding && <LandingScreen onFinish={handleLandingFinish} />}
           </>
-        ) : selectedExpense ? (
-          <ExpenseDetailsScreen
-            expense={selectedExpense}
-            onBack={() => setSelectedExpense(null)}
-            selectedOrgId={selectedOrgId}
-            onExpenseDeleted={() => {
-              handleDataChanged();
-              setSelectedExpense(null);
-            }}
-            onExpenseUpdated={handleDataChanged}
-          />
         ) : (
           <>
-            <View style={{ flex: 1, display: activeTab === 'home' ? 'flex' : 'none' }}>
-              <HomeScreen
-                onSettingsPress={() => setShowSettings(true)}
-                onOverlayChange={setHomeHasOverlay}
-                hasOrganization={hasOrganization}
-                currentUser={currentUser}
-                onDataChanged={handleDataChanged}
-                onOrgChange={setSelectedOrgId}
-                onExpensePress={setSelectedExpense}
-                dataVersion={dataVersion}
-              />
-            </View>
-            <View style={{ flex: 1, display: activeTab === 'expenses' ? 'flex' : 'none' }}>
-              <ExpensesScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} selectedOrgId={selectedOrgId} />
-            </View>
-            {activeTab === 'capture' && (
-              <View style={{ flex: 1 }}>
-                <ScanScreen
-                  onCancel={handleCaptureCancel}
-                  onExpenseSaved={() => {
-                    handleDataChanged();
-                    setActiveTab(previousTab);
-                  }}
-                  selectedOrgId={selectedOrgId}
-                />
-              </View>
-            )}
-            <View style={{ flex: 1, display: activeTab === 'category' ? 'flex' : 'none' }}>
-              <CategoryScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} selectedOrgId={selectedOrgId} />
-            </View>
-            {!homeHasOverlay && activeTab !== 'capture' && (
-              <BottomNavigation
-                activeTab={activeTab}
-                onTabPress={handleTabPress}
-                hasOrganization={hasOrganization}
-              />
-            )}
-            {showSettings && (
-              <Animated.View style={[{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-              }, { transform: [{ translateX: settingsSlideAnim }] }]}>
-                <SettingsScreen
-                  onBack={handleSettingsBack}
-                  onLogout={handleLogout}
+            <View style={{ flex: 1 }} pointerEvents={selectedExpense ? 'none' : 'auto'}>
+              <View style={{ flex: 1, display: activeTab === 'home' ? 'flex' : 'none' }}>
+                <HomeScreen
+                  onSettingsPress={() => setShowSettings(true)}
+                  onOverlayChange={setHomeHasOverlay}
                   hasOrganization={hasOrganization}
                   currentUser={currentUser}
-                  selectedOrgId={selectedOrgId}
+                  onDataChanged={handleDataChanged}
+                  onOrgChange={setSelectedOrgId}
+                  onExpensePress={setSelectedExpense}
+                  dataVersion={dataVersion}
                 />
-              </Animated.View>
+              </View>
+              <View style={{ flex: 1, display: activeTab === 'expenses' ? 'flex' : 'none' }}>
+                <ExpensesScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} selectedOrgId={selectedOrgId} />
+              </View>
+              {activeTab === 'capture' && (
+                <View style={{ flex: 1 }}>
+                  <ScanScreen
+                    onCancel={handleCaptureCancel}
+                    onExpenseSaved={() => {
+                      handleDataChanged();
+                      setActiveTab(previousTab);
+                    }}
+                    selectedOrgId={selectedOrgId}
+                  />
+                </View>
+              )}
+              <View style={{ flex: 1, display: activeTab === 'category' ? 'flex' : 'none' }}>
+                <CategoryScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} selectedOrgId={selectedOrgId} />
+              </View>
+              {!homeHasOverlay && activeTab !== 'capture' && (
+                <BottomNavigation
+                  activeTab={activeTab}
+                  onTabPress={handleTabPress}
+                  hasOrganization={hasOrganization}
+                />
+              )}
+              {showSettings && (
+                <Animated.View style={[{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                }, { transform: [{ translateX: settingsSlideAnim }] }]}>
+                  <SettingsScreen
+                    onBack={handleSettingsBack}
+                    onLogout={handleLogout}
+                    hasOrganization={hasOrganization}
+                    currentUser={currentUser}
+                    selectedOrgId={selectedOrgId}
+                  />
+                </Animated.View>
+              )}
+            </View>
+            {selectedExpense && (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                <ExpenseDetailsScreen
+                  expense={selectedExpense}
+                  onBack={() => setSelectedExpense(null)}
+                  selectedOrgId={selectedOrgId}
+                  onExpenseDeleted={() => {
+                    handleDataChanged();
+                    setSelectedExpense(null);
+                  }}
+                  onExpenseUpdated={handleDataChanged}
+                />
+              </View>
             )}
           </>
         )}

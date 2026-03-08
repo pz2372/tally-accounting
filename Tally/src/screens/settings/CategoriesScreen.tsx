@@ -138,7 +138,7 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
       // Get access token
       const accessToken = await getAccessToken();
       if (!accessToken) {
-        Alert.alert('Error', 'Please log in again');
+        Alert.alert(t('common.error') || 'Error', t('categories.loginAgain') || 'Please log in again');
         return;
       }
 
@@ -202,15 +202,15 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
         }
 
         setHasChanges(false);
-        Alert.alert('Success', 'Categories updated successfully');
+        Alert.alert(t('common.success'), t('categories.updateSuccess') || 'Categories updated successfully');
       } else {
-        Alert.alert('Error', response.data.error || 'Failed to update categories');
+        Alert.alert(t('common.error') || 'Error', response.data.error || t('categories.updateError') || 'Failed to update categories');
       }
     } catch (error: any) {
       // Alert is shown below
       Alert.alert(
-        'Error', 
-        error.response?.data?.error || error.message || 'Failed to save changes'
+        t('common.error') || 'Error',
+        error.response?.data?.error || error.message || t('categories.saveError') || 'Failed to save changes'
       );
     } finally {
       setIsSaving(false);
@@ -269,7 +269,7 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
                       styles.categoryName,
                       !category.isActive && styles.categoryNameInactive
                     ]}>
-                      {category.name}
+                      {t('categories.' + category.key) || category.name}
                     </Text>
                   </View>
                   <View style={styles.categoryRight}>
