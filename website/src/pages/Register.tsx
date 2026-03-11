@@ -196,7 +196,7 @@ export default function Register() {
             <form onSubmit={handleNext}>
               <h2 className="register-title">Create your account</h2>
               <p className="register-subtitle">
-                Get started with Tally for $49.
+                Register business with 2 or more users
               </p>
 
               <div className="form-group">
@@ -303,7 +303,7 @@ export default function Register() {
                     </>
                   ) : (
                     <>
-                      Continue to Payment — $49/mo
+                      Continue 
                       <ArrowRight size={18} />
                     </>
                   )}

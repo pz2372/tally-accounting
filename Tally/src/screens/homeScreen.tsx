@@ -215,8 +215,7 @@ export default function HomeScreen({
     setIsInitialLoading(true);
     refreshOrgData(selectedBusinessId)
       .then(() => onDataChanged?.())
-      .catch(() => { /* cache data still available */ })
-      .finally(() => setIsInitialLoading(false));
+      .catch(() => { /* cache data still available */ });
   }, [selectedBusinessId]);
 
   useEffect(() => {
@@ -282,11 +281,6 @@ export default function HomeScreen({
             }
           }
 
-          // Show cache-based metrics immediately (totalSpent, unmatchedItems)
-          if (isActive) {
-            setMetrics({ ...nextMetrics });
-          }
-
           // Fetch gross/net sales and statement matching data
           try {
             const api = await createAuthenticatedAxios();
@@ -325,9 +319,13 @@ export default function HomeScreen({
 
         if (isActive) {
           setMetrics({ ...nextMetrics });
+          setIsInitialLoading(false);
         }
       } catch (error) {
         // silently fail - non-critical metrics load
+        if (isActive) {
+          setIsInitialLoading(false);
+        }
       }
     };
 

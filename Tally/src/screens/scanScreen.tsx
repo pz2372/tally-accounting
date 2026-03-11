@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, ActivityIndicator, Platform, PermissionsAndroid } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, Platform, PermissionsAndroid, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DocumentScanner from 'react-native-document-scanner-plugin';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing } from '../styles/theme';
 import ReviewScanScreen from './reviewScanScreen';
 
@@ -28,7 +29,6 @@ export default function ScanScreen({ onCancel, onExpenseSaved, selectedOrgId, de
     try {
       setIsScanning(true);
 
-      // Request camera permission on Android if needed
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.CAMERA,
@@ -41,6 +41,24 @@ export default function ScanScreen({ onCancel, onExpenseSaved, selectedOrgId, de
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           Alert.alert('Permission Required', 'Camera permission is required to scan documents');
+          onCancel();
+          return;
+        }
+      } else {
+        const { status: existingStatus } = await ImagePicker.getCameraPermissionsAsync();
+        if (existingStatus === 'denied') {
+          Alert.alert(
+            'Camera Access Required',
+            'Tally needs camera access to scan documents. Please enable it in Settings.',
+            [
+              { text: 'Cancel', onPress: onCancel, style: 'cancel' },
+              { text: 'Open Settings', onPress: () => { Linking.openSettings(); onCancel(); } },
+            ]
+          );
+          return;
+        }
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
           onCancel();
           return;
         }
