@@ -10,12 +10,16 @@ const router = Router();
 // Public routes (no auth required)
 // POST /api/auth/firebase-login - Login with Firebase token
 router.post('/firebase-login', authController.firebaseLogin);
+// POST /api/auth/direct-login - Login with email/password (bypasses Firebase)
+router.post('/direct-login', authController.directLogin);
 // POST /api/auth/register - Register new user
 router.post('/register', authController.register);
 // POST /api/auth/register-checkout - Create Stripe Checkout for registration
 router.post('/register-checkout', authController.registerCheckout);
 // POST /api/auth/complete-registration - Complete registration after Stripe payment
 router.post('/complete-registration', authController.completeRegistration);
+// POST /api/auth/register-free - Register without payment
+router.post('/register-free', authController.registerFree);
 // GET /api/auth/invite/:token - Validate invite token
 router.get('/invite/:token', authController.validateInvite);
 // POST /api/auth/accept-invite - Accept invite and create account
