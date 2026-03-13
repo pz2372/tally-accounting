@@ -1,6 +1,7 @@
 import { getAuth } from '../config/firebase';
 import prisma from '../config/database';
 import jwt, { SignOptions, Secret } from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types/http';
 import { PRESET_CATEGORIES } from '../config/categories';
@@ -668,6 +669,229 @@ export const acceptInvite: PublicHandler = async (req, res) => {
   } catch (error) {
     console.error('acceptInvite error:', error);
     res.status(500).json({ success: false, error: 'Failed to accept invite' });
+  }
+};
+
+// Register free — create user + org without Stripe payment (public)
+export const registerFree: PublicHandler = async (req, res) => {
+  try {
+    const { name, email, password, orgName } = req.body;
+
+    if (!email || !password || !orgName?.trim()) {
+      return res.status(400).json({ success: false, error: 'Email, password, and organization name are required' });
+    }
+
+    // Check if email already taken
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser && existingUser.firebaseUid) {
+      return res.status(409).json({ success: false, error: 'Email already in use' });
+    }
+
+    // Create Firebase user
+    let userRecord;
+    try {
+      userRecord = await getAuth().createUser({
+        email,
+        password,
+        displayName: name || undefined,
+      });
+    } catch (error) {
+      if (error.code === 'auth/email-already-exists') {
+        return res.status(409).json({ success: false, error: 'Email already in use' });
+      }
+      return res.status(400).json({ success: false, error: error.message || 'Failed to create account' });
+    }
+
+    // Create DB user
+    const user = await prisma.user.create({
+      data: {
+        firebaseUid: userRecord.uid,
+        email,
+        name: name?.trim() || null,
+      },
+    });
+
+    // Create org with free subscription
+    const org = await prisma.organization.create({
+      data: {
+        name: orgName.trim(),
+        billingOwnerId: user.id,
+        members: {
+          create: {
+            userId: user.id,
+            role: 'ADMIN',
+            permissions: [],
+          },
+        },
+        subscription: {
+          create: {
+            status: 'ACTIVE',
+            plan: 'basic',
+          },
+        },
+      },
+      include: {
+        members: { include: { user: true } },
+        subscription: true,
+      },
+    });
+
+    const accessToken = jwt.sign(
+      { id: user.id, firebaseUid: userRecord.uid, email: user.email, emailVerified: false },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.status(201).json({
+      success: true,
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: false,
+        createdAt: user.createdAt,
+        organizations: [
+          {
+            id: org.id,
+            name: org.name,
+            dba: org.dba,
+            role: 'ADMIN',
+            permissions: [],
+            subscription: org.subscription,
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    console.error('registerFree error:', error);
+    res.status(500).json({ success: false, error: 'Registration failed' });
+  }
+};
+
+// Direct login — bypass Firebase, verify password against DB hash
+export const directLogin: PublicHandler = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required',
+      });
+    }
+
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          include: {
+            org: {
+              include: {
+                subscription: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user || !user.isActive || !user.passwordHash) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password',
+      });
+    }
+
+    // Verify password
+    const passwordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordValid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password',
+      });
+    }
+
+    // Load first org data (same as firebaseLogin)
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    let firstOrgData = null;
+    if (user.memberships.length > 0) {
+      const firstOrgId = user.memberships[0].orgId;
+
+      firstOrgData = await prisma.organization.findUnique({
+        where: { id: firstOrgId },
+        include: {
+          orgCategories: true,
+          expenses: {
+            where: {
+              expenseDate: { gte: startOfMonth, lte: endOfMonth },
+            },
+          },
+          matches: {
+            where: {
+              createdAt: { gte: startOfMonth, lte: endOfMonth },
+            },
+            include: {
+              expense: true,
+              cardTxn: true,
+            },
+          },
+        },
+      });
+    }
+
+    // Generate access token
+    const accessToken = jwt.sign(
+      {
+        id: user.id,
+        firebaseUid: user.firebaseUid,
+        email: user.email,
+        emailVerified: true,
+      },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
+    res.json({
+      success: true,
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        emailVerified: true,
+        createdAt: user.createdAt,
+        organizations: user.memberships.map((m) => ({
+          id: m.orgId,
+          name: m.org.name,
+          dba: m.org.dba,
+          role: m.role,
+          permissions: m.permissions,
+          subscription: m.org.subscription,
+        })),
+      },
+      presetCategories: PRESET_CATEGORIES,
+      firstOrgData: firstOrgData
+        ? {
+            orgId: firstOrgData.id,
+            categoryOverrides: firstOrgData.orgCategories,
+            expenses: firstOrgData.expenses,
+            matches: firstOrgData.matches,
+          }
+        : null,
+      syncedAt: new Date().toISOString(),
+      syncPeriod: {
+        start: startOfMonth.toISOString(),
+        end: endOfMonth.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Direct login error:', error);
+    res.status(500).json({ success: false, error: 'Login failed' });
   }
 };
 

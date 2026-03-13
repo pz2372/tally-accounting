@@ -11,7 +11,6 @@ import {
   Sparkles,
   Camera,
   FileCheck,
-  CheckCircle2,
   FileText,
   RefreshCw,
   TrendingUp,
@@ -604,7 +603,7 @@ export default function Home() {
               transition={{ delay: 0.65 }}
             >
               <Link to="/register" className="btn-glow">
-                Start Free Trial
+                Start Today
               </Link>
             </motion.div>
           </motion.div>
@@ -673,56 +672,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Pricing ── */}
-      <section className="pricing-home" id="pricing">
-        <div className="container">
-          <motion.div
-            className="pricing-home-header"
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7 }}
-            viewport={{ once: true }}
-          >
-            <h2>
-              Simple, <span className="gradient-text">transparent</span> pricing
-            </h2>
-            <p>Everything you need. One flat price. No hidden fees.</p>
-          </motion.div>
-
-          <motion.div
-            className="pricing-home-card"
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.15 }}
-            viewport={{ once: true }}
-          >
-            <div className="pricing-home-price">
-              <span className="price-dollar">$</span>
-              <span className="price-amount">49</span>
-              <span className="price-period">/month</span>
-            </div>
-            <p className="pricing-home-desc">14-day free trial &middot; Cancel anytime</p>
-            <div className="pricing-home-features">
-              {[
-                'Unlimited team members',
-                'Unlimited receipt scans',
-                'Bank statement matching',
-                'Expense categorization',
-                'Sales report tracking',
-                'Recurring charges',
-                'Custom categories',
-                'Priority support',
-              ].map((f, i) => (
-                <div key={i} className="pricing-home-feat">
-                  <CheckCircle2 size={16} />
-                  <span>{f}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
       {/* ── CTA ── */}
       <section className="cta-dark">
         <div className="cta-glow-orb" />
@@ -740,11 +689,11 @@ export default function Home() {
             </h2>
             <p>
               Join hundreds of businesses using Tally to save time and money on
-              bookkeeping. Start your 14-day free trial today.
+              bookkeeping. Start today!
             </p>
             <div className="cta-dark-actions">
               <Link to="/register" className="btn-glow">
-                Start Free Trial
+                Register Now
               </Link>
             </div>
           </motion.div>
