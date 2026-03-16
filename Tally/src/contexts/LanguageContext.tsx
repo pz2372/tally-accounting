@@ -1,4 +1,5 @@
-import React, { createContext, useState, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface LanguageContextType {
   language: string;
@@ -255,6 +256,7 @@ const translations: Record<string, Record<string, string>> = {
     'statements.cash': 'Cash',
     'statements.loadError': 'Failed to load statements. Please try again.',
     'statements.transactionLoadError': 'Failed to load transactions. Please try again.',
+    'statements.dailySalesReport': 'Daily Sales Report',
 
     // Upload Statement Screen
     'uploadStatement.title': 'Upload Statement',
@@ -726,6 +728,7 @@ const translations: Record<string, Record<string, string>> = {
     'statements.cash': 'Efectivo',
     'statements.loadError': 'Error al cargar estados. Intente de nuevo.',
     'statements.transactionLoadError': 'Error al cargar transacciones. Intente de nuevo.',
+    'statements.dailySalesReport': 'Informe de Ventas Diario',
 
     // Upload Statement Screen
     'uploadStatement.title': 'Subir Estado',
@@ -1145,6 +1148,7 @@ const translations: Record<string, Record<string, string>> = {
     'statements.cash': '现金',
     'statements.loadError': '加载报表失败，请重试。',
     'statements.transactionLoadError': '加载交易失败，请重试。',
+    'statements.dailySalesReport': '每日销售报告',
 
     // Upload Statement Screen
     'uploadStatement.title': '上传报表',
@@ -1612,6 +1616,7 @@ const translations: Record<string, Record<string, string>> = {
     'statements.cash': 'Tunai',
     'statements.loadError': 'Gagal memuat laporan. Silakan coba lagi.',
     'statements.transactionLoadError': 'Gagal memuat transaksi. Silakan coba lagi.',
+    'statements.dailySalesReport': 'Laporan Penjualan Harian',
 
     // Upload Statement Screen
     'uploadStatement.title': 'Unggah Laporan',
@@ -1847,8 +1852,21 @@ const translations: Record<string, Record<string, string>> = {
   },
 };
 
+const LANGUAGE_KEY = 'TALLY_LANGUAGE';
+
 export function LanguageProvider({ children }: LanguageProviderProps) {
-  const [language, setLanguage] = useState('en');
+  const [language, setLanguageState] = useState('en');
+
+  useEffect(() => {
+    AsyncStorage.getItem(LANGUAGE_KEY).then((saved) => {
+      if (saved) setLanguageState(saved);
+    });
+  }, []);
+
+  const setLanguage = (lang: string) => {
+    setLanguageState(lang);
+    AsyncStorage.setItem(LANGUAGE_KEY, lang);
+  };
 
   const t = (key: string): string => {
     return translations[language]?.[key] || translations['en'][key] || key;

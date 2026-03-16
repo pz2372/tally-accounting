@@ -163,18 +163,6 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               </TouchableOpacity>
             </View>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                Don't have an account?{' '}
-                <Text
-                  style={styles.footerLink}
-                  onPress={() => Linking.openURL('https://tally-accounting.netlify.app/register')}
-                >
-                  Register
-                </Text>
-              </Text>
-            </View>
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
