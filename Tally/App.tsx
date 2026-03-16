@@ -49,6 +49,7 @@ export default function App() {
   const [homeHasOverlay, setHomeHasOverlay] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [cameraPermissionDenied, setCameraPermissionDenied] = useState(false);
   const settingsSlideAnim = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   const handleDataChanged = () => setDataVersion(v => v + 1);
@@ -217,13 +218,14 @@ export default function App() {
                       setActiveTab(previousTab);
                     }}
                     selectedOrgId={selectedOrgId}
+                    onPermissionDenied={(denied) => setCameraPermissionDenied(denied)}
                   />
                 </View>
               )}
               <View style={{ flex: 1, display: activeTab === 'category' ? 'flex' : 'none' }}>
                 <CategoryScreen onExpensePress={setSelectedExpense} dataVersion={dataVersion} selectedOrgId={selectedOrgId} />
               </View>
-              {!homeHasOverlay && activeTab !== 'capture' && (
+              {!homeHasOverlay && (activeTab !== 'capture' || cameraPermissionDenied) && (
                 <BottomNavigation
                   activeTab={activeTab}
                   onTabPress={handleTabPress}

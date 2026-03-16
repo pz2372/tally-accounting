@@ -51,8 +51,17 @@ interface CategoryScreenProps {
 
 
 export default function CategoryScreen({ onExpensePress, dataVersion = 0, selectedOrgId }: CategoryScreenProps) {
-  const { t } = useContext(LanguageContext);
+  const { t, language } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+
+  const getLocale = () => {
+    switch (language) {
+      case 'es': return 'es-ES';
+      case 'zh': return 'zh-CN';
+      case 'id': return 'id-ID';
+      default: return 'en-US';
+    }
+  };
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -233,11 +242,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
   };
 
   const formatMonth = (date: Date): string => {
-    const monthKeys = ['january', 'february', 'march', 'april', 'may', 'june',
-      'july', 'august', 'september', 'october', 'november', 'december'];
-    const monthIndex = date.getMonth();
-    const year = date.getFullYear();
-    return `${t('month.' + monthKeys[monthIndex])} ${year}`;
+    return date.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' });
   };
 
   return (

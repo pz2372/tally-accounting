@@ -56,8 +56,17 @@ interface StatementTransactionItem {
 }
 
 export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, onDataChanged }: StatementsScreenProps) {
-  const { t } = useContext(LanguageContext);
+  const { t, language } = useContext(LanguageContext);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+
+  const getLocale = () => {
+    switch (language) {
+      case 'es': return 'es-ES';
+      case 'zh': return 'zh-CN';
+      case 'id': return 'id-ID';
+      default: return 'en-US';
+    }
+  };
   const [statements, setStatements] = useState<Statement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'statement' | 'sales'>('all');
@@ -185,7 +194,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
             })
             .map((report: any) => ({
               id: report.id,
-              name: 'Daily Sales Report',
+              name: t('statements.dailySalesReport'),
               period: new Date(report.businessDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
               uploadDate: new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
               totalTransactions: 0,
@@ -273,7 +282,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                 })
                 .map((report: any) => ({
                   id: report.id,
-                  name: 'Daily Sales Report',
+                  name: t('statements.dailySalesReport'),
                   period: new Date(report.businessDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                   uploadDate: new Date(report.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                   totalTransactions: 0,
@@ -1109,7 +1118,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
           
           <View style={styles.monthInfo}>
             <Text style={styles.monthText}>
-              {selectedMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              {selectedMonth.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' })}
             </Text>
           </View>
           
