@@ -93,6 +93,7 @@ model User {
   firebaseUid     String?  @unique
   email           String   @unique
   name            String?
+  passwordHash    String?
   preferredLocale String   @default("en-US")
   isActive        Boolean  @default(true)
   // timezone      String?  // recommended later
