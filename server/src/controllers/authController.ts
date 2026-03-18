@@ -320,7 +320,7 @@ export const validateInvite: PublicHandler = async (req, res) => {
     const invite = await prisma.inviteToken.findUnique({
       where: { token },
       include: {
-        user: { select: { email: true } },
+        user: { select: { email: true, firebaseUid: true } },
         org: { select: { name: true } },
       },
     });
@@ -341,6 +341,7 @@ export const validateInvite: PublicHandler = async (req, res) => {
       success: true,
       email: invite.user.email,
       orgName: invite.org.name,
+      isExistingUser: !!invite.user.firebaseUid,
     });
   } catch (error) {
     console.error('validateInvite error:', error);
@@ -597,20 +598,48 @@ export const acceptInvite: PublicHandler = async (req, res) => {
       return res.status(400).json({ success: false, error: 'This invite has expired' });
     }
 
-    // Create Firebase auth user
+    // Handle existing vs new user
     let userRecord;
-    try {
-      userRecord = await getAuth().createUser({
-        email: invite.user.email,
-        password,
-        displayName: name || undefined,
-      });
-    } catch (error) {
-      if (error.code === 'auth/email-already-exists') {
-        return res.status(409).json({ success: false, error: 'An account with this email already exists. Please log in instead.' });
+    const isExistingUser = !!invite.user.firebaseUid;
+
+    if (isExistingUser) {
+      // Existing user — verify password via Firebase REST API
+      const firebaseApiKey = process.env.FIREBASE_API_KEY;
+      if (!firebaseApiKey) {
+        return res.status(500).json({ success: false, error: 'Firebase API key not configured' });
       }
-      console.error('Firebase createUser error:', error);
-      return res.status(400).json({ success: false, error: 'Failed to create account' });
+      try {
+        const firebaseRes = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: invite.user.email, password, returnSecureToken: true }),
+          }
+        );
+        if (!firebaseRes.ok) {
+          return res.status(401).json({ success: false, error: 'Incorrect password' });
+        }
+        userRecord = await getAuth().getUser(invite.user.firebaseUid);
+      } catch (error) {
+        console.error('Firebase signIn error:', error);
+        return res.status(401).json({ success: false, error: 'Incorrect password' });
+      }
+    } else {
+      // New user — create Firebase auth account
+      try {
+        userRecord = await getAuth().createUser({
+          email: invite.user.email,
+          password,
+          displayName: name || undefined,
+        });
+      } catch (error: any) {
+        if (error.code === 'auth/email-already-exists') {
+          return res.status(409).json({ success: false, error: 'An account with this email already exists. Please log in instead.' });
+        }
+        console.error('Firebase createUser error:', error);
+        return res.status(400).json({ success: false, error: 'Failed to create account' });
+      }
     }
 
     // Update the DB user with Firebase UID and name
@@ -618,7 +647,7 @@ export const acceptInvite: PublicHandler = async (req, res) => {
       where: { id: invite.userId },
       data: {
         firebaseUid: userRecord.uid,
-        name: name?.trim() || null,
+        ...(name?.trim() ? { name: name.trim() } : {}),
       },
       include: {
         memberships: {
