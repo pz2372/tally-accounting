@@ -12,6 +12,7 @@ export default function AcceptInvite() {
   const [validating, setValidating] = useState(true);
   const [email, setEmail] = useState('');
   const [orgName, setOrgName] = useState('');
+  const [isExistingUser, setIsExistingUser] = useState(false);
   const [invalidReason, setInvalidReason] = useState('');
 
   const [name, setName] = useState('');
@@ -33,6 +34,7 @@ export default function AcceptInvite() {
         if (data.success) {
           setEmail(data.email);
           setOrgName(data.orgName);
+          setIsExistingUser(data.isExistingUser || false);
         } else {
           setInvalidReason(data.error || 'Invalid invite link');
         }
@@ -119,8 +121,8 @@ export default function AcceptInvite() {
             You've been invited to <strong>{orgName}</strong>
           </div>
 
-          <h1 className="invite-title">Set up your account</h1>
-          <p className="invite-subtitle">Create a password to join {orgName} on Tally</p>
+          <h1 className="invite-title">{isExistingUser ? 'Join ' + orgName : 'Set up your account'}</h1>
+          <p className="invite-subtitle">{isExistingUser ? 'Enter your password to join ' + orgName + ' on Tally' : 'Create a password to join ' + orgName + ' on Tally'}</p>
 
           {error && <div className="invite-error">{error}</div>}
 
@@ -136,19 +138,21 @@ export default function AcceptInvite() {
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="invite-name">Full Name</label>
-              <input
-                id="invite-name"
-                type="text"
-                className="form-input"
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={loading}
-                autoFocus
-              />
-            </div>
+            {!isExistingUser && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="invite-name">Full Name</label>
+                <input
+                  id="invite-name"
+                  type="text"
+                  className="form-input"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={loading}
+                  autoFocus
+                />
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label" htmlFor="invite-password">Password</label>
@@ -183,17 +187,19 @@ export default function AcceptInvite() {
                 <Loader2 size={18} className="spin" />
               ) : (
                 <>
-                  Create Account & Join
+                  {isExistingUser ? 'Join' : 'Create Account & Join'}
                   <ArrowRight size={16} />
                 </>
               )}
             </button>
           </form>
 
-          <p className="invite-footer-text">
-            Already have an account?{' '}
-            <Link to="/login" className="invite-link">Sign in</Link>
-          </p>
+          {!isExistingUser && (
+            <p className="invite-footer-text">
+              Already have an account?{' '}
+              <Link to="/login" className="invite-link">Sign in</Link>
+            </p>
+          )}
         </div>
       </div>
     </div>
