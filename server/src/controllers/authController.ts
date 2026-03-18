@@ -1,7 +1,7 @@
 import { getAuth } from '../config/firebase';
 import prisma from '../config/database';
 import jwt, { SignOptions, Secret } from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types/http';
 import { PRESET_CATEGORIES } from '../config/categories';
