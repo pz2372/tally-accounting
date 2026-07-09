@@ -232,7 +232,7 @@ export default function MissingReceiptsScreen({ expenses, onBack, onExpensePress
 
   const formatExpense = (exp: any) => {
     const expenseDate = new Date(exp.expenseDate);
-    const categoryName = exp.categoryNameSnapshot || 'Miscellaneous';
+    const categoryName = exp.categoryNameSnapshot || 'Other Expenses';
     return {
       id: exp.id,
       date: expenseDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),

@@ -8,6 +8,7 @@ import { getAccessToken } from '../../services/authService';
 import { colors, spacing, borderRadius } from '../../styles/theme';
 import { LanguageContext } from '../../contexts/LanguageContext';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
+import { getFullCategorySettings } from '../../components/categories';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
@@ -26,23 +27,39 @@ interface Category {
   visibleToEmployees: boolean;
 }
 
-
 export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesScreenProps) {
   const { t } = useContext(LanguageContext);
   
-  const initialCategories: Category[] = [
-    { id: '1', key: 'miscellaneous', name: t('categories.miscellaneous'), icon: 'apps-outline', color: '#6B7280', isActive: true, visibleToEmployees: true },
-    { id: '2', key: 'labor', name: t('categories.labor'), icon: 'people-outline', color: colors.purple, isActive: true, visibleToEmployees: true },
-    { id: '3', key: 'inventory', name: t('categories.inventory'), icon: 'cube-outline', color: '#10B981', isActive: true, visibleToEmployees: true },
-    { id: '4', key: 'operations', name: t('categories.operations'), icon: 'settings-outline', color: '#F59E0B', isActive: true, visibleToEmployees: true },
-    { id: '5', key: 'tax', name: t('categories.tax'), icon: 'calculator-outline', color: colors.red, isActive: true, visibleToEmployees: true },
-    { id: '6', key: 'transportation', name: t('categories.transportation'), icon: 'car-outline', color: colors.blue, isActive: true, visibleToEmployees: true },
-  ];
+  const initialCategories: Category[] = getFullCategorySettings().map(category => ({
+    id: category.key,
+    key: category.key,
+    name: category.name,
+    icon: category.icon,
+    color: category.color,
+    isActive: category.isEnabled,
+    visibleToEmployees: category.visibleToEmployees,
+  }));
   
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [originalCategories, setOriginalCategories] = useState<Category[]>(initialCategories);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+
+  const mergeCategorySettings = (settings: any[] = []): Category[] => {
+    return getFullCategorySettings(settings).map(category => ({
+      id: category.key,
+      key: category.key,
+      name: category.name,
+      icon: category.icon,
+      color: category.color,
+      isActive: category.isEnabled,
+      visibleToEmployees: category.visibleToEmployees,
+    }));
+  };
+
+  const toCachedCategorySettings = (settings: any[] = []) => {
+    return getFullCategorySettings(settings);
+  };
 
   // Load current category settings from cache first, then fetch from server
   useEffect(() => {
@@ -53,20 +70,13 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
           const cached = await AsyncStorage.getItem(`@org_categories_${selectedOrgId}`);
           if (cached) {
             const cachedCategories = JSON.parse(cached);
-            const mappedCategories: Category[] = cachedCategories.map((cat: any) => {
-              const initial = initialCategories.find(ic => ic.key === cat.key);
-              return {
-                id: initial?.id || cat.key,
-                key: cat.key,
-                name: cat.name,
-                icon: initial?.icon || 'apps-outline',
-                color: cat.color || initial?.color || '#6B7280',
-                isActive: cat.isEnabled !== false,
-                visibleToEmployees: cat.visibleToEmployees !== false,
-              };
-            });
+            const mappedCategories = mergeCategorySettings(cachedCategories);
             setCategories(mappedCategories);
             setOriginalCategories(mappedCategories);
+            await AsyncStorage.setItem(
+              `@org_categories_${selectedOrgId}`,
+              JSON.stringify(toCachedCategorySettings(mappedCategories))
+            );
           }
         } catch {
           // Silently fail - cache might not exist
@@ -86,22 +96,17 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
         });
 
         if (response.data.success && response.data.categories) {
-          // Map server response to Category format
-          const serverCategories: Category[] = response.data.categories.map((cat: any) => {
-            // Find the matching initial category to get icon and color
-            const initial = initialCategories.find(ic => ic.key === cat.key);
-            return {
-              id: initial?.id || cat.key,
-              key: cat.key,
-              name: cat.name,
-              icon: initial?.icon || 'apps-outline',
-              color: cat.color || initial?.color || '#6B7280',
-              isActive: cat.isEnabled !== false,
-              visibleToEmployees: cat.visibleToEmployees !== false,
-            };
-          });
+          const serverCategories = mergeCategorySettings(response.data.categories);
           setCategories(serverCategories);
           setOriginalCategories(serverCategories);
+          if (selectedOrgId) {
+            await AsyncStorage.setItem(
+              `@org_categories_${selectedOrgId}`,
+              JSON.stringify(toCachedCategorySettings(response.data.categories))
+            ).catch(() => {
+              // Silently fail - non-critical cache update
+            });
+          }
         }
       } catch {
         // Silently fail - use cache or default categories
@@ -114,8 +119,8 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
   // Check for changes whenever categories update
   useEffect(() => {
     const changed = categories.some((cat, index) =>
-      cat.isActive !== originalCategories[index].isActive ||
-      cat.visibleToEmployees !== originalCategories[index].visibleToEmployees
+      cat.isActive !== originalCategories[index]?.isActive ||
+      cat.visibleToEmployees !== originalCategories[index]?.visibleToEmployees
     );
     setHasChanges(changed);
   }, [categories, originalCategories]);
@@ -171,19 +176,7 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
         });
 
         if (refreshResponse.data.success && refreshResponse.data.categories) {
-          // Map server response to Category format
-          const serverCategories: Category[] = refreshResponse.data.categories.map((cat: any) => {
-            const initial = initialCategories.find(ic => ic.key === cat.key);
-            return {
-              id: initial?.id || cat.key,
-              key: cat.key,
-              name: cat.name,
-              icon: initial?.icon || 'apps-outline',
-              color: cat.color || initial?.color || '#6B7280',
-              isActive: cat.isEnabled !== false,
-              visibleToEmployees: cat.visibleToEmployees !== false,
-            };
-          });
+          const serverCategories = mergeCategorySettings(refreshResponse.data.categories);
           setCategories(serverCategories);
           setOriginalCategories(serverCategories);
 
@@ -191,7 +184,7 @@ export default function CategoriesScreen({ onBack, selectedOrgId }: CategoriesSc
           if (selectedOrgId) {
             await AsyncStorage.setItem(
               `@org_categories_${selectedOrgId}`,
-              JSON.stringify(refreshResponse.data.categories)
+              JSON.stringify(toCachedCategorySettings(refreshResponse.data.categories))
             ).catch(() => {
               // Silently fail - non-critical cache update
             });

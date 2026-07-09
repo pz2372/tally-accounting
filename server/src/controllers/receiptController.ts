@@ -20,6 +20,14 @@ export interface ExtractedReceiptData {
   tax?: string;
   discounts?: string;
   refunds?: string;
+  items?: Array<{
+    name?: string;
+    normalizedName?: string;
+    quantity?: string;
+    unit?: string;
+    unitPrice?: string;
+    total?: string;
+  }>;
 }
 
 /**
@@ -79,15 +87,26 @@ export const extractReceiptData = async (req: Request, res: Response) => {
   "tips": "tips/gratuity amount (numbers only)",
   "tax": "tax collected amount (numbers only)",
   "discounts": "total discounts amount (numbers only)",
-  "refunds": "total refunds amount (numbers only)"
+  "refunds": "total refunds amount (numbers only)",
+  "items": [
+    {
+      "name": "line item name exactly as shown on receipt",
+      "normalizedName": "generic item name for inventory grouping, plural if natural (e.g. 'Avocados' for Hass Avocado, Small Avocado, Organic Avocados)",
+      "quantity": "quantity purchased as a number only, if visible",
+      "unit": "unit such as each, lb, case, bag, oz, kg, if visible",
+      "unitPrice": "unit price number only, if visible",
+      "total": "line item total number only, if visible"
+    }
+  ]
 }
 
 IMPORTANT RULES:
 1. First determine documentType: "receipt" for purchase receipts/invoices/expenses, "sales_report" for daily sales summaries/revenue reports/income documents.
 2. For sales reports: Put ALL financial figures into their specific fields (grossSales, netSales, cash, tips, tax, discounts, refunds). Do NOT put dollar amounts in the notes field. Leave merchant, amount, and category as empty string.
 3. For receipts: Fill merchant, amount, category, and notes. Leave all sales report fields (grossSales, netSales, cash, tips, tax, discounts, refunds) as empty string.
-4. All monetary values must be numbers only (no $ signs, no commas).
-5. If a field cannot be determined, use empty string.`,
+4. For receipts: Extract itemized line items when visible. normalizedName should group variants into one inventory item name. Examples: "HASS AVOCADO", "SMALL AVOCADO", and "ORGANIC AVOCADOS" all normalize to "Avocados"; "Roma Tomato" and "Tomatoes 5lb" normalize to "Tomatoes". Do not collapse different meat cuts into a generic meat name: "Chicken Thigh" normalizes to "Chicken Thighs", while "Chicken Leg" or "Chicken Drumstick" normalizes to "Chicken Legs".
+5. All monetary values must be numbers only (no $ signs, no commas).
+6. If a field cannot be determined, use empty string.`,
             },
           ],
         },
@@ -142,6 +161,25 @@ IMPORTANT RULES:
       } else {
         extracted[field] = '';
       }
+    }
+
+    if (!Array.isArray(extracted.items)) {
+      extracted.items = [];
+    } else {
+      extracted.items = extracted.items.map(item => ({
+        name: String(item.name || '').trim(),
+        normalizedName: String(item.normalizedName || item.name || '').trim(),
+        quantity: item.quantity !== undefined && item.quantity !== null && item.quantity !== ''
+          ? String(item.quantity).replace(/[^\d.]/g, '')
+          : '',
+        unit: String(item.unit || '').trim(),
+        unitPrice: item.unitPrice !== undefined && item.unitPrice !== null && item.unitPrice !== ''
+          ? String(item.unitPrice).replace(/[^\d.]/g, '')
+          : '',
+        total: item.total !== undefined && item.total !== null && item.total !== ''
+          ? String(item.total).replace(/[^\d.]/g, '')
+          : '',
+      })).filter(item => item.name || item.normalizedName);
     }
 
     res.json(extracted);

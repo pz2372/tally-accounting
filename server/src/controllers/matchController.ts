@@ -250,10 +250,11 @@ export const approveMatch: Handler = async (req, res) => {
     }
     
     // Update match status
-    const updatedMatch = await prisma.receiptMatch.update({
-      where: { id },
+    await prisma.receiptMatch.updateMany({
+      where: { id, orgId },
       data: { status: 'MATCHED' }
     });
+    const updatedMatch = await prisma.receiptMatch.findFirst({ where: { id, orgId } });
     
     res.json({
       success: true,
@@ -293,10 +294,11 @@ export const rejectMatch: Handler = async (req, res) => {
       });
     }
     
-    const updatedMatch = await prisma.receiptMatch.update({
-      where: { id },
+    await prisma.receiptMatch.updateMany({
+      where: { id, orgId },
       data: { status: 'REJECTED' }
     });
+    const updatedMatch = await prisma.receiptMatch.findFirst({ where: { id, orgId } });
     
     res.json({
       success: true,
@@ -336,8 +338,8 @@ export const deleteMatch: Handler = async (req, res) => {
       });
     }
     
-    await prisma.receiptMatch.delete({
-      where: { id }
+    await prisma.receiptMatch.deleteMany({
+      where: { id, orgId }
     });
     
     res.json({
@@ -352,4 +354,3 @@ export const deleteMatch: Handler = async (req, res) => {
     });
   }
 };
-

@@ -209,6 +209,7 @@ export const updateRecurringCharge: Handler = async (req, res) => {
       categoryName,
       dayOfMonth,
       useLastDay,
+      startDate,
       endDate
     } = req.body;
     
@@ -260,14 +261,41 @@ export const updateRecurringCharge: Handler = async (req, res) => {
     }
     
     if (useLastDay !== undefined) updateData.useLastDay = useLastDay;
+    if (startDate !== undefined) updateData.startDate = new Date(String(startDate));
     if (endDate !== undefined) {
       updateData.endDate = endDate ? new Date(String(endDate)) : null;
     }
+
+    if (dayOfMonth !== undefined || useLastDay !== undefined || startDate !== undefined) {
+      const nextDayOfMonth = dayOfMonth !== undefined ? Number.parseInt(String(dayOfMonth), 10) : existing.dayOfMonth;
+      const nextUseLastDay = useLastDay !== undefined ? Boolean(useLastDay) : existing.useLastDay;
+      const scheduleStart = startDate !== undefined ? new Date(String(startDate)) : new Date();
+      const now = new Date();
+      let nextRunAt = new Date(scheduleStart);
+
+      if (nextUseLastDay) {
+        nextRunAt = new Date(scheduleStart.getFullYear(), scheduleStart.getMonth() + 1, 0);
+      } else {
+        nextRunAt.setDate(nextDayOfMonth);
+      }
+
+      while (nextRunAt < now) {
+        nextRunAt.setMonth(nextRunAt.getMonth() + 1);
+        if (nextUseLastDay) {
+          nextRunAt = new Date(nextRunAt.getFullYear(), nextRunAt.getMonth() + 1, 0);
+        } else {
+          nextRunAt.setDate(nextDayOfMonth);
+        }
+      }
+
+      updateData.nextRunAt = nextRunAt;
+    }
     
-    const charge = await prisma.recurringCharge.update({
-      where: { id },
+    await prisma.recurringCharge.updateMany({
+      where: { id, orgId, deletedAt: null },
       data: updateData,
     });
+    const charge = await prisma.recurringCharge.findFirst({ where: { id, orgId, deletedAt: null } });
     
     res.json({
       success: true,
@@ -307,10 +335,11 @@ export const pauseRecurringCharge: Handler = async (req, res) => {
       });
     }
     
-    const updatedCharge = await prisma.recurringCharge.update({
-      where: { id },
+    await prisma.recurringCharge.updateMany({
+      where: { id, orgId, deletedAt: null },
       data: { status: 'PAUSED' }
     });
+    const updatedCharge = await prisma.recurringCharge.findFirst({ where: { id, orgId, deletedAt: null } });
     
     res.json({
       success: true,
@@ -350,10 +379,11 @@ export const resumeRecurringCharge: Handler = async (req, res) => {
       });
     }
     
-    const updatedCharge = await prisma.recurringCharge.update({
-      where: { id },
+    await prisma.recurringCharge.updateMany({
+      where: { id, orgId, deletedAt: null },
       data: { status: 'ACTIVE' }
     });
+    const updatedCharge = await prisma.recurringCharge.findFirst({ where: { id, orgId, deletedAt: null } });
     
     res.json({
       success: true,
@@ -393,10 +423,11 @@ export const cancelRecurringCharge: Handler = async (req, res) => {
       });
     }
     
-    const updatedCharge = await prisma.recurringCharge.update({
-      where: { id },
+    await prisma.recurringCharge.updateMany({
+      where: { id, orgId, deletedAt: null },
       data: { status: 'CANCELED' }
     });
+    const updatedCharge = await prisma.recurringCharge.findFirst({ where: { id, orgId, deletedAt: null } });
     
     res.json({
       success: true,
@@ -436,8 +467,8 @@ export const deleteRecurringCharge: Handler = async (req, res) => {
       });
     }
     
-    await prisma.recurringCharge.update({
-      where: { id },
+    await prisma.recurringCharge.updateMany({
+      where: { id, orgId, deletedAt: null },
       data: { 
         deletedAt: new Date(),
         status: 'CANCELED'
@@ -571,4 +602,3 @@ export const runScheduler: Handler = async (req, res) => {
     });
   }
 };
-

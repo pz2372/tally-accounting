@@ -10,6 +10,7 @@ import DatePickerModal from '../components/DatePickerModal';
 import { CATEGORIES, getCategoryColor } from '../components/categories';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 import { getAccessToken } from '../services/authService';
+import { cacheOrgExpenses } from '../services/cacheService';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
@@ -166,9 +167,7 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
       // Prepend to local expense cache so it shows up immediately
       if (savedExpense) {
         const cacheKey = `@org_expenses_${orgId}`;
-        const cached = await AsyncStorage.getItem(cacheKey);
-        const cachedList = cached ? JSON.parse(cached) : [];
-        await AsyncStorage.setItem(cacheKey, JSON.stringify([savedExpense, ...cachedList]));
+        await cacheOrgExpenses(orgId, [savedExpense]);
 
         // Clear monthly cache to force refresh
         const monthKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
@@ -201,6 +200,7 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
 
   const swipeHandlers = useSwipeBack(onBack);
   const selectedPayment = PAYMENT_METHODS.find(p => p.label === paymentMethod)!;
+  const getTranslatedCategory = (category: string) => t(`categories.${category.toLowerCase()}`) || category;
 
   return (
     <>
@@ -263,7 +263,7 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
                   <View style={[styles.categoryColorDot, { backgroundColor: getCategoryColor(selectedCategory) }]} />
                 )}
                 <Text style={[styles.pickerButtonText, !selectedCategory && styles.pickerPlaceholder]}>
-                  {selectedCategory || t('newExpense.selectCategory')}
+                  {selectedCategory ? getTranslatedCategory(selectedCategory) : t('newExpense.selectCategory')}
                 </Text>
               </View>
               <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
@@ -281,7 +281,7 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
                       <View style={styles.pickerItemContent}>
                         <View style={[styles.categoryColorDot, { backgroundColor: getCategoryColor(category) }]} />
                         <Text style={[styles.pickerItemText, selectedCategory === category && styles.pickerItemTextSelected]}>
-                          {category}
+                          {getTranslatedCategory(category)}
                         </Text>
                       </View>
                       {selectedCategory === category && <Ionicons name="checkmark" size={18} color={colors.primary} />}

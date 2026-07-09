@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFullCategorySettings } from '../components/categories';
 
 // Cache keys
 export const CACHE_KEYS = {
@@ -17,6 +18,7 @@ export const CACHE_KEYS = {
   ORG_TRANSACTIONS: '@org_transactions_',
   ORG_SALES_REPORTS: '@org_sales_reports_',
   ORG_RECEIPT_MATCHES: '@org_receipt_matches_',
+  ORG_BUSINESS_REPORT_AUTOMATION: '@org_business_report_automation_',
 };
 
 interface SyncMetadata {
@@ -26,6 +28,31 @@ interface SyncMetadata {
     end: string;
   };
 }
+
+const getExpenseTime = (expense: any): number => {
+  const rawDate = expense?.expenseDate || expense?.date || expense?.createdAt;
+  const time = rawDate ? new Date(rawDate).getTime() : 0;
+  return Number.isNaN(time) ? 0 : time;
+};
+
+export const mergeExpensesById = (existing: any[] = [], incoming: any[] = []) => {
+  const byId = new Map<string, any>();
+
+  [...existing, ...incoming].forEach((expense: any) => {
+    if (!expense?.id) return;
+    byId.set(expense.id, { ...(byId.get(expense.id) || {}), ...expense });
+  });
+
+  return Array.from(byId.values()).sort((a: any, b: any) => getExpenseTime(b) - getExpenseTime(a));
+};
+
+export const cacheOrgExpenses = async (orgId: string, expenses: any[], options: { replace?: boolean } = {}) => {
+  const key = `${CACHE_KEYS.ORG_EXPENSES}${orgId}`;
+  const existing = options.replace ? [] : ((await getCachedData(key)) || []);
+  const merged = mergeExpensesById(Array.isArray(existing) ? existing : [], expenses || []);
+  await AsyncStorage.setItem(key, JSON.stringify(merged));
+  return merged;
+};
 
 // Save comprehensive login data to cache
 export const cacheLoginData = async (data: any) => {
@@ -52,10 +79,10 @@ export const cacheLoginData = async (data: any) => {
       const { orgId, categoryOverrides, expenses, matches } = firstOrgData;
 
       await AsyncStorage.multiSet([
-        [`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`, JSON.stringify(categoryOverrides || [])],
-        [`${CACHE_KEYS.ORG_EXPENSES}${orgId}`, JSON.stringify(expenses)],
+        [`${CACHE_KEYS.ORG_CATEGORIES}${orgId}`, JSON.stringify(getFullCategorySettings(categoryOverrides || []))],
         [`${CACHE_KEYS.ORG_RECEIPT_MATCHES}${orgId}`, JSON.stringify(matches)],
       ]);
+      await cacheOrgExpenses(orgId, expenses || [], { replace: true });
     }
 
     // Save sync metadata

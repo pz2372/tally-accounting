@@ -138,32 +138,38 @@ export default function SalesReportScreen({ onBack, selectedOrgId }: SalesReport
         {/* Month Toggle */}
         <View style={styles.monthSelector}>
           <TouchableOpacity
-            style={styles.navButton}
+            style={styles.monthPillButton}
             onPress={() => {
               const newDate = new Date(selectedMonth);
               newDate.setMonth(newDate.getMonth() - 1);
               setSelectedMonth(newDate);
             }}
+            activeOpacity={0.75}
           >
-            <Text style={styles.navButtonText}>‹</Text>
+            <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
           </TouchableOpacity>
 
-          <View style={styles.monthInfo}>
+          <View style={styles.monthPillCenter}>
             <Text style={styles.monthText}>
               {selectedMonth.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' })}
             </Text>
           </View>
 
           <TouchableOpacity
-            style={styles.navButton}
+            style={[styles.monthPillButton, isCurrentOrFutureMonth() && styles.monthPillButtonDisabled]}
             onPress={() => {
               const newDate = new Date(selectedMonth);
               newDate.setMonth(newDate.getMonth() + 1);
               setSelectedMonth(newDate);
             }}
             disabled={isCurrentOrFutureMonth()}
+            activeOpacity={0.75}
           >
-            <Text style={[styles.navButtonText, isCurrentOrFutureMonth() && styles.navButtonDisabled]}>›</Text>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={isCurrentOrFutureMonth() ? colors.textSecondary : colors.textPrimary}
+            />
           </TouchableOpacity>
         </View>
 
@@ -339,6 +345,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
+    paddingRight: 25,
     color: colors.textPrimary,
   },
   headerButton: {
@@ -347,37 +354,40 @@ const styles = StyleSheet.create({
   monthSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.lg,
+    justifyContent: 'center',
+    alignSelf: 'center',
     marginBottom: spacing.lg,
-    padding: spacing.xl,
-    borderRadius: borderRadius.lg,
+    gap: spacing.sm,
+  },
+  monthPillButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  navButton: {
-    width: 40,
-    height: 40,
+  monthPillButtonDisabled: {
+    opacity: 0.45,
+  },
+  monthPillCenter: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  navButtonText: {
-    fontSize: 28,
-    color: colors.textSecondary,
-  },
-  navButtonDisabled: {
-    color: colors.borderLight,
-    opacity: 0.5,
-  },
-  monthInfo: {
-    alignItems: 'center',
-    flex: 1,
+    minHeight: 36,
+    minWidth: 156,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   monthText: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.textPrimary,
+    textAlign: 'center',
   },
   content: {
     flex: 1,

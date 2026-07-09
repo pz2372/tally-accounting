@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
@@ -19,6 +19,7 @@ interface DatePickerModalProps {
   onClose: () => void;
   onReset?: () => void;
   onDateRangeChange?: (range: DateRange) => void;
+  maxRangeMonths?: number;
 }
 
 export default function DatePickerModal({
@@ -28,6 +29,7 @@ export default function DatePickerModal({
   onClose,
   onReset,
   onDateRangeChange,
+  maxRangeMonths,
 }: DatePickerModalProps) {
   const { t } = useContext(LanguageContext);
   const [rangeStart, setRangeStart] = useState<string | null>(null);
@@ -35,6 +37,18 @@ export default function DatePickerModal({
 
   const formatDate = (date: Date) => {
     return date.toISOString().split('T')[0];
+  };
+
+  const isRangeOverLimit = (startDateString: string, endDateString: string) => {
+    if (!maxRangeMonths) return false;
+
+    const start = parseLocalDate(startDateString);
+    const end = parseLocalDate(endDateString);
+    const maxEnd = new Date(start);
+    maxEnd.setMonth(maxEnd.getMonth() + maxRangeMonths);
+    maxEnd.setHours(23, 59, 59, 999);
+
+    return end.getTime() > maxEnd.getTime();
   };
 
   const handleDayPress = (day: { dateString: string; timestamp: number }) => {
@@ -51,9 +65,17 @@ export default function DatePickerModal({
       const endTs = day.timestamp;
 
       if (endTs < startTs) {
+        if (isRangeOverLimit(day.dateString, rangeStart)) {
+          Alert.alert('Date Range Too Long', `Choose a range of ${maxRangeMonths} months or less.`);
+          return;
+        }
         setRangeEnd(rangeStart);
         setRangeStart(day.dateString);
       } else {
+        if (isRangeOverLimit(rangeStart, day.dateString)) {
+          Alert.alert('Date Range Too Long', `Choose a range of ${maxRangeMonths} months or less.`);
+          return;
+        }
         setRangeEnd(day.dateString);
       }
     }

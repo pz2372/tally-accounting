@@ -382,6 +382,7 @@ export const deleteStatement: Handler = async (req, res) => {
       // Delete matches first
       await tx.receiptMatch.deleteMany({
         where: {
+          orgId,
           cardTxn: { statementId: id }
         }
       });
@@ -392,8 +393,8 @@ export const deleteStatement: Handler = async (req, res) => {
       });
       
       // Delete statement
-      await tx.statement.delete({
-        where: { id }
+      await tx.statement.deleteMany({
+        where: { id, orgId }
       });
     });
     
@@ -482,4 +483,3 @@ export const getStatementFileUrl: Handler = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to generate file URL' });
   }
 };
-

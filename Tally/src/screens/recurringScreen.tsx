@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
-import { CATEGORIES, getCategoryColor } from '../components/categories';
+import { CATEGORIES, getCategoryColor, getCategoryIcon as getCategoryIconFromConfig, getCategoryName } from '../components/categories';
 import { getCachedData, CACHE_KEYS } from '../services/cacheService';
 import { getAccessToken, refreshAccessToken } from '../services/authService';
 import axios from 'axios';
@@ -15,12 +15,12 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onr
 
 // Map category keys to display names
 const CATEGORY_KEY_TO_NAME: Record<string, string> = {
-  'miscellaneous': 'Miscellaneous',
-  'labor': 'Labor',
-  'inventory': 'Inventory',
-  'operations': 'Operations',
-  'tax': 'Tax',
-  'transportation': 'Transportation',
+  miscellaneous: 'Other Expenses',
+  labor: 'Wages',
+  inventory: 'Supplies',
+  operations: 'Rent',
+  tax: 'Taxes & Licenses',
+  transportation: 'Auto Expenses',
 };
 
 interface RecurringScreenProps {
@@ -34,6 +34,7 @@ interface RecurringCharge {
   category: string;
   amount: number;
   frequency: 'monthly' | 'yearly' | 'weekly' | 'quarterly';
+  dayOfMonth?: number;
   nextBillingDate: string;
   isActive: boolean;
   lastCharge: string;
@@ -44,10 +45,11 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteChargeId, setDeleteChargeId] = useState<string | number | null>(null);
+  const [editingChargeId, setEditingChargeId] = useState<string | number | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [newVendor, setNewVendor] = useState('');
   const [newAmount, setNewAmount] = useState('');
-  const [newCategory, setNewCategory] = useState('Operations');
+  const [newCategory, setNewCategory] = useState('Rent');
   const [newFrequency, setNewFrequency] = useState<'monthly' | 'yearly' | 'weekly' | 'quarterly'>('monthly');
   const [recurringDate, setRecurringDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -104,9 +106,10 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
           const transformedCharges: RecurringCharge[] = response.data.charges.map((charge: any) => ({
             id: charge.id,
             vendor: charge.name,
-            category: charge.categoryKey ? CATEGORY_KEY_TO_NAME[charge.categoryKey] || 'Operations' : 'Operations',
+            category: charge.categoryKey ? CATEGORY_KEY_TO_NAME[charge.categoryKey] || getCategoryName(charge.categoryKey) : 'Rent',
             amount: charge.amountCents / 100,
             frequency: 'monthly', // Server only supports monthly currently
+            dayOfMonth: charge.dayOfMonth,
             nextBillingDate: charge.nextRunAt ? new Date(charge.nextRunAt).toLocaleDateString() : '',
             isActive: charge.status === 'ACTIVE',
             lastCharge: charge.lastRunAt ? new Date(charge.lastRunAt).toLocaleDateString() : ''
@@ -142,9 +145,10 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
               const transformedCharges: RecurringCharge[] = retryResponse.data.charges.map((charge: any) => ({
                 id: charge.id,
                 vendor: charge.name,
-                category: charge.categoryKey ? CATEGORY_KEY_TO_NAME[charge.categoryKey] || 'Operations' : 'Operations',
+                category: charge.categoryKey ? CATEGORY_KEY_TO_NAME[charge.categoryKey] || getCategoryName(charge.categoryKey) : 'Rent',
                 amount: charge.amountCents / 100,
                 frequency: 'monthly',
+                dayOfMonth: charge.dayOfMonth,
                 nextBillingDate: charge.nextRunAt ? new Date(charge.nextRunAt).toLocaleDateString() : '',
                 isActive: charge.status === 'ACTIVE',
                 lastCharge: charge.lastRunAt ? new Date(charge.lastRunAt).toLocaleDateString() : ''
@@ -261,23 +265,36 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
     }
   };
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'Miscellaneous':
-        return 'apps-outline';
-      case 'Labor':
-        return 'people-outline';
-      case 'Inventory':
-        return 'cube-outline';
-      case 'Operations':
-        return 'settings-outline';
-      case 'Tax':
-        return 'calculator-outline';
-      case 'Transportation':
-        return 'car-outline';
-      default:
-        return 'repeat';
-    }
+  const getCategoryIcon = (category: string) => getCategoryIconFromConfig(category);
+
+  const resetChargeForm = () => {
+    setEditingChargeId(null);
+    setNewVendor('');
+    setNewAmount('');
+    setNewCategory('Rent');
+    setRecurringDate('');
+    setShowCategoryPicker(false);
+  };
+
+  const openAddModal = () => {
+    resetChargeForm();
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (charge: RecurringCharge) => {
+    setEditingChargeId(charge.id);
+    setNewVendor(charge.vendor);
+    setNewAmount(charge.amount.toFixed(2));
+    setNewCategory(charge.category || 'Rent');
+    const day = charge.dayOfMonth || (charge.nextBillingDate ? new Date(charge.nextBillingDate).getDate() : 1);
+    setRecurringDate(String(Math.min(Math.max(day || 1, 1), 28)));
+    setShowCategoryPicker(false);
+    setShowAddModal(true);
+  };
+
+  const closeChargeModal = () => {
+    setShowAddModal(false);
+    resetChargeForm();
   };
 
   const handleAddCharge = async () => {
@@ -345,33 +362,41 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
         startDate: startDate.toISOString()
       };
 
+      const isEditing = editingChargeId !== null;
+
       // Make API call
-      const response = await axios.post(
-        `${API_URL}/api/recurring-charges`,
-        requestData,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'X-Org-Id': orgId
-          }
+      const response = await axios.request({
+        method: isEditing ? 'put' : 'post',
+        url: isEditing
+          ? `${API_URL}/api/recurring-charges/${editingChargeId}`
+          : `${API_URL}/api/recurring-charges`,
+        data: requestData,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Org-Id': orgId
         }
-      );
+      });
 
       if (response.data.success) {
-        // Update local state with new charge
-        const newCharge: RecurringCharge = {
+        // Update local state with saved charge
+        const savedCharge: RecurringCharge = {
           id: response.data.charge.id, // Use cuid string directly
           vendor: response.data.charge.name,
-          category: newCategory,
-          amount: amountCents / 100,
+          category: response.data.charge.categoryKey
+            ? CATEGORY_KEY_TO_NAME[response.data.charge.categoryKey] || getCategoryName(response.data.charge.categoryKey)
+            : newCategory,
+          amount: response.data.charge.amountCents / 100,
           frequency: 'monthly',
+          dayOfMonth: response.data.charge.dayOfMonth,
           nextBillingDate: new Date(response.data.charge.nextRunAt).toLocaleDateString(),
-          isActive: true,
-          lastCharge: ''
+          isActive: response.data.charge.status === 'ACTIVE',
+          lastCharge: response.data.charge.lastRunAt ? new Date(response.data.charge.lastRunAt).toLocaleDateString() : ''
         };
 
-        const updatedCharges = [newCharge, ...charges];
+        const updatedCharges = isEditing
+          ? charges.map(charge => charge.id === editingChargeId ? savedCharge : charge)
+          : [savedCharge, ...charges];
         setCharges(updatedCharges);
 
         // Update cache
@@ -381,14 +406,9 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
         );
 
         // Reset form and close modal
-        setNewVendor('');
-        setNewAmount('');
-        setNewCategory('Operations');
-        setRecurringDate('');
-        setShowAddModal(false);
-        setShowCategoryPicker(false);
+        closeChargeModal();
 
-        Alert.alert('Success', 'Recurring charge added successfully');
+        Alert.alert('Success', isEditing ? 'Recurring charge updated successfully' : 'Recurring charge added successfully');
       }
     } catch (error: any) {
       // Alert is shown below
@@ -430,7 +450,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('recurring.title')}</Text>
-          <TouchableOpacity style={styles.headerButton} onPress={() => setShowAddModal(true)}>
+          <TouchableOpacity style={styles.headerButton} onPress={openAddModal}>
             <Ionicons name="add" size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
@@ -478,7 +498,13 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
                     <View style={styles.chargeRight}>
                       <Text style={styles.chargeAmount}>${charge.amount.toFixed(2)}</Text>
                       <TouchableOpacity 
-                        style={styles.trashButton}
+                        style={styles.iconButton}
+                        onPress={() => openEditModal(charge)}
+                      >
+                        <Ionicons name="create-outline" size={20} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.iconButton}
                         onPress={() => {
                           setDeleteChargeId(charge.id);
                           setShowDeleteModal(true);
@@ -536,13 +562,13 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
           visible={showAddModal}
           animationType="fade"
           transparent={true}
-          onRequestClose={() => setShowAddModal(false)}
+          onRequestClose={closeChargeModal}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.editModalContent}>
               <View style={styles.editModalHeader}>
-                <Text style={styles.modalTitle}>{t('recurring.addTitle')}</Text>
-                <TouchableOpacity onPress={() => setShowAddModal(false)}>
+                <Text style={styles.modalTitle}>{editingChargeId ? 'Edit Recurring Expense' : t('recurring.addTitle')}</Text>
+                <TouchableOpacity onPress={closeChargeModal}>
                   <Ionicons name="close" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
               </View>
@@ -678,7 +704,7 @@ export default function RecurringScreen({ onBack, selectedOrgId }: RecurringScre
                 {isSaving ? (
                   <ActivityIndicator color={colors.surface} />
                 ) : (
-                  <Text style={styles.saveButtonText}>{t('recurring.addButton')}</Text>
+                  <Text style={styles.saveButtonText}>{editingChargeId ? 'Save Changes' : t('recurring.addButton')}</Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
@@ -845,7 +871,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
   },
-  trashButton: {
+  iconButton: {
     padding: spacing.xs,
   },
   modalOverlay: {

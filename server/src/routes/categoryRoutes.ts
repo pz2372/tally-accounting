@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import * as categoryController from '../controllers/categoryController';
 import { requireOrg, verifyToken } from '../middleware/auth';
+import { requireAdmin } from '../middleware/roleAuth';
+import { auditAction } from '../middleware/auditAction';
+import { validate } from '../middleware/validate';
+import { categorySchemas } from '../validation/schemas';
 
 const router = Router();
 
@@ -15,6 +19,6 @@ router.use(requireOrg);
 router.get('/', categoryController.getOrgCategories);
 
 // Update category overrides (disable / hide from employees)
-router.put('/batch', categoryController.updateOrgCategories);
+router.put('/batch', requireAdmin, validate({ body: categorySchemas.batchUpdate }), auditAction({ action: 'ADMIN_UPDATE', entityType: 'CategorySettings' }), categoryController.updateOrgCategories);
 
 export default router;

@@ -10,9 +10,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 let SecureStore: typeof import('expo-secure-store') | null = null;
 
 try {
-  SecureStore = require('expo-secure-store');
+  const ExpoSecureStore = require('expo-secure-store');
   // Verify the native module is actually available
-  SecureStore.getItemAsync('__probe__').catch(() => {});
+  if (ExpoSecureStore?.getItemAsync && ExpoSecureStore?.setItemAsync && ExpoSecureStore?.deleteItemAsync) {
+    SecureStore = ExpoSecureStore;
+    SecureStore?.getItemAsync('__probe__').catch(() => {});
+  }
 } catch {
   SecureStore = null;
 }

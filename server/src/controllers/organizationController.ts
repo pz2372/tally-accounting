@@ -251,7 +251,7 @@ export const getOrganization: Handler = async (req, res) => {
 export const updateOrganization: Handler = async (req, res) => {
   try {
     const { orgId, role } = req.user;
-    const { name, dba, ein } = req.body;
+    const { name, dba, ein, inventoryItemizedTrackerEnabled } = req.body;
 
     if (role !== 'ADMIN') {
       return res.status(403).json({
@@ -260,20 +260,37 @@ export const updateOrganization: Handler = async (req, res) => {
       });
     }
 
-    if (!name || name.trim() === '') {
+    if (name !== undefined && name.trim() === '') {
       return res.status(400).json({
         success: false,
         error: 'Organization name is required'
       });
     }
 
+    if (inventoryItemizedTrackerEnabled !== undefined && typeof inventoryItemizedTrackerEnabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'inventoryItemizedTrackerEnabled must be a boolean'
+      });
+    }
+
+    const data: {
+      name?: string;
+      dba?: string | null;
+      ein?: string | null;
+      inventoryItemizedTrackerEnabled?: boolean;
+    } = {};
+
+    if (name !== undefined) data.name = name.trim();
+    if (dba !== undefined) data.dba = dba?.trim() || null;
+    if (ein !== undefined) data.ein = ein?.trim() || null;
+    if (inventoryItemizedTrackerEnabled !== undefined) {
+      data.inventoryItemizedTrackerEnabled = inventoryItemizedTrackerEnabled;
+    }
+
     const org = await prisma.organization.update({
       where: { id: orgId },
-      data: {
-        name: name.trim(),
-        dba: dba?.trim() || null,
-        ein: ein?.trim() || null
-      }
+      data
     });
 
     res.json({
@@ -502,4 +519,3 @@ export const getMembers: Handler = async (req, res) => {
     });
   }
 };
-

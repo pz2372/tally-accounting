@@ -27,6 +27,7 @@ interface ExpenseDetailsScreenProps {
         paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK';
         orgCategoryId?: string;
         notes?: string;
+        receiptImageSource?: { uri: string; headers?: Record<string, string> };
     };
     onBack: () => void;
     onExpenseDeleted?: () => void;
@@ -34,24 +35,7 @@ interface ExpenseDetailsScreenProps {
     selectedOrgId?: string | null;
 }
 
-const getCategoryColor = (category: string): string => {
-    switch (category) {
-        case 'Miscellaneous':
-            return '#6B7280';
-        case 'Labor':
-            return '#9333EA';
-        case 'Inventory':
-            return '#10B981';
-        case 'Operations':
-            return '#F59E0B';
-        case 'Tax':
-            return '#EF4444';
-        case 'Transportation':
-            return '#3B82F6';
-        default:
-            return colors.gray;
-    }
-};
+const getCategoryColor = (category: string): string => getColorFromCategories(category);
 
 export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted, onExpenseUpdated, selectedOrgId }: ExpenseDetailsScreenProps) {
     const { t } = useContext(LanguageContext);
@@ -80,16 +64,29 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
     const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
     const [imageHeaders, setImageHeaders] = useState<Record<string, string>>({});
     const [showImageViewer, setShowImageViewer] = useState(false);
-    const [imageLoading, setImageLoading] = useState(true);
+    const [imageLoading, setImageLoading] = useState(false);
 
     useEffect(() => {
         const loadReceiptImage = async () => {
             try {
+                if (expense.receiptImageSource) {
+                    setReceiptImageUrl(expense.receiptImageSource.uri);
+                    setImageHeaders(expense.receiptImageSource.headers || {});
+                    setImageLoading(false);
+                    return;
+                }
+
                 const orgId = await getOrgId();
-                if (!orgId) return;
+                if (!orgId) {
+                    setImageLoading(false);
+                    return;
+                }
 
                 const token = await getAccessToken();
-                if (!token) return;
+                if (!token) {
+                    setImageLoading(false);
+                    return;
+                }
 
                 // Check if expense has a receipt by fetching from server
                 const res = await fetch(`${API_URL}/api/expenses/${expense.id}`, {
@@ -98,18 +95,25 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                 const data = await res.json();
 
                 if (data.success && data.expense?.receiptUrl) {
+                    setImageLoading(true);
                     setReceiptImageUrl(`${API_URL}/api/expenses/${expense.id}/image`);
                     setImageHeaders({ Authorization: `Bearer ${token}`, 'x-org-id': orgId });
+                } else {
+                    setImageLoading(false);
                 }
-            } catch { }
+            } catch {
+                setImageLoading(false);
+            }
         };
         loadReceiptImage();
-    }, [expense.id]);
+    }, [expense.id, expense.receiptImageSource]);
 
     const hasChanges = editCategory !== savedValues.current.category ||
         editPaymentMethod !== savedValues.current.paymentMethod ||
         editDescription !== savedValues.current.notes ||
         editDate.getTime() !== savedValues.current.date;
+
+    const isLocalReceiptImage = receiptImageUrl?.startsWith('file:');
 
     const formatDate = (dateStr: string, day: number): string => {
         const monthKeys = ['january', 'february', 'march', 'april', 'may', 'june',
@@ -359,8 +363,9 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
                                     source={{ uri: receiptImageUrl, headers: imageHeaders }}
                                     style={styles.receiptImage}
                                     resizeMode="contain"
-                                    onLoadStart={() => setImageLoading(true)}
+                                    onLoadStart={() => !isLocalReceiptImage && setImageLoading(true)}
                                     onLoadEnd={() => setImageLoading(false)}
+                                    onError={() => setImageLoading(false)}
                                 />
                                 <View style={styles.tapToZoomBadge}>
                                     <Ionicons name="expand-outline" size={14} color={colors.surface} />

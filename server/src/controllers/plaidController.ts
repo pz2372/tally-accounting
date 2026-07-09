@@ -286,9 +286,9 @@ export const removeItem: Handler = async (req, res) => {
     const { itemId } = req.params;
     const orgId = req.user.orgId;
 
-    const item = await prisma.plaidItem.findUnique({ where: { id: itemId } });
+    const item = await prisma.plaidItem.findFirst({ where: { id: itemId, orgId } });
 
-    if (!item || item.orgId !== orgId) {
+    if (!item) {
       return res.status(404).json({ success: false, error: 'Item not found' });
     }
 
@@ -296,7 +296,7 @@ export const removeItem: Handler = async (req, res) => {
     await plaidClient.itemRemove({ access_token: item.accessToken });
 
     // Remove from DB (accounts cascade)
-    await prisma.plaidItem.delete({ where: { id: itemId } });
+    await prisma.plaidItem.deleteMany({ where: { id: itemId, orgId } });
 
     return res.json({ success: true, message: 'Account disconnected' });
   } catch (error) {

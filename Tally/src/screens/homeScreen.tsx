@@ -5,8 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
-import { getOrgCachedData } from '../services/cacheService';
-import { createAuthenticatedAxios } from '../services/authService';
+import { cacheOrgExpenses, getOrgCachedData } from '../services/cacheService';
+import { checkAuth, createAuthenticatedAxios } from '../services/authService';
+import { getFullCategorySettings } from '../components/categories';
 import NewExpenseScreen from './newExpenseScreen';
 import UploadStatementScreen from './uploadStatementScreen';
 import NeedsAttentionScreen from './needsAttentionScreen';
@@ -45,6 +46,7 @@ interface HomeScreenProps {
   onCreateOrganization?: () => void;
   onDataChanged?: () => void;
   onOrgChange?: (orgId: string) => void;
+  onUserRefresh?: (user: any) => void;
   onExpensePress?: (expense: any) => void;
   dataVersion?: number;
   currentUser?: {
@@ -61,6 +63,7 @@ export default function HomeScreen({
   onCreateOrganization,
   onDataChanged,
   onOrgChange,
+  onUserRefresh,
   onExpensePress,
   dataVersion,
   currentUser
@@ -135,9 +138,19 @@ export default function HomeScreen({
   // Only overwrites cache for endpoints that succeed — failed calls keep existing cache
   const refreshOrgData = async (orgId: string) => {
     const api = await createAuthenticatedAxios();
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
 
     const [expensesRes, categoriesRes, statementsRes, recurringRes, receiptsRes, matchesRes, salesRes] = await Promise.all([
-      api.get('/api/expenses', { headers: { 'x-org-id': orgId } }).catch(() => null),
+      api.get('/api/expenses', {
+        headers: { 'x-org-id': orgId },
+        params: {
+          startDate: thirtyDaysAgo.toISOString(),
+          endDate: now.toISOString(),
+        },
+      }).catch(() => null),
       api.get('/api/categories', { headers: { 'x-org-id': orgId } }).catch(() => null),
       api.get('/api/statements', { headers: { 'x-org-id': orgId } }).catch(() => null),
       api.get('/api/recurring-charges', { headers: { 'x-org-id': orgId } }).catch(() => null),
@@ -147,8 +160,8 @@ export default function HomeScreen({
     ]);
 
     const cacheUpdates: [string, string][] = [];
-    if (expensesRes?.data?.expenses)     cacheUpdates.push([`@org_expenses_${orgId}`, JSON.stringify(expensesRes.data.expenses)]);
-    if (categoriesRes?.data?.categories) cacheUpdates.push([`@org_categories_${orgId}`, JSON.stringify(categoriesRes.data.categories)]);
+    if (expensesRes?.data?.expenses)     await cacheOrgExpenses(orgId, expensesRes.data.expenses, { replace: true });
+    if (categoriesRes?.data?.categories) cacheUpdates.push([`@org_categories_${orgId}`, JSON.stringify(getFullCategorySettings(categoriesRes.data.categories))]);
     if (statementsRes?.data?.statements) cacheUpdates.push([`@org_statements_${orgId}`, JSON.stringify(statementsRes.data.statements)]);
     if (recurringRes?.data?.charges)     cacheUpdates.push([`@org_recurring_charges_${orgId}`, JSON.stringify(recurringRes.data.charges)]);
     if (receiptsRes?.data?.receipts)     cacheUpdates.push([`@org_receipts_${orgId}`, JSON.stringify(receiptsRes.data.receipts)]);
@@ -185,10 +198,30 @@ export default function HomeScreen({
 
   // Pull-to-refresh handler
   const handleRefresh = async () => {
-    if (!selectedBusinessId) return;
     setRefreshing(true);
     try {
-      await refreshOrgData(selectedBusinessId);
+      let orgIdToRefresh = selectedBusinessId;
+      const { valid, user: freshUser } = await checkAuth();
+
+      if (valid && freshUser) {
+        await AsyncStorage.setItem('@current_user', JSON.stringify(freshUser));
+        onUserRefresh?.(freshUser);
+
+        const freshBusinesses = Array.isArray(freshUser.organizations) ? freshUser.organizations : [];
+        const selectedStillExists = orgIdToRefresh && freshBusinesses.some((org: any) => org.id === orgIdToRefresh);
+
+        if (!selectedStillExists) {
+          orgIdToRefresh = freshBusinesses[0]?.id || null;
+          if (orgIdToRefresh) {
+            setSelectedBusinessId(orgIdToRefresh);
+            onOrgChange?.(orgIdToRefresh);
+          }
+        }
+      }
+
+      if (orgIdToRefresh) {
+        await refreshOrgData(orgIdToRefresh);
+      }
       onDataChanged?.();
     } catch {
       // silently fail — user can try again

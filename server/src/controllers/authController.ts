@@ -17,6 +17,22 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET: Secret = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN: SignOptions['expiresIn'] = (process.env.JWT_EXPIRES_IN || '7d') as SignOptions['expiresIn'];
+const FIREBASE_VERIFY_TIMEOUT_MS = 10000;
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeout: NodeJS.Timeout | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+};
 
 // Register user - create Firebase user, create DB user, return access token
 export const register: Handler = async (req, res) => {
@@ -114,6 +130,7 @@ export const register: Handler = async (req, res) => {
           id: m.orgId,
           name: m.org.name,
           dba: m.org.dba,
+          inventoryItemizedTrackerEnabled: m.org.inventoryItemizedTrackerEnabled,
           role: m.role,
           permissions: m.permissions,
           subscription: m.org.subscription
@@ -131,6 +148,9 @@ export const register: Handler = async (req, res) => {
 
 // Firebase login - verify Firebase token and return access token
 export const firebaseLogin: Handler = async (req, res) => {
+  const startedAt = Date.now();
+  console.log(`[auth] firebase-login received ${new Date().toISOString()}`);
+
   try {
     const { firebaseToken } = req.body;
     
@@ -144,11 +164,21 @@ export const firebaseLogin: Handler = async (req, res) => {
     // Verify Firebase token
     let decodedToken;
     try {
-      decodedToken = await getAuth().verifyIdToken(firebaseToken);
+      decodedToken = await withTimeout(
+        getAuth().verifyIdToken(firebaseToken),
+        FIREBASE_VERIFY_TIMEOUT_MS,
+        'Firebase token verification timed out'
+      );
+      console.log(`[auth] firebase-login Firebase token verified in ${Date.now() - startedAt}ms`);
     } catch (error) {
-      return res.status(401).json({
+      const message = error instanceof Error ? error.message : 'Invalid Firebase token';
+      const timedOut = message.includes('timed out');
+      console.log(`[auth] firebase-login Firebase token ${timedOut ? 'timed out' : 'rejected'} in ${Date.now() - startedAt}ms`, message);
+      return res.status(timedOut ? 504 : 401).json({
         success: false,
-        error: 'Invalid Firebase token'
+        error: timedOut
+          ? 'Firebase token verification timed out. Check the server network connection to Firebase.'
+          : 'Invalid Firebase token'
       });
     }
     
@@ -156,8 +186,9 @@ export const firebaseLogin: Handler = async (req, res) => {
     
     // Calculate current month date range
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
     
     // Find or create user in database with basic organization list
     let user = await prisma.user.findUnique({
@@ -204,7 +235,8 @@ export const firebaseLogin: Handler = async (req, res) => {
       });
     }
     
-    // Load detailed data only for the first organization
+    // Keep login fast: preload lightweight org category settings only.
+    // Expenses and matches are refreshed after authentication by the app.
     let firstOrgData = null;
     if (user.memberships.length > 0) {
       const firstOrgId = user.memberships[0].orgId;
@@ -213,20 +245,6 @@ export const firebaseLogin: Handler = async (req, res) => {
         where: { id: firstOrgId },
         include: {
           orgCategories: true,
-          expenses: {
-            where: {
-              expenseDate: { gte: startOfMonth, lte: endOfMonth }
-            }
-          },
-          matches: {
-            where: {
-              createdAt: { gte: startOfMonth, lte: endOfMonth }
-            },
-            include: {
-              expense: true,
-              cardTxn: true
-            }
-          }
         }
       });
     }
@@ -243,6 +261,8 @@ export const firebaseLogin: Handler = async (req, res) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
     
+    console.log(`[auth] firebase-login responding success in ${Date.now() - startedAt}ms`);
+
     res.json({
       success: true,
       accessToken,
@@ -256,6 +276,7 @@ export const firebaseLogin: Handler = async (req, res) => {
           id: m.orgId,
           name: m.org.name,
           dba: m.org.dba,
+          inventoryItemizedTrackerEnabled: m.org.inventoryItemizedTrackerEnabled,
           role: m.role,
           permissions: m.permissions,
           subscription: m.org.subscription
@@ -265,13 +286,13 @@ export const firebaseLogin: Handler = async (req, res) => {
       firstOrgData: firstOrgData ? {
         orgId: firstOrgData.id,
         categoryOverrides: firstOrgData.orgCategories,
-        expenses: firstOrgData.expenses,
-        matches: firstOrgData.matches
+        expenses: [],
+        matches: []
       } : null,
       syncedAt: new Date().toISOString(),
       syncPeriod: {
-        start: startOfMonth.toISOString(),
-        end: endOfMonth.toISOString()
+        start: thirtyDaysAgo.toISOString(),
+        end: now.toISOString()
       }
     });
   } catch (error) {
@@ -842,10 +863,12 @@ export const directLogin: PublicHandler = async (req, res) => {
       });
     }
 
-    // Load first org data (same as firebaseLogin)
+    // Keep login fast: preload lightweight org category settings only.
+    // Expenses and matches are refreshed after authentication by the app.
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
 
     let firstOrgData = null;
     if (user.memberships.length > 0) {
@@ -855,20 +878,6 @@ export const directLogin: PublicHandler = async (req, res) => {
         where: { id: firstOrgId },
         include: {
           orgCategories: true,
-          expenses: {
-            where: {
-              expenseDate: { gte: startOfMonth, lte: endOfMonth },
-            },
-          },
-          matches: {
-            where: {
-              createdAt: { gte: startOfMonth, lte: endOfMonth },
-            },
-            include: {
-              expense: true,
-              cardTxn: true,
-            },
-          },
         },
       });
     }
@@ -898,6 +907,7 @@ export const directLogin: PublicHandler = async (req, res) => {
           id: m.orgId,
           name: m.org.name,
           dba: m.org.dba,
+          inventoryItemizedTrackerEnabled: m.org.inventoryItemizedTrackerEnabled,
           role: m.role,
           permissions: m.permissions,
           subscription: m.org.subscription,
@@ -908,14 +918,14 @@ export const directLogin: PublicHandler = async (req, res) => {
         ? {
             orgId: firstOrgData.id,
             categoryOverrides: firstOrgData.orgCategories,
-            expenses: firstOrgData.expenses,
-            matches: firstOrgData.matches,
+            expenses: [],
+            matches: [],
           }
         : null,
       syncedAt: new Date().toISOString(),
       syncPeriod: {
-        start: startOfMonth.toISOString(),
-        end: endOfMonth.toISOString(),
+        start: thirtyDaysAgo.toISOString(),
+        end: now.toISOString(),
       },
     });
   } catch (error) {
@@ -923,4 +933,3 @@ export const directLogin: PublicHandler = async (req, res) => {
     res.status(500).json({ success: false, error: 'Login failed' });
   }
 };
-

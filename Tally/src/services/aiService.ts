@@ -1,6 +1,6 @@
 // AI Service for Receipt Data Extraction
 import * as FileSystem from 'expo-file-system/legacy';
-import { getAccessToken } from './authService';
+import { getAccessToken, getStoredUser } from './authService';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
@@ -19,6 +19,14 @@ export interface ExtractedReceiptData {
   tax: string;
   discounts: string;
   refunds: string;
+  items: Array<{
+    name: string;
+    normalizedName: string;
+    quantity: string;
+    unit: string;
+    unitPrice: string;
+    total: string;
+  }>;
 }
 
 /**
@@ -50,12 +58,16 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
       throw new Error('No authentication token available');
     }
 
+    const storedUser = await getStoredUser();
+    const orgId = storedUser?.organizations?.[0]?.id;
+
     // Call backend extraction endpoint
     const response = await fetch(`${API_URL}/api/receipts/extract`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        ...(orgId ? { 'x-org-id': orgId } : {}),
       },
       body: JSON.stringify({
         image: base64Image,
@@ -87,6 +99,14 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
       tax: data.tax || '',
       discounts: data.discounts || '',
       refunds: data.refunds || '',
+      items: Array.isArray(data.items) ? data.items.map((item: any) => ({
+        name: item.name || '',
+        normalizedName: item.normalizedName || item.name || '',
+        quantity: item.quantity || '',
+        unit: item.unit || '',
+        unitPrice: item.unitPrice || '',
+        total: item.total || '',
+      })) : [],
     };
   } catch (error: any) {
     // Return empty data on error so user can enter manually
@@ -104,6 +124,7 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
       tax: '',
       discounts: '',
       refunds: '',
+      items: [],
     };
   }
 };

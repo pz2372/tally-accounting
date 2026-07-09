@@ -14,13 +14,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { colors, typography, spacing, borderRadius, commonStyles } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { getOrgCachedData, CACHE_KEYS } from '../services/cacheService';
 import { getAccessToken } from '../services/authService';
-import { CATEGORIES, CATEGORY_CONFIG } from '../components/categories';
+import { CATEGORIES, CATEGORY_CONFIG, LEGACY_CATEGORY_KEY_TO_KEY } from '../components/categories';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
+const RECEIPT_THUMB_CACHE_DIR = `${FileSystem.cacheDirectory}receipt-thumbnails/`;
+
+type ReceiptImageSource = { uri: string; headers?: Record<string, string> };
 
 interface ExpenseItem {
   id: string;
@@ -32,6 +36,8 @@ interface ExpenseItem {
   paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK';
   categoryKey?: string;
   notes?: string;
+  receiptUrl?: string;
+  receiptImageSource?: ReceiptImageSource;
 }
 
 interface CategoryData {
@@ -65,13 +71,15 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTotalLoading, setIsTotalLoading] = useState(true);
   const [totalSpent, setTotalSpent] = useState(0);
-  
+  const [receiptImageSources, setReceiptImageSources] = useState<Record<string, ReceiptImageSource>>({});
+
   const isCurrentOrFutureMonth = () => {
     const now = new Date();
-    return selectedMonth.getFullYear() > now.getFullYear() || 
-           (selectedMonth.getFullYear() === now.getFullYear() && 
-            selectedMonth.getMonth() >= now.getMonth());
+    return selectedMonth.getFullYear() > now.getFullYear() ||
+      (selectedMonth.getFullYear() === now.getFullYear() &&
+        selectedMonth.getMonth() >= now.getMonth());
   };
 
   const isInitialLoad = useRef(true);
@@ -83,13 +91,21 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
 
   const buildCategoryView = (expenses: any[], orgOverrides: any[], userRole: string) => {
     const categoryMap = new Map<string, CategoryData>();
+    const normalizeCategoryKey = (key?: string) => key ? (LEGACY_CATEGORY_KEY_TO_KEY[key] || key) : key;
+    const overrideByKey = new Map<string, any>();
+
+    orgOverrides?.forEach((override: any) => {
+      const key = normalizeCategoryKey(override?.categoryKey || override?.key);
+      if (key) overrideByKey.set(key, override);
+    });
+
     let totalSpentAllCategories = 0;
 
     CATEGORIES.forEach((name) => {
       const config = CATEGORY_CONFIG[name];
       if (!config) return;
 
-      const override = orgOverrides?.find((oc: any) => (oc.categoryKey || oc.key) === config.key);
+      const override = overrideByKey.get(config.key);
       const isEnabled = !override || override.isEnabled !== false;
       const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
       const isVisibleToUser = isEnabled && (userRole === 'ADMIN' || isVisibleToEmployees);
@@ -120,14 +136,19 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
           return;
         }
 
-        const categoryData = categoryMap.get(expense.categoryKey);
+        const normalizedCategoryKey = normalizeCategoryKey(expense.categoryKey);
+        if (!normalizedCategoryKey) {
+          return;
+        }
+
+        const categoryData = categoryMap.get(normalizedCategoryKey);
         if (!categoryData) {
           return;
         }
 
         const amountDollars = expense.amountCents / 100;
 
-        const override = orgOverrides?.find((oc: any) => (oc.categoryKey || oc.key) === expense.categoryKey);
+        const override = overrideByKey.get(normalizedCategoryKey);
         const isVisibleToEmployees = !override || override.visibleToEmployees !== false;
         const isVisibleToUser = userRole === 'ADMIN' || isVisibleToEmployees;
 
@@ -142,8 +163,9 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
             description: expense.notes || expense.categoryNameSnapshot || '',
             amount: amountDollars,
             paymentMethod: expense.paymentMethod,
-            categoryKey: expense.categoryKey,
+            categoryKey: normalizedCategoryKey,
             notes: expense.notes,
+            receiptUrl: expense.receiptUrl,
           });
 
           categoryData.amount += amountDollars;
@@ -153,7 +175,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
     }
 
     const categoriesArray = Array.from(categoryMap.values())
-      .filter((cat) => cat.isVisible)
+      .filter((cat) => cat.isVisible && cat.expenseCount > 0 && cat.amount !== 0)
       .sort((a, b) => b.amount - a.amount);
 
     categoriesArray.forEach(cat => {
@@ -167,9 +189,36 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
     return { categoriesArray, totalSpentAllCategories };
   };
 
+  const getReceiptThumbCacheUri = (expense: any) => {
+    const versionDate = expense.updatedAt || expense.createdAt || expense.expenseDate || '';
+    const version = new Date(versionDate).getTime();
+    return `${RECEIPT_THUMB_CACHE_DIR}${expense.id}-${Number.isNaN(version) ? 'current' : version}.jpg`;
+  };
+
+  const loadCachedReceiptImages = async (expenses: any[]) => {
+    const nextSources: Record<string, ReceiptImageSource> = {};
+
+    await Promise.all((expenses || []).map(async (expense: any) => {
+      try {
+        if (!expense?.id || !expense?.receiptUrl) return;
+
+        const uri = getReceiptThumbCacheUri(expense);
+        const info = await FileSystem.getInfoAsync(uri);
+        if (info.exists) {
+          nextSources[expense.id] = { uri };
+        }
+      } catch {
+        // Missing thumbnail cache is non-critical.
+      }
+    }));
+
+    setReceiptImageSources(nextSources);
+  };
+
   const loadCategoryData = async (showSpinner = false) => {
     try {
       if (showSpinner) setIsLoading(true);
+      setIsTotalLoading(true);
 
       // Determine org ID and user role
       let orgId = selectedOrgId;
@@ -198,6 +247,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
         setCategories(categoriesArray);
         setTotalSpent(totalSpentAllCategories);
         setIsLoading(false);
+        loadCachedReceiptImages(expenses);
       }
 
       // Fetch fresh expenses from server for the selected month only
@@ -218,6 +268,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
           const { categoriesArray, totalSpentAllCategories } = buildCategoryView(data.expenses, freshOverrides, userRole);
           setCategories(categoriesArray);
           setTotalSpent(totalSpentAllCategories);
+          loadCachedReceiptImages(data.expenses);
         }
       } catch (err) {
 
@@ -226,6 +277,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
       Alert.alert('Error', 'Failed to load category data. Please try again.');
     } finally {
       setIsLoading(false);
+      setIsTotalLoading(false);
     }
   };
   
@@ -245,47 +297,71 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
     return date.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' });
   };
 
+  const openExpenseDetails = (expense: ExpenseItem, categoryName: string) => {
+    onExpensePress?.({
+      id: expense.id,
+      date: expense.date,
+      day: expense.day,
+      vendor: expense.vendor,
+      category: categoryName,
+      status: 'Approved' as const,
+      amount: expense.amount,
+      paymentMethod: expense.paymentMethod,
+      categoryKey: expense.categoryKey,
+      notes: expense.notes,
+      receiptImageSource: receiptImageSources[expense.id],
+    });
+  };
+
+  const renderMonthSelector = () => (
+    <View style={styles.monthSelector}>
+      <TouchableOpacity
+        style={styles.monthPillButton}
+        onPress={() => {
+          const newDate = new Date(selectedMonth);
+          newDate.setMonth(newDate.getMonth() - 1);
+          setSelectedMonth(newDate);
+        }}
+        activeOpacity={0.75}
+      >
+        <Ionicons name="chevron-back" size={16} color={colors.textPrimary} />
+      </TouchableOpacity>
+
+      <View style={styles.monthPillCenter}>
+        <Text style={styles.monthText}>
+          {formatMonth(selectedMonth)}
+        </Text>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.monthPillButton, isCurrentOrFutureMonth() && styles.monthPillButtonDisabled]}
+        onPress={() => {
+          const newDate = new Date(selectedMonth);
+          newDate.setMonth(newDate.getMonth() + 1);
+          setSelectedMonth(newDate);
+        }}
+        disabled={isCurrentOrFutureMonth()}
+        activeOpacity={0.75}
+      >
+        <Ionicons
+          name="chevron-forward"
+          size={16}
+          color={isCurrentOrFutureMonth() ? colors.textSecondary : colors.textPrimary}
+        />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerText}>
             <Text style={styles.title}>{t('category.title')}</Text>
             <Text style={styles.subtitle}>{t('category.subtitle')}</Text>
           </View>
-        </View>
-
-        {/* Month Selector */}
-        <View style={styles.monthSelector}>
-          <TouchableOpacity 
-            style={styles.navButton}
-            onPress={() => {
-              const newDate = new Date(selectedMonth);
-              newDate.setMonth(newDate.getMonth() - 1);
-              setSelectedMonth(newDate);
-            }}
-          >
-            <Text style={styles.navButtonText}>‹</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.monthInfo}>
-            <Text style={styles.monthText}>
-              {formatMonth(selectedMonth)}
-            </Text>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.navButton}
-            onPress={() => {
-              const newDate = new Date(selectedMonth);
-              newDate.setMonth(newDate.getMonth() + 1);
-              setSelectedMonth(newDate);
-            }}
-            disabled={isCurrentOrFutureMonth()}
-          >
-            <Text style={[styles.navButtonText, isCurrentOrFutureMonth() && styles.navButtonDisabled]}>›</Text>
-          </TouchableOpacity>
+          {renderMonthSelector()}
         </View>
 
         {/* Total Spent Card */}
@@ -293,7 +369,13 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
           <View style={styles.totalCardContent}>
             <View>
               <Text style={styles.totalLabel}>{t('category.totalExpenses').toUpperCase()}</Text>
-              <Text style={styles.totalAmount}>${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+              <View style={styles.totalAmountContainer}>
+                {isTotalLoading ? (
+                  <ActivityIndicator size="large" color={colors.textOnDark} />
+                ) : (
+                  <Text style={styles.totalAmount}>${totalSpent.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                )}
+              </View>
             </View>
           </View>
         </View>
@@ -359,18 +441,7 @@ export default function CategoryScreen({ onExpensePress, dataVersion = 0, select
                           key={expIndex} 
                           style={styles.expenseItem}
                           activeOpacity={0.7}
-                          onPress={() => onExpensePress && onExpensePress({
-                            id: expense.id,
-                            date: expense.date,
-                            day: expense.day,
-                            vendor: expense.vendor,
-                            category: category.name,
-                            status: 'Approved' as const,
-                            amount: expense.amount,
-                            paymentMethod: expense.paymentMethod,
-                            categoryKey: expense.categoryKey,
-                            notes: expense.notes,
-                          })}
+                          onPress={() => openExpenseDetails(expense, category.name)}
                         >
                           <View style={styles.expenseDate}>
                             <Text style={styles.expenseMonth}>{expense.date}</Text>
@@ -403,6 +474,12 @@ const styles = StyleSheet.create({
   },
   header: {
     ...commonStyles.header,
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     ...typography.title,
@@ -425,38 +502,39 @@ const styles = StyleSheet.create({
   monthSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    flexShrink: 0,
+    gap: spacing.xs,
+  },
+  monthPillButton: {
+    width: 35,
+    height: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.surface,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    padding: spacing.xl,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  navButton: {
-    width: 40,
-    height: 40,
+  monthPillButtonDisabled: {
+    opacity: 0.45,
+  },
+  monthPillCenter: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  navButtonText: {
-    fontSize: 28,
-    color: colors.textSecondary,
-  },
-  navButtonDisabled: {
-    opacity: 0.5,
-    color: colors.borderLight,
-  },
-  monthInfo: {
-    alignItems: 'center',
-    flex: 1,
+    minHeight: 35,
+    minWidth: 118,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   monthText: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
     color: colors.textPrimary,
-    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   transactionCount: {
     ...typography.label,
@@ -473,6 +551,11 @@ const styles = StyleSheet.create({
     ...typography.label,
     textAlign: 'center',
     marginBottom: spacing.sm,
+  },
+  totalAmountContainer: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   totalAmount: {
     fontSize: 40,

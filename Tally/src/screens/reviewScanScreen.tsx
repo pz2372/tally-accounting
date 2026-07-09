@@ -19,7 +19,7 @@ import DatePickerModal from '../components/DatePickerModal';
 import { CATEGORIES, getCategoryColor } from '../components/categories';
 import { extractReceiptData } from '../services/aiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getOrgCachedData } from '../services/cacheService';
+import { cacheOrgExpenses, getOrgCachedData } from '../services/cacheService';
 import { getAccessToken } from '../services/authService';
 // @ts-ignore — legacy subpath has no type declarations but works at runtime
 import * as FileSystem from 'expo-file-system/legacy';
@@ -31,6 +31,15 @@ const PAYMENT_METHOD_MAP: Record<string, string> = {
   'Debit Card': 'DEBIT_CARD',
   'Cash': 'CASH',
 };
+
+interface ExtractedInventoryItem {
+  name: string;
+  normalizedName: string;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
+  total: string;
+}
 
 interface ReviewScanScreenProps {
   imageUri: string;
@@ -74,6 +83,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
   const [tax, setTax] = useState('');
   const [discounts, setDiscounts] = useState('');
   const [refunds, setRefunds] = useState('');
+  const [inventoryItems, setInventoryItems] = useState<ExtractedInventoryItem[]>([]);
 
 
   useEffect(() => {
@@ -121,6 +131,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       if (extracted.tax) setTax(extracted.tax);
       if (extracted.discounts) setDiscounts(extracted.discounts);
       if (extracted.refunds) setRefunds(extracted.refunds);
+      if (extracted.items) setInventoryItems(extracted.items);
     } catch (error) {
       // Alert is shown below
       Alert.alert(
@@ -223,6 +234,9 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         parameters.categoryName = selectedCategory!;
         if (merchant.trim()) parameters.merchant = merchant.trim();
         if (notes.trim()) parameters.notes = notes.trim();
+        if (inventoryItems.length > 0) {
+          parameters.inventoryItems = JSON.stringify(inventoryItems);
+        }
       }
 
       // Upload with timeout
@@ -279,15 +293,12 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
           } catch { }
         }
       } else {
-        const savedExpense = responseData.expense;
-        if (savedExpense) {
-          const cacheKey = `@org_expenses_${orgId}`;
-          const cached = await AsyncStorage.getItem(cacheKey);
-          const cachedList = cached ? JSON.parse(cached) : [];
-          const updatedList = [savedExpense, ...cachedList];
-          await AsyncStorage.setItem(cacheKey, JSON.stringify(updatedList));
+          const savedExpense = responseData.expense;
+          if (savedExpense) {
+            const cacheKey = `@org_expenses_${orgId}`;
+            await cacheOrgExpenses(orgId, [savedExpense]);
 
-          // Clear monthly cache to force refresh on expensesScreen
+            // Clear monthly cache to force refresh on expensesScreen
           await AsyncStorage.removeItem(`${cacheKey}_${monthKey}`);
 
           // Update home metrics cache with new expense figures
@@ -356,6 +367,8 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   };
+
+  const getTranslatedCategory = (category: string) => t(`categories.${category.toLowerCase()}`) || category;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -506,7 +519,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
                         styles.pickerButtonText,
                         !selectedCategory && styles.pickerPlaceholder
                       ]}>
-                        {selectedCategory || t('newExpense.selectCategory')}
+                        {selectedCategory ? getTranslatedCategory(selectedCategory) : t('newExpense.selectCategory')}
                       </Text>
                     </View>
                     <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
@@ -535,7 +548,7 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
                               <Text style={[
                                 styles.pickerItemText,
                                 selectedCategory === category && styles.pickerItemTextSelected
-                              ]}>{category}</Text>
+                              ]}>{getTranslatedCategory(category)}</Text>
                             </View>
                             {selectedCategory === category && (
                               <Ionicons name="checkmark" size={18} color={colors.primary} />

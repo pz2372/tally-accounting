@@ -104,6 +104,8 @@ model User {
   ownedOrganizations Organization[]
   uploadedStatements Statement[] @relation("StatementsUploadedBy")
   uploadedSalesReports SalesReport[]
+  businessReportAutomations BusinessReportAutomation[] @relation("BusinessReportAutomationsCreatedBy")
+  auditLogs AuditLog[]
   supportTickets SupportTicket[]
   inviteTokens InviteToken[]
 }
@@ -113,6 +115,7 @@ model Organization {
   name      String
   dba       String?  // Doing Business As
   ein       String?  // Employer Identification Number
+  inventoryItemizedTrackerEnabled Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -127,11 +130,14 @@ model Organization {
   orgCategories OrgCategory[]
 
   expenses    Expense[]
+  inventoryItems InventoryItem[]
   statements  Statement[]
   salesReports SalesReport[]
   matches     ReceiptMatch[]
   recurringCharges RecurringCharge[]
   recurringChargeInstances RecurringChargeInstance[]
+  businessReportAutomations BusinessReportAutomation[]
+  auditLogs AuditLog[]
   supportTickets SupportTicket[]
   plaidItems       PlaidItem[]
   inviteTokens InviteToken[]
@@ -237,10 +243,36 @@ model Expense {
   org         Organization @relation(fields: [orgId], references: [id])
 
   matches     ReceiptMatch[]
+  inventoryItems InventoryItem[]
 
   @@index([orgId, expenseDate])
   @@index([orgId, deletedAt])
   @@index([orgId, categoryKey])
+}
+
+model InventoryItem {
+  id             String   @id @default(cuid())
+  orgId          String
+  expenseId      String
+
+  rawName        String
+  normalizedName String
+  quantity       Float?
+  unit           String?
+  unitPriceCents Int?
+  totalCents     Int?
+  purchasedAt    DateTime
+  merchant       String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  org            Organization @relation(fields: [orgId], references: [id])
+  expense        Expense      @relation(fields: [expenseId], references: [id])
+
+  @@index([orgId, purchasedAt])
+  @@index([orgId, normalizedName])
+  @@index([expenseId])
 }
 
 model Statement {
@@ -349,6 +381,32 @@ model SalesReport {
 
   @@unique([orgId, businessDate])          // one report per day per restaurant
   @@index([orgId, businessDate])
+}
+
+model BusinessReportAutomation {
+  id                String   @id @default(cuid())
+  orgId             String
+  createdById       String
+
+  reports           String[]
+  deliveryChannels  String[]
+  messageRecipient  String?
+  emailRecipient    String?
+  cadence           String
+  isActive          Boolean  @default(true)
+  nextRunAt         DateTime?
+  lastSentAt        DateTime?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  org               Organization @relation(fields: [orgId], references: [id])
+  createdBy         User         @relation("BusinessReportAutomationsCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([orgId, createdById])
+  @@index([orgId, isActive])
+  @@index([createdById])
+  @@index([nextRunAt])
 }
 
 model RecurringCharge {
@@ -543,5 +601,24 @@ model InviteToken {
   org  Organization @relation(fields: [orgId], references: [id])
 
   @@index([token])
+  @@index([userId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  orgId      String
+  userId     String?
+  action     String
+  entityType String
+  entityId   String
+  changes    Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  org  Organization @relation(fields: [orgId], references: [id])
+  user User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, entityType, entityId])
+  @@index([orgId, createdAt])
   @@index([userId])
 }

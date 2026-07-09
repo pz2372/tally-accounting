@@ -1,4 +1,5 @@
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 let LocalAuthentication: typeof import('expo-local-authentication') | null = null;
 try {
   LocalAuthentication = require('expo-local-authentication');
@@ -11,11 +12,24 @@ import { cacheLoginData, clearCache } from './cacheService';
 
 // Update this with your server URL
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
+const REQUEST_TIMEOUT_MS = 15000;
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_KEY = 'current_user';
 const BIOMETRIC_ENABLED_KEY = 'biometric_enabled';
+
+const getNetworkErrorMessage = (error: any) => {
+  if (error.code === 'ECONNABORTED') {
+    return 'Server took too long to respond. Please try again.';
+  }
+
+  if (error.message === 'Network Error' || !error.response) {
+    return 'Cannot reach the server. Make sure the API server is running and the app URL is correct.';
+  }
+
+  return error.response?.data?.message || error.response?.data?.error || 'Failed to authenticate with server';
+};
 
 // Store tokens securely
 export const storeTokens = async (accessToken: string, refreshToken?: string) => {
@@ -31,7 +45,7 @@ export const storeTokens = async (accessToken: string, refreshToken?: string) =>
 
 export const storeUser = async (user: unknown) => {
   try {
-    await secureSet(USER_KEY, JSON.stringify(user));
+    await AsyncStorage.setItem(`@${USER_KEY}`, JSON.stringify(user));
   } catch (error) {
     // Silently fail on user storage
   }
@@ -90,6 +104,7 @@ export const clearTokens = async () => {
   try {
     await secureDelete(ACCESS_TOKEN_KEY);
     await secureDelete(REFRESH_TOKEN_KEY);
+    await AsyncStorage.removeItem(`@${USER_KEY}`);
     await secureDelete(USER_KEY);
     await secureDelete(BIOMETRIC_ENABLED_KEY);
   } catch (error) {
@@ -99,7 +114,7 @@ export const clearTokens = async () => {
 
 export const getStoredUser = async () => {
   try {
-    const raw = await secureGet(USER_KEY);
+    const raw = await AsyncStorage.getItem(`@${USER_KEY}`) || await secureGet(USER_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (error) {
     return null;
@@ -108,10 +123,17 @@ export const getStoredUser = async () => {
 
 // Exchange Firebase token for server access token
 const exchangeFirebaseToken = async (firebaseToken: string) => {
+  const startedAt = Date.now();
+  console.log(`[auth] POST ${API_URL}/api/auth/firebase-login started`);
+
   try {
-    const response = await axios.post(`${API_URL}/api/auth/firebase-login`, {
-      firebaseToken,
-    });
+    const response = await axios.post(
+      `${API_URL}/api/auth/firebase-login`,
+      { firebaseToken },
+      { timeout: REQUEST_TIMEOUT_MS }
+    );
+
+    console.log(`[auth] POST /api/auth/firebase-login completed in ${Date.now() - startedAt}ms`);
 
     return {
       accessToken: response.data.accessToken,
@@ -124,6 +146,11 @@ const exchangeFirebaseToken = async (firebaseToken: string) => {
       error: null,
     };
   } catch (error: any) {
+    console.log(
+      `[auth] POST /api/auth/firebase-login failed in ${Date.now() - startedAt}ms`,
+      error.code || error.message
+    );
+
     return {
       accessToken: null,
       refreshToken: null,
@@ -132,7 +159,7 @@ const exchangeFirebaseToken = async (firebaseToken: string) => {
       firstOrgData: null,
       syncedAt: null,
       syncPeriod: null,
-      error: error.response?.data?.message || 'Failed to authenticate with server',
+      error: getNetworkErrorMessage(error),
     };
   }
 };
@@ -221,6 +248,7 @@ export const checkAuth = async (): Promise<{ valid: boolean; user: any | null }>
   try {
     const response = await axios.get(`${API_URL}/api/auth/me`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: REQUEST_TIMEOUT_MS,
     });
     const freshUser = response.data.user ?? response.data;
     // Update stored user with fresh data from server
@@ -243,6 +271,7 @@ export const createAuthenticatedAxios = async () => {
 
   return axios.create({
     baseURL: API_URL,
+    timeout: REQUEST_TIMEOUT_MS,
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

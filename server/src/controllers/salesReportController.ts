@@ -388,10 +388,11 @@ const report = await prisma.salesReport.findFirst({
       });
     }
 
-    const updatedReport = await prisma.salesReport.update({
-      where: { id },
+    await prisma.salesReport.updateMany({
+      where: { id, orgId },
       data: { status: 'APPROVED' }
     });
+    const updatedReport = await prisma.salesReport.findFirst({ where: { id, orgId } });
     
     res.json({
       success: true,
@@ -437,10 +438,11 @@ export const rejectSalesReport: Handler = async (req, res) => {
       updateData.notes = notes;
     }
     
-    const updatedReport = await prisma.salesReport.update({
-      where: { id },
+    await prisma.salesReport.updateMany({
+      where: { id, orgId },
       data: updateData
     });
+    const updatedReport = await prisma.salesReport.findFirst({ where: { id, orgId } });
 
     res.json({
       success: true,
@@ -493,9 +495,7 @@ const report = await prisma.salesReport.findFirst({
       }
     }
 
-    await prisma.salesReport.delete({
-      where: { id }
-    });
+    await prisma.salesReport.deleteMany({ where: { id, orgId } });
 
     res.json({
       success: true,
@@ -739,4 +739,3 @@ export const getSalesReportImage: Handler = async (req, res) => {
     res.status(500).json({ success: false, error: 'Failed to load image' });
   }
 };
-

@@ -5,6 +5,17 @@ import { PRESET_CATEGORIES, isValidCategoryName } from '../config/categories';
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
+const LEGACY_CATEGORY_KEY_TO_KEY: Record<string, string> = {
+  labor: 'wages',
+  inventory: 'supplies',
+  operations: 'rent',
+  tax: 'taxes_licenses',
+  transportation: 'car_truck',
+  miscellaneous: 'other_expenses',
+};
+
+const normalizeCategoryKey = (key: string) => LEGACY_CATEGORY_KEY_TO_KEY[key] || key;
+
 // Get all preset categories (from constants — no DB needed)
 export const getAllPresetCategories: Handler = async (_req, res) => {
   res.json({ success: true, categories: PRESET_CATEGORIES });
@@ -23,7 +34,7 @@ export const getOrgCategories: Handler = async (req, res) => {
 
     // Fetch only overrides (rows only exist for customised categories)
     const overrides = await prisma.orgCategory.findMany({ where: { orgId } });
-    const overrideMap = new Map(overrides.map(o => [o.categoryKey, o]));
+    const overrideMap = new Map(overrides.map(o => [normalizeCategoryKey(o.categoryKey), o]));
 
     const categories = PRESET_CATEGORIES.map(preset => {
       const override = overrideMap.get(preset.key);
@@ -66,15 +77,17 @@ export const updateOrgCategories: Handler = async (req, res) => {
       // Convert presetCategoryId to key if needed
       if (!key && cat.presetCategoryId) {
         const idToKeyMap: Record<string, string> = {
-          'preset_misc': 'miscellaneous',
-          'preset_labor': 'labor',
-          'preset_inventory': 'inventory',
-          'preset_operations': 'operations',
-          'preset_tax': 'tax',
-          'preset_transport': 'transportation',
+          'preset_misc': 'other_expenses',
+          'preset_labor': 'wages',
+          'preset_inventory': 'supplies',
+          'preset_operations': 'rent',
+          'preset_tax': 'taxes_licenses',
+          'preset_transport': 'car_truck',
         };
         key = idToKeyMap[cat.presetCategoryId];
       }
+
+      if (key) key = normalizeCategoryKey(key);
 
       return { ...cat, key };
     });

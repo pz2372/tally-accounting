@@ -4,11 +4,10 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import 'dotenv/config';
 import { initializeFirebase } from './src/config/firebase';
+import { validateEnv } from './src/config/env';
 
 // Validate required environment variables before starting
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
-}
+validateEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +27,7 @@ import organizationRoutes from './src/routes/organizationRoutes';
 import statementRoutes from './src/routes/statementRoutes';
 import matchRoutes from './src/routes/matchRoutes';
 import salesReportRoutes from './src/routes/salesReportRoutes';
+import businessReportRoutes from './src/routes/businessReportRoutes';
 import recurringChargeRoutes from './src/routes/recurringChargeRoutes';
 import uploadRoutes from './src/routes/uploadRoutes';
 import supportRoutes from './src/routes/supportRoutes';
@@ -79,6 +79,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/statements', statementRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/sales-reports', salesReportRoutes);
+app.use('/api/business-reports', businessReportRoutes);
 app.use('/api/recurring-charges', recurringChargeRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/expenses', expenseRoutes);
@@ -97,6 +98,7 @@ app.use((err: Error, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
+  console.warn(`Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     error: 'Route not found'
   });
@@ -106,4 +108,5 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
+  console.log('🔐 Auth diagnostics enabled: Firebase token verification timeout is 10s');
 });

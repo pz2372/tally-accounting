@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { View, Animated, Dimensions } from 'react-native';
+import { View, Animated, Dimensions, ActivityIndicator, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useState, useEffect, useRef } from 'react';
 
@@ -32,9 +32,10 @@ interface Expense {
   category: string;
   status: 'Approved' | 'Pending';
   amount: number;
-  paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH';
+  paymentMethod?: 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'CHECK';
   orgCategoryId?: string;
   notes?: string;
+  receiptImageSource?: { uri: string; headers?: Record<string, string> };
 }
 
 export default function App() {
@@ -76,6 +77,10 @@ export default function App() {
 
   // Check for existing auth session on app start — validates against server
   useEffect(() => {
+    const authTimeout = setTimeout(() => {
+      setIsCheckingAuth(false);
+    }, 8000);
+
     const checkAuthStatus = async () => {
       try {
         const { valid } = await checkAuth();
@@ -130,11 +135,14 @@ export default function App() {
       } catch (error) {
         console.error('Auth check error:', error);
       } finally {
+        clearTimeout(authTimeout);
         setIsCheckingAuth(false);
       }
     };
 
     checkAuthStatus();
+
+    return () => clearTimeout(authTimeout);
   }, []);
   
   useEffect(() => {
@@ -185,7 +193,10 @@ export default function App() {
       <SafeAreaProvider>
         <View style={{ flex: 1 }}>
         {isCheckingAuth ? (
-          <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
+          <View style={{ flex: 1, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator size="large" color="#111827" />
+            <Text style={{ marginTop: 12, color: '#6B7280', fontSize: 14 }}>Loading...</Text>
+          </View>
         ) : !isAuthenticated ? (
           <>
             <LoginScreen onLogin={handleLogin} />
@@ -202,6 +213,7 @@ export default function App() {
                   currentUser={currentUser}
                   onDataChanged={handleDataChanged}
                   onOrgChange={setSelectedOrgId}
+                  onUserRefresh={setCurrentUser}
                   onExpensePress={setSelectedExpense}
                   dataVersion={dataVersion}
                 />

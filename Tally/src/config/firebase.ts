@@ -1,6 +1,7 @@
 // Firebase configuration for Tally mobile app
 // Using Firebase Auth REST API for React Native compatibility
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { secureGet, secureSet, secureDelete } from '../utils/secureStorage';
 
 const FIREBASE_API_KEY = 'AIzaSyDUAfgY-vHfcjvxeJo2DHVfE8pMbQhe1pk';
@@ -8,6 +9,8 @@ const AUTH_BASE_URL = 'https://identitytoolkit.googleapis.com/v1';
 const TOKEN_REFRESH_URL = 'https://securetoken.googleapis.com/v1';
 
 const FIREBASE_USER_KEY = 'firebase_user';
+const FIREBASE_ID_TOKEN_KEY = 'firebase_id_token';
+const FIREBASE_REFRESH_TOKEN_KEY = 'firebase_refresh_token';
 
 export type User = {
   uid: string;
@@ -21,12 +24,39 @@ export type User = {
 
 let currentUser: User | null = null;
 
+const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 15000) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 // Load persisted user on startup
 const loadPersistedUser = async () => {
   try {
-    const raw = await secureGet(FIREBASE_USER_KEY);
-    if (raw) {
-      currentUser = JSON.parse(raw);
+    const [rawProfile, idToken, refreshToken] = await Promise.all([
+      AsyncStorage.getItem(`@${FIREBASE_USER_KEY}`),
+      secureGet(FIREBASE_ID_TOKEN_KEY),
+      secureGet(FIREBASE_REFRESH_TOKEN_KEY),
+    ]);
+
+    if (rawProfile && idToken && refreshToken) {
+      currentUser = { ...JSON.parse(rawProfile), idToken, refreshToken };
+      return;
+    }
+
+    const legacyRaw = await secureGet(FIREBASE_USER_KEY);
+    if (legacyRaw) {
+      currentUser = JSON.parse(legacyRaw);
+      await persistUser(currentUser);
+      await secureDelete(FIREBASE_USER_KEY);
     }
   } catch (error) {
     // Failed to load persisted user
@@ -37,9 +67,20 @@ loadPersistedUser();
 const persistUser = async (user: User | null) => {
   try {
     if (user) {
-      await secureSet(FIREBASE_USER_KEY, JSON.stringify(user));
+      const { idToken, refreshToken, ...profile } = user;
+      await Promise.all([
+        AsyncStorage.setItem(`@${FIREBASE_USER_KEY}`, JSON.stringify(profile)),
+        secureSet(FIREBASE_ID_TOKEN_KEY, idToken),
+        secureSet(FIREBASE_REFRESH_TOKEN_KEY, refreshToken),
+        secureDelete(FIREBASE_USER_KEY),
+      ]);
     } else {
-      await secureDelete(FIREBASE_USER_KEY);
+      await Promise.all([
+        AsyncStorage.removeItem(`@${FIREBASE_USER_KEY}`),
+        secureDelete(FIREBASE_ID_TOKEN_KEY),
+        secureDelete(FIREBASE_REFRESH_TOKEN_KEY),
+        secureDelete(FIREBASE_USER_KEY),
+      ]);
     }
   } catch (error) {
     // Failed to persist user
@@ -49,7 +90,7 @@ const persistUser = async (user: User | null) => {
 // Sign in with email/password via REST API
 export const signInWithEmail = async (email: string, password: string) => {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${AUTH_BASE_URL}/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
       {
         method: 'POST',
@@ -59,7 +100,7 @@ export const signInWithEmail = async (email: string, password: string) => {
           password,
           returnSecureToken: true,
         }),
-      }
+      },
     );
 
     const data = await response.json();
@@ -84,14 +125,19 @@ export const signInWithEmail = async (email: string, password: string) => {
 
     return { user, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message || 'Firebase authentication failed' };
+    return {
+      user: null,
+      error: error.name === 'AbortError'
+        ? 'Firebase took too long to respond. Please try again.'
+        : error.message || 'Firebase authentication failed'
+    };
   }
 };
 
 // Sign up with email/password via REST API
 export const signUpWithEmail = async (email: string, password: string) => {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${AUTH_BASE_URL}/accounts:signUp?key=${FIREBASE_API_KEY}`,
       {
         method: 'POST',
@@ -101,7 +147,7 @@ export const signUpWithEmail = async (email: string, password: string) => {
           password,
           returnSecureToken: true,
         }),
-      }
+      },
     );
 
     const data = await response.json();
@@ -125,7 +171,12 @@ export const signUpWithEmail = async (email: string, password: string) => {
 
     return { user, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return {
+      user: null,
+      error: error.name === 'AbortError'
+        ? 'Firebase took too long to respond. Please try again.'
+        : error.message
+    };
   }
 };
 
@@ -158,7 +209,7 @@ export const getIdToken = async () => {
 
   // Try to refresh the token
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `${TOKEN_REFRESH_URL}/token?key=${FIREBASE_API_KEY}`,
       {
         method: 'POST',
@@ -167,7 +218,7 @@ export const getIdToken = async () => {
           grant_type: 'refresh_token',
           refresh_token: currentUser.refreshToken,
         }),
-      }
+      },
     );
 
     const data = await response.json();
