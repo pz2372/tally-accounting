@@ -35,7 +35,7 @@ router.post('/with-receipt', uploadLimiter, uploadSingle, validate({ body: expen
 router.put('/:id/dismiss-receipt', validate({ params: idParam }), auditAction({ action: 'ADMIN_UPDATE', entityType: 'Expense', entityId: req => req.params.id }), expenseController.dismissMissingReceipt);
 
 // PUT /api/expenses/:id - Update expense
-router.put('/:id', validate({ params: idParam, body: expenseSchemas.create }), expenseController.updateExpense);
+router.put('/:id', validate({ params: idParam, body: expenseSchemas.update }), expenseController.updateExpense);
 
 // DELETE /api/expenses/:id - Delete expense
 router.delete('/:id', validate({ params: idParam }), auditAction({ action: 'DELETE', entityType: 'Expense', entityId: req => req.params.id }), expenseController.deleteExpense);

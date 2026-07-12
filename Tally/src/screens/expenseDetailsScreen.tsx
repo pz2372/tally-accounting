@@ -244,9 +244,9 @@ export default function ExpenseDetailsScreen({ expense, onBack, onExpenseDeleted
             setShowPaymentPicker(false);
             Alert.alert(t('common.success'), t('details.editSuccess'));
             onExpenseUpdated?.();
-        } catch (error) {
-            // Alert is shown below
-            Alert.alert(t('common.error') || 'Error', t('details.editError'));
+        } catch (error: any) {
+            const message = error?.response?.data?.error || error?.message || t('details.editError');
+            Alert.alert(t('common.error') || 'Error', message);
         } finally {
             setIsSaving(false);
         }

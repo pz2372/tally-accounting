@@ -35,7 +35,7 @@ export interface ExtractedReceiptData {
  * @param categories - Optional list of category names for Claude to choose from
  * @returns Extracted receipt data
  */
-export const extractReceiptData = async (imageUri: string, categories?: string[]): Promise<ExtractedReceiptData> => {
+export const extractReceiptData = async (imageUri: string, categories?: string[], orgIdOverride?: string | null): Promise<ExtractedReceiptData> => {
   try {
     // Ensure URI has file:// prefix if needed
     let fileUri = imageUri;
@@ -59,7 +59,7 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
     }
 
     const storedUser = await getStoredUser();
-    const orgId = storedUser?.organizations?.[0]?.id;
+    const orgId = orgIdOverride || storedUser?.organizations?.[0]?.id;
 
     // Call backend extraction endpoint
     const response = await fetch(`${API_URL}/api/receipts/extract`, {
@@ -76,8 +76,14 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to extract receipt data');
+      let message = 'Failed to extract receipt data';
+      try {
+        const error = await response.json();
+        message = error.error || error.message || message;
+      } catch {
+        message = `${response.status} ${response.statusText || message}`;
+      }
+      throw new Error(message);
     }
 
     const data = await response.json();
@@ -109,23 +115,7 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
       })) : [],
     };
   } catch (error: any) {
-    // Return empty data on error so user can enter manually
-    return {
-      merchant: '',
-      amount: '',
-      date: new Date(),
-      category: '',
-      notes: '',
-      documentType: 'receipt',
-      grossSales: '',
-      netSales: '',
-      cash: '',
-      tips: '',
-      tax: '',
-      discounts: '',
-      refunds: '',
-      items: [],
-    };
+    throw new Error(error?.message || 'Failed to extract receipt data');
   }
 };
 

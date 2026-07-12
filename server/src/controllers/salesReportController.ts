@@ -526,14 +526,14 @@ export const getMonthlySummary: Handler = async (req, res) => {
     }
 
     const [year, mon] = monthStr.split('-').map(Number);
-    const startDate = new Date(year, mon - 1, 1);
-    const endDate = new Date(year, mon, 0, 23, 59, 59, 999); // last moment of last day
+    const startDate = new Date(Date.UTC(year, mon - 1, 1));
+    const endDate = new Date(Date.UTC(year, mon, 1));
 
     // 1. Aggregate all sales reports for the month
     const salesReports = await prisma.salesReport.findMany({
       where: {
         orgId,
-        businessDate: { gte: startDate, lte: endDate },
+        businessDate: { gte: startDate, lt: endDate },
       },
     });
 
@@ -560,7 +560,7 @@ export const getMonthlySummary: Handler = async (req, res) => {
       where: {
         orgId,
         deletedAt: null,
-        expenseDate: { gte: startDate, lte: endDate },
+        expenseDate: { gte: startDate, lt: endDate },
       },
     });
 

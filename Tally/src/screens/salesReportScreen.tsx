@@ -113,7 +113,7 @@ export default function SalesReportScreen({ onBack, selectedOrgId }: SalesReport
     } finally {
       setIsLoading(false);
     }
-  }, [selectedMonth]);
+  }, [selectedMonth, selectedOrgId]);
 
   useEffect(() => {
     fetchMonthlySummary();

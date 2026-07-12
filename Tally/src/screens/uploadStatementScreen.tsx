@@ -1,15 +1,18 @@
 import React, { useState, useContext, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, borderRadius } from '../styles/theme';
 import { LanguageContext } from '../contexts/LanguageContext';
 import { getAccessToken } from '../services/authService';
 import DatePickerModal from '../components/DatePickerModal';
-// import ScanScreen from './scanScreen';
 import { useSwipeBack } from '../hooks/useSwipeBack';
+import { extractReceiptData } from '../services/aiService';
+// @ts-ignore - legacy subpath has no type declarations but works at runtime
+import * as FileSystem from 'expo-file-system/legacy';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
@@ -18,18 +21,27 @@ interface UploadStatementScreenProps {
   selectedOrgId?: string | null;
 }
 
-// type UploadType = 'dailySales' | 'monthlyStatement';
+type UploadType = 'salesStatement' | 'bankStatement';
 
 export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadStatementScreenProps) {
   const { t } = useContext(LanguageContext);
-  // const [uploadType, setUploadType] = useState<UploadType>('monthlyStatement');
+  const [uploadType, setUploadType] = useState<UploadType>('bankStatement');
   const [selectedFile, setSelectedFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [statementName, setStatementName] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  // const [showScanScreen, setShowScanScreen] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [merchant, setMerchant] = useState('');
+  const [notes, setNotes] = useState('');
+  const [grossSales, setGrossSales] = useState('');
+  const [netSales, setNetSales] = useState('');
+  const [cash, setCash] = useState('');
+  const [tips, setTips] = useState('');
+  const [tax, setTax] = useState('');
+  const [discounts, setDiscounts] = useState('');
+  const [refunds, setRefunds] = useState('');
   const isPickingFileRef = useRef(false);
 
   const getOrgId = async (): Promise<string | null> => {
@@ -44,6 +56,59 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
     }
   };
 
+  const clearSalesFields = () => {
+    setMerchant('');
+    setNotes('');
+    setGrossSales('');
+    setNetSales('');
+    setCash('');
+    setTips('');
+    setTax('');
+    setDiscounts('');
+    setRefunds('');
+  };
+
+  const resetSelectedStatement = () => {
+    setSelectedFile(null);
+    setUploadProgress(0);
+    setUploadType('bankStatement');
+    clearSalesFields();
+  };
+
+  const analyzeStatementImage = async (asset: DocumentPicker.DocumentPickerAsset) => {
+    setIsExtracting(true);
+    try {
+      const orgId = await getOrgId();
+      const extracted = await extractReceiptData(asset.uri, [], orgId);
+      const isSalesStatement = extracted.documentType === 'sales_report'
+        || Boolean(extracted.grossSales || extracted.netSales || extracted.cash);
+
+      if (isSalesStatement) {
+        setUploadType('salesStatement');
+        setStatementName('');
+        if (extracted.merchant) setMerchant(extracted.merchant);
+        if (extracted.date) setSelectedDate(extracted.date);
+        if (extracted.notes) setNotes(extracted.notes);
+        if (extracted.grossSales) setGrossSales(extracted.grossSales);
+        if (extracted.netSales) setNetSales(extracted.netSales);
+        if (extracted.cash) setCash(extracted.cash);
+        if (extracted.tips) setTips(extracted.tips);
+        if (extracted.tax) setTax(extracted.tax);
+        if (extracted.discounts) setDiscounts(extracted.discounts);
+        if (extracted.refunds) setRefunds(extracted.refunds);
+      } else {
+        setUploadType('bankStatement');
+        clearSalesFields();
+      }
+    } catch (error: any) {
+      setUploadType('bankStatement');
+      clearSalesFields();
+      Alert.alert('Analysis Error', error?.message || 'Could not analyze the image. It will be saved as a bank statement.');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const handleFilePick = async () => {
     if (isPickingFileRef.current) {
       return;
@@ -53,12 +118,18 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
 
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        type: ['image/jpeg', 'application/pdf', 'text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
         copyToCacheDirectory: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedFile(result.assets[0]);
+        const asset = result.assets[0];
+        setSelectedFile(asset);
+        clearSalesFields();
+        setUploadType('bankStatement');
+        if (asset.mimeType?.includes('image/jpeg') || asset.name?.toLowerCase().endsWith('.jpg') || asset.name?.toLowerCase().endsWith('.jpeg')) {
+          await analyzeStatementImage(asset);
+        }
       }
     } catch (err) {
       Alert.alert(t('uploadStatement.error'), t('uploadStatement.errorMessage'));
@@ -67,12 +138,106 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
     }
   };
 
-  // const handleScanStatement = () => {
-  //   setShowScanScreen(true);
-  // };
+  const handleImagePick = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      Alert.alert(t('uploadStatement.error'), 'Photo library permission is required to choose an image.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const image = result.assets[0];
+      const filename = image.fileName || image.uri.split('/').pop() || 'statement.jpg';
+      const asset: DocumentPicker.DocumentPickerAsset = {
+        uri: image.uri,
+        name: filename,
+        mimeType: image.mimeType || 'image/jpeg',
+        size: image.fileSize,
+        lastModified: Date.now(),
+      };
+
+      setSelectedFile(asset);
+      clearSalesFields();
+      setUploadType('bankStatement');
+      await analyzeStatementImage(asset);
+    }
+  };
 
   const handleStatementPress = () => {
-    handleFilePick();
+    Alert.alert(
+      t('uploadStatement.selectStatementFile'),
+      t('uploadStatement.tapToBrowse'),
+      [
+        { text: 'Choose Image', onPress: handleImagePick },
+        { text: 'Choose File', onPress: handleFilePick },
+        { text: t('common.cancel'), style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const toCents = (value: string) => String(Math.round(parseFloat(value || '0') * 100));
+
+  const saveSalesStatement = async (token: string, orgId: string) => {
+    if (!selectedFile) {
+      Alert.alert(t('uploadStatement.noFileSelected'), t('uploadStatement.pleaseSelectFile'));
+      return false;
+    }
+
+    if (!grossSales.trim() && !netSales.trim()) {
+      Alert.alert(t('common.validationError'), 'Please enter gross sales or net sales.');
+      return false;
+    }
+
+    const parameters: Record<string, string> = {
+      businessDate: selectedDate.toISOString(),
+    };
+    if (merchant.trim()) parameters.merchant = merchant.trim();
+    if (notes.trim()) parameters.notes = notes.trim();
+    if (grossSales.trim()) parameters.grossSalesCents = toCents(grossSales);
+    if (netSales.trim()) parameters.netSalesCents = toCents(netSales);
+    if (cash.trim()) parameters.cashCents = toCents(cash);
+    if (tips.trim()) parameters.tipsCents = toCents(tips);
+    if (tax.trim()) parameters.taxCents = toCents(tax);
+    if (discounts.trim()) parameters.discountsCents = toCents(discounts);
+    if (refunds.trim()) parameters.refundsCents = toCents(refunds);
+
+    setUploadProgress(20);
+    const uploadResult = await FileSystem.uploadAsync(`${API_URL}/api/sales-reports/with-receipt`, selectedFile.uri, {
+      httpMethod: 'POST',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'file',
+      parameters,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-org-id': orgId,
+      },
+    });
+
+    setUploadProgress(100);
+    const data = JSON.parse(uploadResult.body);
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      throw new Error(data.error || 'Failed to save sales statement');
+    }
+
+    if (data.report) {
+      const cacheKey = `@org_sales_reports_${orgId}`;
+      const cached = await AsyncStorage.getItem(cacheKey);
+      const cachedList = cached ? JSON.parse(cached) : [];
+      await AsyncStorage.setItem(cacheKey, JSON.stringify([data.report, ...cachedList]));
+
+      const monthKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}`;
+      await AsyncStorage.removeItem(`${cacheKey}_${monthKey}`);
+    }
+
+    return true;
   };
 
   const handleSave = async () => {
@@ -81,13 +246,14 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
       return;
     }
 
-    if (!statementName.trim()) {
+    if (uploadType === 'bankStatement' && !statementName.trim()) {
       Alert.alert(t('common.validationError'), t('uploadStatement.pleaseEnterName'));
       return;
     }
 
     setIsUploading(true);
     setUploadProgress(0);
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
 
     try {
       const orgId = await getOrgId();
@@ -103,13 +269,30 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
       }
 
       let progress = 0;
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         progress += 20;
         if (progress <= 80) setUploadProgress(progress);
       }, 150);
 
-      // Daily sales handled via scan screen
-      {
+      if (uploadType === 'salesStatement') {
+        const didSave = await saveSalesStatement(token, orgId);
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
+        if (!didSave) {
+          setIsUploading(false);
+          setUploadProgress(0);
+          return;
+        }
+
+        setTimeout(() => {
+          setIsUploading(false);
+          Alert.alert(t('common.success'), 'Sales statement saved successfully.', [
+            { text: t('common.ok'), onPress: onBack }
+          ]);
+        }, 300);
+      } else {
         // Upload monthly bank statement with file
         const formData = new FormData();
         formData.append('file', {
@@ -131,7 +314,10 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
           body: formData,
         });
 
-        clearInterval(progressInterval);
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
         setUploadProgress(100);
 
         // Update statements cache
@@ -153,9 +339,12 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         }, 300);
       }
     } catch (error: any) {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
       setIsUploading(false);
       setUploadProgress(0);
-      const errorMessage = error?.response?.data?.error || t('uploadStatement.errorMessage');
+      const errorMessage = error?.message || error?.response?.data?.error || t('uploadStatement.errorMessage');
       Alert.alert(t('uploadStatement.error'), errorMessage);
     }
   };
@@ -165,20 +354,6 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
   };
 
   const swipeHandlers = useSwipeBack(onBack);
-
-  // if (showScanScreen) {
-  //   return (
-  //     <ScanScreen
-  //       onCancel={() => setShowScanScreen(false)}
-  //       onExpenseSaved={() => {
-  //         setShowScanScreen(false);
-  //         onBack();
-  //       }}
-  //       selectedOrgId={selectedOrgId}
-  //       defaultDocumentType={uploadType === 'dailySales' ? 'sales_report' : undefined}
-  //     />
-  //   );
-  // }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -193,44 +368,8 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Upload Type Selector - daily sales handled via scan screen
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('uploadStatement.uploadType')}</Text>
-            <View style={styles.typeSelectorContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.typeSelectorButton,
-                  uploadType === 'dailySales' && styles.typeSelectorButtonActive,
-                ]}
-                onPress={() => setUploadType('dailySales')}
-              >
-                <Text style={[
-                  styles.typeSelectorText,
-                  uploadType === 'dailySales' && styles.typeSelectorTextActive,
-                ]}>
-                  {t('uploadStatement.dailySales')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.typeSelectorButton,
-                  uploadType === 'monthlyStatement' && styles.typeSelectorButtonActive,
-                ]}
-                onPress={() => setUploadType('monthlyStatement')}
-              >
-                <Text style={[
-                  styles.typeSelectorText,
-                  uploadType === 'monthlyStatement' && styles.typeSelectorTextActive,
-                ]}>
-                  {t('uploadStatement.monthlyStatement')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          */}
-
           {/* Name Field */}
-          <View style={styles.inputGroup}>
+          {uploadType === 'bankStatement' && <View style={styles.inputGroup}>
             <Text style={styles.label}>{t('uploadStatement.statementName')}</Text>
             <TextInput
               style={styles.input}
@@ -239,7 +378,7 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
               value={statementName}
               onChangeText={setStatementName}
             />
-          </View>
+          </View>}
 
           {/* Date Field */}
           <View style={styles.inputGroup}>
@@ -262,16 +401,22 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
             <TouchableOpacity
               style={styles.uploadArea}
               onPress={handleStatementPress}
-              disabled={isUploading}
+              disabled={isUploading || isExtracting}
             >
               <View style={styles.uploadIcon}>
-                <Ionicons name="cloud-upload-outline" size={48} color={colors.primary} />
+                {isExtracting
+                  ? <ActivityIndicator color={colors.primary} />
+                  : <Ionicons name="cloud-upload-outline" size={48} color={colors.primary} />}
               </View>
               <Text style={styles.uploadTitle}>
-                {selectedFile ? t('uploadStatement.changeFile') : t('uploadStatement.selectFile')}
+                {isExtracting ? 'Analyzing statement...' : selectedFile ? t('uploadStatement.changeFile') : t('uploadStatement.selectFile')}
               </Text>
               <Text style={styles.uploadSubtitle}>
-                {t('uploadStatement.tapToBrowse')}
+                {selectedFile && uploadType === 'salesStatement'
+                  ? 'Detected sales statement'
+                  : selectedFile
+                    ? 'Detected bank statement'
+                    : t('uploadStatement.tapToBrowse')}
               </Text>
             </TouchableOpacity>
 
@@ -288,13 +433,61 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
                   </Text>
                 </View>
                 {!isUploading && (
-                  <TouchableOpacity onPress={() => setSelectedFile(null)}>
+                  <TouchableOpacity onPress={resetSelectedStatement}>
                     <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
                   </TouchableOpacity>
                 )}
               </View>
             )}
           </View>
+
+          {uploadType === 'salesStatement' && selectedFile && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Sales Data</Text>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Merchant</Text>
+                <TextInput style={styles.input} placeholder="Optional" placeholderTextColor={colors.textSecondary} value={merchant} onChangeText={setMerchant} />
+              </View>
+              <View style={styles.row}>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Gross Sales</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={grossSales} onChangeText={setGrossSales} keyboardType="decimal-pad" />
+                </View>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Net Sales</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={netSales} onChangeText={setNetSales} keyboardType="decimal-pad" />
+                </View>
+              </View>
+              <View style={styles.row}>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Cash</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={cash} onChangeText={setCash} keyboardType="decimal-pad" />
+                </View>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Tips</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={tips} onChangeText={setTips} keyboardType="decimal-pad" />
+                </View>
+              </View>
+              <View style={styles.row}>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Tax</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={tax} onChangeText={setTax} keyboardType="decimal-pad" />
+                </View>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Discounts</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={discounts} onChangeText={setDiscounts} keyboardType="decimal-pad" />
+                </View>
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Refunds</Text>
+                <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={refunds} onChangeText={setRefunds} keyboardType="decimal-pad" />
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Notes</Text>
+                <TextInput style={styles.input} placeholder="Optional" placeholderTextColor={colors.textSecondary} value={notes} onChangeText={setNotes} />
+              </View>
+            </View>
+          )}
 
           {/* Upload Progress */}
           {isUploading && (
@@ -308,7 +501,7 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         </ScrollView>
 
         {/* Footer Buttons */}
-        {!isUploading && (
+        {!isUploading && !isExtracting && (
           <View style={styles.footer}>
             <View style={styles.buttonContainer}>
               <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
@@ -517,6 +710,14 @@ const styles = StyleSheet.create({
   },
   inputGroup: {
     marginBottom: spacing.xl,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  rowItem: {
+    flex: 1,
   },
   label: {
     fontSize: 14,

@@ -10,7 +10,8 @@ import DatePickerModal from '../components/DatePickerModal';
 import { CATEGORIES, getCategoryColor } from '../components/categories';
 import { useSwipeBack } from '../hooks/useSwipeBack';
 import { getAccessToken } from '../services/authService';
-import { cacheOrgExpenses } from '../services/cacheService';
+import { cacheOrgExpenses, getOrgCachedData } from '../services/cacheService';
+import { extractReceiptData } from '../services/aiService';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://tally-accounting.onrender.com';
 
@@ -41,6 +42,59 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
   const [notes, setNotes] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [extractingReceipt, setExtractingReceipt] = useState(false);
+
+  const getCurrentOrgId = async () => {
+    const userRaw = await AsyncStorage.getItem('@current_user');
+    const user = userRaw ? JSON.parse(userRaw) : null;
+    return selectedOrgId || user?.organizations?.[0]?.id || null;
+  };
+
+  const buildAiCategoryList = async (orgId: string | null) => {
+    let allCategories: string[] = [...CATEGORIES];
+
+    if (!orgId) return allCategories;
+
+    try {
+      const orgData = await getOrgCachedData(orgId);
+      const orgCategories = orgData?.categories;
+      if (Array.isArray(orgCategories)) {
+        const orgCategoryNames = orgCategories
+          .map((c: any) => c.preset?.name || c.name || c.categoryName)
+          .filter(Boolean);
+        allCategories = Array.from(new Set([...allCategories, ...orgCategoryNames]));
+      }
+    } catch {
+      // Continue with preset categories if cached org categories are unavailable.
+    }
+
+    return allCategories;
+  };
+
+  const analyzeReceiptImage = async (imageUri: string) => {
+    setSelectedReceipt(imageUri);
+    setExtractingReceipt(true);
+
+    try {
+      const orgId = await getCurrentOrgId();
+      const allCategories = await buildAiCategoryList(orgId);
+      const extracted = await extractReceiptData(imageUri, allCategories, orgId);
+
+      if (extracted.merchant) setMerchant(extracted.merchant);
+      if (extracted.amount) setAmount(extracted.amount);
+      if (extracted.category) setSelectedCategory(extracted.category);
+      if (extracted.date) setSelectedDate(extracted.date);
+      if (extracted.notes) setNotes(extracted.notes);
+
+      if (!extracted.merchant && !extracted.amount && !extracted.category) {
+        Alert.alert(t('reviewScan.extractionError'), t('reviewScan.extractionErrorMessage'));
+      }
+    } catch (error: any) {
+      Alert.alert(t('reviewScan.extractionError'), error?.message || t('reviewScan.extractionErrorMessage'));
+    } finally {
+      setExtractingReceipt(false);
+    }
+  };
 
   const handleTakePhoto = async () => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
@@ -57,7 +111,7 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      setSelectedReceipt(result.assets[0].uri);
+      await analyzeReceiptImage(result.assets[0].uri);
     }
   };
 
@@ -71,12 +125,12 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.8,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      setSelectedReceipt(result.assets[0].uri);
+      await analyzeReceiptImage(result.assets[0].uri);
     }
   };
 
@@ -111,9 +165,7 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
         return;
       }
 
-      const userRaw = await AsyncStorage.getItem('@current_user');
-      const user = userRaw ? JSON.parse(userRaw) : null;
-      const orgId = selectedOrgId || user?.organizations?.[0]?.id;
+      const orgId = await getCurrentOrgId();
       if (!orgId) {
         Alert.alert('Error', 'No organization found. Please log in again.');
         return;
@@ -358,11 +410,21 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
                 {selectedReceipt ? t('newExpense.changeReceipt') : t('newExpense.uploadReceipt')}
               </Text>
             </TouchableOpacity>
+            {extractingReceipt && (
+              <View style={styles.extractingReceipt}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.extractingReceiptText}>Analyzing receipt...</Text>
+              </View>
+            )}
             {selectedReceipt && (
               <View style={styles.receiptSection}>
                 <Text style={styles.receiptSectionTitle}>{t('newExpense.receipt')}</Text>
                 <Image source={{ uri: selectedReceipt }} style={styles.receiptImage} resizeMode="contain" />
-                <TouchableOpacity style={styles.removeReceiptButton} onPress={() => setSelectedReceipt(null)}>
+                <TouchableOpacity
+                  style={styles.removeReceiptButton}
+                  onPress={() => setSelectedReceipt(null)}
+                  disabled={extractingReceipt}
+                >
                   <Ionicons name="close-circle" size={24} color={colors.surface} />
                 </TouchableOpacity>
               </View>
@@ -373,9 +435,9 @@ export default function NewExpenseScreen({ onBack, selectedOrgId }: NewExpenseSc
         {/* Save Button */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+            style={[styles.saveButton, (saving || extractingReceipt) && styles.saveButtonDisabled]}
             onPress={handleSave}
-            disabled={saving}
+            disabled={saving || extractingReceipt}
           >
             {saving
               ? <ActivityIndicator color={colors.surface} />
@@ -466,6 +528,19 @@ const styles = StyleSheet.create({
   saveButtonText: { fontSize: 16, fontWeight: '700', color: colors.surface },
   receiptSection: { marginTop: spacing.md, position: 'relative' },
   receiptSectionTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.md },
+  extractingReceipt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  extractingReceiptText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
   receiptImage: {
     width: '100%', height: 300, backgroundColor: colors.surface,
     borderRadius: borderRadius.lg, borderWidth: 1, borderColor: colors.border,

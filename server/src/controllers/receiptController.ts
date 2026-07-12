@@ -30,6 +30,60 @@ export interface ExtractedReceiptData {
   }>;
 }
 
+const receiptExtractionTool = {
+  name: 'record_receipt_data',
+  description: 'Record structured data extracted from a receipt, invoice, or sales report image.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      documentType: { type: 'string', enum: ['receipt', 'sales_report'] },
+      merchant: { type: 'string' },
+      amount: { type: 'string' },
+      date: { type: 'string', description: 'Date in YYYY-MM-DD format.' },
+      category: { type: 'string' },
+      notes: { type: 'string' },
+      grossSales: { type: 'string' },
+      netSales: { type: 'string' },
+      cash: { type: 'string' },
+      tips: { type: 'string' },
+      tax: { type: 'string' },
+      discounts: { type: 'string' },
+      refunds: { type: 'string' },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            normalizedName: { type: 'string' },
+            quantity: { type: 'string' },
+            unit: { type: 'string' },
+            unitPrice: { type: 'string' },
+            total: { type: 'string' },
+          },
+          required: ['name', 'normalizedName', 'quantity', 'unit', 'unitPrice', 'total'],
+        },
+      },
+    },
+    required: [
+      'documentType',
+      'merchant',
+      'amount',
+      'date',
+      'category',
+      'notes',
+      'grossSales',
+      'netSales',
+      'cash',
+      'tips',
+      'tax',
+      'discounts',
+      'refunds',
+      'items',
+    ],
+  },
+};
+
 /**
  * Extract receipt data from base64-encoded image using Claude Vision
  * POST /api/receipts/extract
@@ -59,6 +113,8 @@ export const extractReceiptData = async (req: Request, res: Response) => {
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
+      tools: [receiptExtractionTool as any],
+      tool_choice: { type: 'tool', name: 'record_receipt_data' },
       messages: [
         {
           role: 'user',
@@ -73,32 +129,7 @@ export const extractReceiptData = async (req: Request, res: Response) => {
             },
             {
               type: 'text',
-              text: `Please analyze this document and extract the following information in JSON format:
-{
-  "documentType": "receipt or sales_report - determine from the document (receipt=business expense, sales_report=business income)",
-  "merchant": "business name or store name (for receipts only, leave empty for sales reports)",
-  "amount": "total amount (numbers only, e.g., '45.99') - for receipts only",
-  "date": "date in YYYY-MM-DD format if visible, otherwise current date",
-  "category": "best matching category based on merchant and items"${categoryText},
-  "notes": "brief 1-line description only if relevant context exists (do NOT put financial figures here)",
-  "grossSales": "gross/total sales amount (numbers only, e.g., '1234.56')",
-  "netSales": "net sales amount after deductions (numbers only)",
-  "cash": "cash sales amount (numbers only)",
-  "tips": "tips/gratuity amount (numbers only)",
-  "tax": "tax collected amount (numbers only)",
-  "discounts": "total discounts amount (numbers only)",
-  "refunds": "total refunds amount (numbers only)",
-  "items": [
-    {
-      "name": "line item name exactly as shown on receipt",
-      "normalizedName": "generic item name for inventory grouping, plural if natural (e.g. 'Avocados' for Hass Avocado, Small Avocado, Organic Avocados)",
-      "quantity": "quantity purchased as a number only, if visible",
-      "unit": "unit such as each, lb, case, bag, oz, kg, if visible",
-      "unitPrice": "unit price number only, if visible",
-      "total": "line item total number only, if visible"
-    }
-  ]
-}
+              text: `Please analyze this document and call the record_receipt_data tool with the extracted fields.${categoryText}
 
 IMPORTANT RULES:
 1. First determine documentType: "receipt" for purchase receipts/invoices/expenses, "sales_report" for daily sales summaries/revenue reports/income documents.
@@ -113,19 +144,26 @@ IMPORTANT RULES:
       ],
     });
 
-    // Parse Claude's response
-    const content = message.content[0];
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type from Claude');
-    }
+    const toolUse = message.content.find((content: any) => (
+      content.type === 'tool_use' && content.name === 'record_receipt_data'
+    )) as any;
 
-    // Extract JSON from the response
-    const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Could not parse Claude response');
+    let extracted: ExtractedReceiptData;
+    if (toolUse?.input && typeof toolUse.input === 'object') {
+      extracted = toolUse.input as ExtractedReceiptData;
+    } else {
+      const textContent = message.content.find((content: any) => content.type === 'text') as any;
+      const jsonMatch = textContent?.text?.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Could not parse Claude response');
+      }
+      try {
+        extracted = JSON.parse(jsonMatch[0]);
+      } catch (parseError: any) {
+        console.error('Claude returned invalid extraction JSON:', parseError?.message);
+        throw new Error('AI returned invalid extraction data. Please try again.');
+      }
     }
-
-    const extracted: ExtractedReceiptData = JSON.parse(jsonMatch[0]);
 
     // Validate and clean up data
     if (!extracted.merchant) {

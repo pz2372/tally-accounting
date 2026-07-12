@@ -176,6 +176,14 @@ export const expenseSchemas = {
     expenseDate: dateString,
     notes: optionalText,
   }).passthrough(),
+  update: z.object({
+    merchant: z.string().trim().max(255).optional(),
+    amountCents: moneyCents.optional(),
+    paymentMethod: z.string().trim().max(80).optional(),
+    categoryName: nonEmptyString.max(160).optional(),
+    expenseDate: dateString.optional(),
+    notes: optionalText,
+  }).passthrough(),
   withReceipt: z.object({
     merchant: z.string().trim().max(255).optional(),
     amountCents: moneyCents,
