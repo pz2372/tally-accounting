@@ -19,12 +19,13 @@ export const PRESET_CATEGORIES: PresetCategoryDef[] = [
   { key: 'rent',                 name: 'Rent',                   color: '#EAB308', sortOrder: 7 },
   { key: 'repairs_maintenance',  name: 'Repairs & Maintenance',  color: '#84CC16', sortOrder: 8 },
   { key: 'supplies',             name: 'Supplies',               color: '#10B981', sortOrder: 9 },
-  { key: 'taxes_licenses',       name: 'Taxes & Licenses',       color: '#EF4444', sortOrder: 10 },
-  { key: 'travel',               name: 'Travel',                 color: '#06B6D4', sortOrder: 11 },
-  { key: 'meals',                name: 'Meals',                  color: '#F43F5E', sortOrder: 12 },
-  { key: 'utilities',            name: 'Utilities',              color: '#0EA5E9', sortOrder: 13 },
-  { key: 'wages',                name: 'Wages',                  color: '#9333EA', sortOrder: 14 },
-  { key: 'other_expenses',       name: 'Other Expenses',         color: '#6B7280', sortOrder: 15 },
+  { key: 'supplies_food',        name: 'Supplies (Food)',        color: '#059669', sortOrder: 10 },
+  { key: 'taxes_licenses',       name: 'Taxes & Licenses',       color: '#EF4444', sortOrder: 11 },
+  { key: 'travel',               name: 'Travel',                 color: '#06B6D4', sortOrder: 12 },
+  { key: 'meals',                name: 'Meals',                  color: '#F43F5E', sortOrder: 13 },
+  { key: 'utilities',            name: 'Utilities',              color: '#0EA5E9', sortOrder: 14 },
+  { key: 'wages',                name: 'Wages',                  color: '#9333EA', sortOrder: 15 },
+  { key: 'other_expenses',       name: 'Other Expenses',         color: '#6B7280', sortOrder: 16 },
 ];
 
 const LEGACY_CATEGORY_NAME_TO_KEY = new Map<string, string>([

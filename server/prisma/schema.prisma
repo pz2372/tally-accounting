@@ -363,6 +363,8 @@ model SalesReport {
   grossSalesCents Int?
   netSalesCents   Int?
   cashCents       Int?
+  creditCardCents Int?
+  takeoutCents    Int?
   tipsCents       Int?            // optional but commonly in daily sales reports
   taxCents        Int?            // optional
   discountsCents  Int?            // optional

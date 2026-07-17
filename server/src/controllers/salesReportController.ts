@@ -22,7 +22,7 @@ export const createSalesReportWithReceipt: Handler = async (req, res) => {
     const {
       businessDate, merchant, notes,
       grossSalesCents, netSalesCents, cashCents,
-      tipsCents, taxCents, discountsCents, refundsCents,
+      creditCardCents, takeoutCents, tipsCents, taxCents, discountsCents, refundsCents,
     } = req.body;
 
     if (!businessDate) {
@@ -56,6 +56,8 @@ export const createSalesReportWithReceipt: Handler = async (req, res) => {
         grossSalesCents: toInt(grossSalesCents),
         netSalesCents: toInt(netSalesCents),
         cashCents: toInt(cashCents),
+        creditCardCents: toInt(creditCardCents),
+        takeoutCents: toInt(takeoutCents),
         tipsCents: toInt(tipsCents),
         taxCents: toInt(taxCents),
         discountsCents: toInt(discountsCents),
@@ -90,6 +92,8 @@ export const uploadSalesReport: Handler = async (req, res) => {
       grossSalesCents,
       netSalesCents,
       cashCents,
+      creditCardCents,
+      takeoutCents,
       tipsCents,
       taxCents,
       discountsCents,
@@ -150,6 +154,8 @@ export const uploadSalesReport: Handler = async (req, res) => {
         grossSalesCents: grossSalesCents ? Number.parseInt(String(grossSalesCents), 10) : null,
         netSalesCents: netSalesCents ? Number.parseInt(String(netSalesCents), 10) : null,
         cashCents: cashCents ? Number.parseInt(String(cashCents), 10) : null,
+        creditCardCents: creditCardCents ? Number.parseInt(String(creditCardCents), 10) : null,
+        takeoutCents: takeoutCents ? Number.parseInt(String(takeoutCents), 10) : null,
         tipsCents: tipsCents ? Number.parseInt(String(tipsCents), 10) : null,
         taxCents: taxCents ? Number.parseInt(String(taxCents), 10) : null,
         discountsCents: discountsCents ? Number.parseInt(String(discountsCents), 10) : null,
@@ -292,6 +298,8 @@ export const updateSalesReport: Handler = async (req, res) => {
       grossSalesCents,
       netSalesCents,
       cashCents,
+      creditCardCents,
+      takeoutCents,
       tipsCents,
       taxCents,
       discountsCents,
@@ -327,6 +335,12 @@ export const updateSalesReport: Handler = async (req, res) => {
     }
     if (cashCents !== undefined) {
       updateData.cashCents = Number.parseInt(String(cashCents), 10);
+    }
+    if (creditCardCents !== undefined) {
+      updateData.creditCardCents = Number.parseInt(String(creditCardCents), 10);
+    }
+    if (takeoutCents !== undefined) {
+      updateData.takeoutCents = Number.parseInt(String(takeoutCents), 10);
     }
     if (tipsCents !== undefined) {
       updateData.tipsCents = Number.parseInt(String(tipsCents), 10);
@@ -540,6 +554,8 @@ export const getMonthlySummary: Handler = async (req, res) => {
     let grossSalesCents = 0;
     let netSalesCents = 0;
     let cashCents = 0;
+    let creditCardCents = 0;
+    let takeoutCents = 0;
     let tipsCents = 0;
     let taxCents = 0;
     let discountsCents = 0;
@@ -549,6 +565,8 @@ export const getMonthlySummary: Handler = async (req, res) => {
       grossSalesCents += r.grossSalesCents || 0;
       netSalesCents += r.netSalesCents || 0;
       cashCents += r.cashCents || 0;
+      creditCardCents += r.creditCardCents || 0;
+      takeoutCents += r.takeoutCents || 0;
       tipsCents += r.tipsCents || 0;
       taxCents += r.taxCents || 0;
       discountsCents += r.discountsCents || 0;
@@ -596,6 +614,8 @@ export const getMonthlySummary: Handler = async (req, res) => {
         grossSalesCents,
         netSalesCents,
         cashCents,
+        creditCardCents,
+        takeoutCents,
         tipsCents,
         taxCents,
         discountsCents,
@@ -662,6 +682,8 @@ export const getSalesAnalytics: Handler = async (req, res) => {
       totalGrossSalesCents: 0,
       totalNetSalesCents: 0,
       totalCashCents: 0,
+      totalCreditCardCents: 0,
+      totalTakeoutCents: 0,
       totalTipsCents: 0,
       totalTaxCents: 0,
       totalDiscountsCents: 0,
@@ -676,6 +698,8 @@ export const getSalesAnalytics: Handler = async (req, res) => {
       analytics.totalGrossSalesCents += report.grossSalesCents || 0;
       analytics.totalNetSalesCents += report.netSalesCents || 0;
       analytics.totalCashCents += report.cashCents || 0;
+      analytics.totalCreditCardCents += report.creditCardCents || 0;
+      analytics.totalTakeoutCents += report.takeoutCents || 0;
       analytics.totalTipsCents += report.tipsCents || 0;
       analytics.totalTaxCents += report.taxCents || 0;
       analytics.totalDiscountsCents += report.discountsCents || 0;

@@ -5,6 +5,8 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
+
 export interface ExtractedReceiptData {
   merchant: string;
   amount: string;
@@ -16,6 +18,8 @@ export interface ExtractedReceiptData {
   grossSales?: string;
   netSales?: string;
   cash?: string;
+  creditCard?: string;
+  takeout?: string;
   tips?: string;
   tax?: string;
   discounts?: string;
@@ -45,6 +49,8 @@ const receiptExtractionTool = {
       grossSales: { type: 'string' },
       netSales: { type: 'string' },
       cash: { type: 'string' },
+      creditCard: { type: 'string' },
+      takeout: { type: 'string' },
       tips: { type: 'string' },
       tax: { type: 'string' },
       discounts: { type: 'string' },
@@ -75,6 +81,8 @@ const receiptExtractionTool = {
       'grossSales',
       'netSales',
       'cash',
+      'creditCard',
+      'takeout',
       'tips',
       'tax',
       'discounts',
@@ -111,7 +119,7 @@ export const extractReceiptData = async (req: Request, res: Response) => {
 
     // Call Claude Vision to extract receipt data
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: ANTHROPIC_MODEL,
       max_tokens: 1024,
       tools: [receiptExtractionTool as any],
       tool_choice: { type: 'tool', name: 'record_receipt_data' },
@@ -133,8 +141,8 @@ export const extractReceiptData = async (req: Request, res: Response) => {
 
 IMPORTANT RULES:
 1. First determine documentType: "receipt" for purchase receipts/invoices/expenses, "sales_report" for daily sales summaries/revenue reports/income documents.
-2. For sales reports: Put ALL financial figures into their specific fields (grossSales, netSales, cash, tips, tax, discounts, refunds). Do NOT put dollar amounts in the notes field. Leave merchant, amount, and category as empty string.
-3. For receipts: Fill merchant, amount, category, and notes. Leave all sales report fields (grossSales, netSales, cash, tips, tax, discounts, refunds) as empty string.
+2. For sales reports: Put ALL financial figures into their specific fields (grossSales, netSales, cash, creditCard, takeout, tips, tax, discounts, refunds). Use creditCard for card/credit/debit/card sales totals, not actual card numbers. Do NOT put dollar amounts in the notes field. Leave merchant, amount, and category as empty string.
+3. For receipts: Fill merchant, amount, category, and notes. Leave all sales report fields (grossSales, netSales, cash, creditCard, takeout, tips, tax, discounts, refunds) as empty string.
 4. For receipts: Extract itemized line items when visible. normalizedName should group variants into one inventory item name. Examples: "HASS AVOCADO", "SMALL AVOCADO", and "ORGANIC AVOCADOS" all normalize to "Avocados"; "Roma Tomato" and "Tomatoes 5lb" normalize to "Tomatoes". Do not collapse different meat cuts into a generic meat name: "Chicken Thigh" normalizes to "Chicken Thighs", while "Chicken Leg" or "Chicken Drumstick" normalizes to "Chicken Legs".
 5. All monetary values must be numbers only (no $ signs, no commas).
 6. If a field cannot be determined, use empty string.`,
@@ -191,7 +199,7 @@ IMPORTANT RULES:
     }
 
     // Clean up sales report numeric fields — Claude may return numbers or strings
-    const numericFields = ['grossSales', 'netSales', 'cash', 'tips', 'tax', 'discounts', 'refunds'] as const;
+    const numericFields = ['grossSales', 'netSales', 'cash', 'creditCard', 'takeout', 'tips', 'tax', 'discounts', 'refunds'] as const;
     for (const field of numericFields) {
       const raw = extracted[field];
       if (raw !== undefined && raw !== null && raw !== '') {
@@ -222,7 +230,21 @@ IMPORTANT RULES:
 
     res.json(extracted);
   } catch (error: any) {
-    console.error('Error extracting receipt data:', error?.status, error?.message, error?.error);
+    console.error('Error extracting receipt data:', {
+      status: error?.status,
+      message: error?.message,
+      providerError: error?.error,
+      model: ANTHROPIC_MODEL,
+    });
+
+    if (error?.status === 401 || error?.status === 403) {
+      return res.status(502).json({
+        error: 'AI provider rejected the extraction request. Check ANTHROPIC_API_KEY, account access, region/VPN, and ANTHROPIC_MODEL.',
+        providerStatus: error.status,
+        providerMessage: error?.error?.message || error?.message || 'Request not allowed',
+      });
+    }
+
     res.status(500).json({
       error: error?.error?.message || error?.message || 'Failed to extract receipt data',
     });

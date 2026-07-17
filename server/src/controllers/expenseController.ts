@@ -7,7 +7,7 @@ import { PRESET_CATEGORIES, isValidCategoryName, getCategoryKey, getCategoryName
 
 type Handler = (req: AuthenticatedRequest, res: Response) => Promise<Response | void> | Response | void;
 
-const INVENTORY_KEYS = new Set(['inventory', 'supplies', 'inventory_purchases', 'materials_supplies']);
+const INVENTORY_KEYS = new Set(['inventory', 'supplies', 'supplies_food', 'inventory_purchases', 'materials_supplies']);
 const INVENTORY_ITEM_RETENTION_YEARS = 2;
 const RECEIPT_EXPORT_LINK_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
 

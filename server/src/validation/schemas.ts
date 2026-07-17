@@ -203,6 +203,8 @@ const salesReportBase = z.object({
   grossSalesCents: moneyCents.optional(),
   netSalesCents: moneyCents.optional(),
   cashCents: moneyCents.optional(),
+  creditCardCents: moneyCents.optional(),
+  takeoutCents: moneyCents.optional(),
   tipsCents: moneyCents.optional(),
   taxCents: moneyCents.optional(),
   discountsCents: moneyCents.optional(),

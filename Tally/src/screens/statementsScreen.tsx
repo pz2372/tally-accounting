@@ -36,6 +36,8 @@ interface Statement {
   grossSalesCents?: number;
   netSalesCents?: number;
   cashCents?: number;
+  creditCardCents?: number;
+  takeoutCents?: number;
   tipsCents?: number;
   taxCents?: number;
   discountsCents?: number;
@@ -87,6 +89,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
   const [editGrossSales, setEditGrossSales] = useState('');
   const [editNetSales, setEditNetSales] = useState('');
   const [editCash, setEditCash] = useState('');
+  const [editCreditCard, setEditCreditCard] = useState('');
+  const [editTakeout, setEditTakeout] = useState('');
   const [editTips, setEditTips] = useState('');
   const [editTax, setEditTax] = useState('');
   const [editDiscounts, setEditDiscounts] = useState('');
@@ -208,6 +212,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
               grossSalesCents: report.grossSalesCents ?? undefined,
               netSalesCents: report.netSalesCents ?? undefined,
               cashCents: report.cashCents ?? undefined,
+              creditCardCents: report.creditCardCents ?? undefined,
+              takeoutCents: report.takeoutCents ?? undefined,
               tipsCents: report.tipsCents ?? undefined,
               taxCents: report.taxCents ?? undefined,
               discountsCents: report.discountsCents ?? undefined,
@@ -296,6 +302,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                   grossSalesCents: report.grossSalesCents ?? undefined,
                   netSalesCents: report.netSalesCents ?? undefined,
                   cashCents: report.cashCents ?? undefined,
+                  creditCardCents: report.creditCardCents ?? undefined,
+                  takeoutCents: report.takeoutCents ?? undefined,
                   tipsCents: report.tipsCents ?? undefined,
                   taxCents: report.taxCents ?? undefined,
                   discountsCents: report.discountsCents ?? undefined,
@@ -618,6 +626,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
     setEditGrossSales(centsToDollarStr(selectedSalesReport.grossSalesCents));
     setEditNetSales(centsToDollarStr(selectedSalesReport.netSalesCents));
     setEditCash(centsToDollarStr(selectedSalesReport.cashCents));
+    setEditCreditCard(centsToDollarStr(selectedSalesReport.creditCardCents));
+    setEditTakeout(centsToDollarStr(selectedSalesReport.takeoutCents));
     setEditTips(centsToDollarStr(selectedSalesReport.tipsCents));
     setEditTax(centsToDollarStr(selectedSalesReport.taxCents));
     setEditDiscounts(centsToDollarStr(selectedSalesReport.discountsCents));
@@ -649,6 +659,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
       const grossCents = dollarsToCents(editGrossSales);
       const netCents = dollarsToCents(editNetSales);
       const cashCents = dollarsToCents(editCash);
+      const creditCardCents = dollarsToCents(editCreditCard);
+      const takeoutCents = dollarsToCents(editTakeout);
       const tipsCents = dollarsToCents(editTips);
       const taxCents = dollarsToCents(editTax);
       const discountsCents = dollarsToCents(editDiscounts);
@@ -656,6 +668,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
       if (grossCents !== undefined) body.grossSalesCents = grossCents;
       if (netCents !== undefined) body.netSalesCents = netCents;
       if (cashCents !== undefined) body.cashCents = cashCents;
+      if (creditCardCents !== undefined) body.creditCardCents = creditCardCents;
+      if (takeoutCents !== undefined) body.takeoutCents = takeoutCents;
       if (tipsCents !== undefined) body.tipsCents = tipsCents;
       if (taxCents !== undefined) body.taxCents = taxCents;
       if (discountsCents !== undefined) body.discountsCents = discountsCents;
@@ -840,6 +854,8 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
       { label: t('salesReport.grossSales'), value: selectedSalesReport.grossSalesCents },
       { label: t('salesReport.netSales'), value: selectedSalesReport.netSalesCents },
       { label: t('statements.cash'), value: selectedSalesReport.cashCents },
+      { label: t('salesReport.creditCard'), value: selectedSalesReport.creditCardCents },
+      { label: t('salesReport.takeout'), value: selectedSalesReport.takeoutCents },
       { label: t('salesReport.tips'), value: selectedSalesReport.tipsCents },
       { label: t('salesReport.tax'), value: selectedSalesReport.taxCents },
       { label: t('salesReport.discounts'), value: selectedSalesReport.discountsCents },
@@ -984,6 +1000,30 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                     style={styles.editInput}
                     value={editCash}
                     onChangeText={setEditCash}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.creditCard')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editCreditCard}
+                    onChangeText={setEditCreditCard}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={styles.editInputGroup}>
+                  <Text style={styles.editInputLabel}>{t('salesReport.takeout')}</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editTakeout}
+                    onChangeText={setEditTakeout}
                     keyboardType="decimal-pad"
                     placeholder="0.00"
                     placeholderTextColor={colors.textTertiary}

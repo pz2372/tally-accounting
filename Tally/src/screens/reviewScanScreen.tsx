@@ -79,6 +79,8 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
   const [grossSales, setGrossSales] = useState('');
   const [netSales, setNetSales] = useState('');
   const [cash, setCash] = useState('');
+  const [creditCard, setCreditCard] = useState('');
+  const [takeout, setTakeout] = useState('');
   const [tips, setTips] = useState('');
   const [tax, setTax] = useState('');
   const [discounts, setDiscounts] = useState('');
@@ -127,6 +129,8 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
       if (extracted.grossSales) setGrossSales(extracted.grossSales);
       if (extracted.netSales) setNetSales(extracted.netSales);
       if (extracted.cash) setCash(extracted.cash);
+      if (extracted.creditCard) setCreditCard(extracted.creditCard);
+      if (extracted.takeout) setTakeout(extracted.takeout);
       if (extracted.tips) setTips(extracted.tips);
       if (extracted.tax) setTax(extracted.tax);
       if (extracted.discounts) setDiscounts(extracted.discounts);
@@ -221,6 +225,8 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
         if (grossSales.trim()) parameters.grossSalesCents = toCents(grossSales);
         if (netSales.trim()) parameters.netSalesCents = toCents(netSales);
         if (cash.trim()) parameters.cashCents = toCents(cash);
+        if (creditCard.trim()) parameters.creditCardCents = toCents(creditCard);
+        if (takeout.trim()) parameters.takeoutCents = toCents(takeout);
         if (tips.trim()) parameters.tipsCents = toCents(tips);
         if (tax.trim()) parameters.taxCents = toCents(tax);
         if (discounts.trim()) parameters.discountsCents = toCents(discounts);
@@ -698,6 +704,36 @@ export default function ReviewScanScreen({ imageUri, onBack, onSave, isSaving: _
                       placeholderTextColor={colors.textSecondary}
                       value={cash}
                       onChangeText={setCash}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.creditCard')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={creditCard}
+                      onChangeText={setCreditCard}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('reviewScan.takeout')}</Text>
+                  <View style={styles.amountInputContainer}>
+                    <Text style={styles.currencySymbol}>$</Text>
+                    <TextInput
+                      style={styles.amountInput}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.textSecondary}
+                      value={takeout}
+                      onChangeText={setTakeout}
                       keyboardType="decimal-pad"
                     />
                   </View>

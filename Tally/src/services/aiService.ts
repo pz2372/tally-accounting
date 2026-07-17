@@ -15,6 +15,8 @@ export interface ExtractedReceiptData {
   grossSales: string;
   netSales: string;
   cash: string;
+  creditCard: string;
+  takeout: string;
   tips: string;
   tax: string;
   discounts: string;
@@ -101,6 +103,8 @@ export const extractReceiptData = async (imageUri: string, categories?: string[]
       grossSales: data.grossSales || '',
       netSales: data.netSales || '',
       cash: data.cash || '',
+      creditCard: data.creditCard || '',
+      takeout: data.takeout || '',
       tips: data.tips || '',
       tax: data.tax || '',
       discounts: data.discounts || '',

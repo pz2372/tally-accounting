@@ -28,7 +28,8 @@ export const ACCOUNTS: AccountDef[] = [
   // ── Cost of Goods Sold (5xxx) ──
   { key: 'inventory_purchases',  code: '5010', name: 'Inventory Purchases',    type: 'COST_OF_GOODS_SOLD', scheduleCLine: '35', color: '#10B981', icon: 'cube-outline',       sortOrder: 10, legacyCategoryKey: null },
   { key: 'materials_supplies',   code: '5020', name: 'Materials & Supplies',   type: 'COST_OF_GOODS_SOLD', scheduleCLine: '38', color: '#059669', icon: 'construct-outline',  sortOrder: 11, legacyCategoryKey: null },
-  { key: 'direct_labor',         code: '5030', name: 'Direct Labor',           type: 'COST_OF_GOODS_SOLD', scheduleCLine: '37', color: '#047857', icon: 'hammer-outline',     sortOrder: 12, legacyCategoryKey: null },
+  { key: 'supplies_food',        code: '5025', name: 'Supplies (Food)',        type: 'COST_OF_GOODS_SOLD', scheduleCLine: '35', color: '#059669', icon: 'restaurant-outline', sortOrder: 12, legacyCategoryKey: null },
+  { key: 'direct_labor',         code: '5030', name: 'Direct Labor',           type: 'COST_OF_GOODS_SOLD', scheduleCLine: '37', color: '#047857', icon: 'hammer-outline',     sortOrder: 13, legacyCategoryKey: null },
 
   // ── Expenses (6xxx) — IRS Schedule C Part II, Lines 8–27 ──
   { key: 'advertising',          code: '6010', name: 'Advertising',            type: 'EXPENSE', scheduleCLine: '8',   color: '#F97316', icon: 'megaphone-outline',   sortOrder: 20, legacyCategoryKey: null },
@@ -73,6 +74,7 @@ export const LEGACY_DISPLAY_NAME_TO_KEY = new Map<string, string>([
   ['Miscellaneous',  'other_expenses'],
   ['Wages', 'wages'],
   ['Supplies', 'supplies'],
+  ['Supplies (Food)', 'supplies_food'],
   ['Rent', 'rent'],
   ['Taxes & Licenses', 'taxes_licenses'],
   ['Auto Expenses', 'car_truck'],

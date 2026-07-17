@@ -28,6 +28,7 @@ export const CATEGORIES: string[] = [
     'Rent',
     'Repairs & Maintenance',
     'Supplies',
+    'Supplies (Food)',
     'Taxes & Licenses',
     'Travel',
     'Meals',
@@ -90,6 +91,12 @@ export const CATEGORY_CONFIG: Record<string, CategoryConfig> = {
         name: 'Supplies',
         color: '#10B981',
         icon: 'cube-outline',
+    },
+    'Supplies (Food)': {
+        key: 'supplies_food',
+        name: 'Supplies (Food)',
+        color: '#059669',
+        icon: 'restaurant-outline',
     },
     'Taxes & Licenses': {
         key: 'taxes_licenses',

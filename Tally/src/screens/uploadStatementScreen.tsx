@@ -38,6 +38,8 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
   const [grossSales, setGrossSales] = useState('');
   const [netSales, setNetSales] = useState('');
   const [cash, setCash] = useState('');
+  const [creditCard, setCreditCard] = useState('');
+  const [takeout, setTakeout] = useState('');
   const [tips, setTips] = useState('');
   const [tax, setTax] = useState('');
   const [discounts, setDiscounts] = useState('');
@@ -62,6 +64,8 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
     setGrossSales('');
     setNetSales('');
     setCash('');
+    setCreditCard('');
+    setTakeout('');
     setTips('');
     setTax('');
     setDiscounts('');
@@ -92,6 +96,8 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
         if (extracted.grossSales) setGrossSales(extracted.grossSales);
         if (extracted.netSales) setNetSales(extracted.netSales);
         if (extracted.cash) setCash(extracted.cash);
+        if (extracted.creditCard) setCreditCard(extracted.creditCard);
+        if (extracted.takeout) setTakeout(extracted.takeout);
         if (extracted.tips) setTips(extracted.tips);
         if (extracted.tax) setTax(extracted.tax);
         if (extracted.discounts) setDiscounts(extracted.discounts);
@@ -204,6 +210,8 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
     if (grossSales.trim()) parameters.grossSalesCents = toCents(grossSales);
     if (netSales.trim()) parameters.netSalesCents = toCents(netSales);
     if (cash.trim()) parameters.cashCents = toCents(cash);
+    if (creditCard.trim()) parameters.creditCardCents = toCents(creditCard);
+    if (takeout.trim()) parameters.takeoutCents = toCents(takeout);
     if (tips.trim()) parameters.tipsCents = toCents(tips);
     if (tax.trim()) parameters.taxCents = toCents(tax);
     if (discounts.trim()) parameters.discountsCents = toCents(discounts);
@@ -464,11 +472,19 @@ export default function UploadStatementScreen({ onBack, selectedOrgId }: UploadS
                   <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={cash} onChangeText={setCash} keyboardType="decimal-pad" />
                 </View>
                 <View style={styles.rowItem}>
-                  <Text style={styles.label}>Tips</Text>
-                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={tips} onChangeText={setTips} keyboardType="decimal-pad" />
+                  <Text style={styles.label}>Credit Card</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={creditCard} onChangeText={setCreditCard} keyboardType="decimal-pad" />
                 </View>
               </View>
               <View style={styles.row}>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Takeout</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={takeout} onChangeText={setTakeout} keyboardType="decimal-pad" />
+                </View>
+                <View style={styles.rowItem}>
+                  <Text style={styles.label}>Tips</Text>
+                  <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={tips} onChangeText={setTips} keyboardType="decimal-pad" />
+                </View>
                 <View style={styles.rowItem}>
                   <Text style={styles.label}>Tax</Text>
                   <TextInput style={styles.input} placeholder="0.00" placeholderTextColor={colors.textSecondary} value={tax} onChangeText={setTax} keyboardType="decimal-pad" />

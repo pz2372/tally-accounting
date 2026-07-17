@@ -26,6 +26,7 @@ const LEGACY_REPORT_KEY_TO_KEY: Record<string, string> = {
   labor: WAGES_REPORT_KEY,
   inventory: INVENTORY_REPORT_KEY,
   supplies: INVENTORY_REPORT_KEY,
+  supplies_food: INVENTORY_REPORT_KEY,
   wages: WAGES_REPORT_KEY,
   advertising: EXPENSES_REPORT_KEY,
   car_truck: EXPENSES_REPORT_KEY,
@@ -45,7 +46,7 @@ const LEGACY_REPORT_KEY_TO_KEY: Record<string, string> = {
   transportation: EXPENSES_REPORT_KEY,
   miscellaneous: EXPENSES_REPORT_KEY,
 };
-const INVENTORY_CATEGORY_KEYS = new Set(['inventory', 'supplies', 'inventory_purchases', 'materials_supplies']);
+const INVENTORY_CATEGORY_KEYS = new Set(['inventory', 'supplies', 'supplies_food', 'inventory_purchases', 'materials_supplies']);
 const WAGES_CATEGORY_KEYS = new Set(['labor', 'wages', 'direct_labor']);
 const EXPENSE_CATEGORY_KEYS = new Set([
   'advertising',
@@ -85,6 +86,7 @@ const normalizeReportKey = (value: string) => {
   if (normalized === 'repairs & maintenance') return EXPENSES_REPORT_KEY;
   if (normalized === 'taxes & licenses') return EXPENSES_REPORT_KEY;
   if (normalized === 'other expenses') return EXPENSES_REPORT_KEY;
+  if (normalized === 'supplies (food)') return INVENTORY_REPORT_KEY;
 
   return LEGACY_REPORT_KEY_TO_KEY[resolveLegacyKey(normalized)] || normalized;
 };
@@ -542,6 +544,8 @@ const generateBusinessReportPdfBuffer = (
     grossSalesCents: number;
     netSalesCents: number;
     cashCents: number;
+    creditCardCents: number;
+    takeoutCents: number;
     tipsCents: number;
     taxCents: number;
     discountsCents: number;
@@ -553,6 +557,8 @@ const generateBusinessReportPdfBuffer = (
     metricRow('Gross sales', formatCurrency(sales.grossSalesCents));
     metricRow('Net sales', formatCurrency(sales.netSalesCents));
     metricRow('Cash', formatCurrency(sales.cashCents));
+    metricRow('Credit card', formatCurrency(sales.creditCardCents));
+    metricRow('Takeout', formatCurrency(sales.takeoutCents));
     metricRow('Tips', formatCurrency(sales.tipsCents));
     metricRow('Tax', formatCurrency(sales.taxCents));
     metricRow('Discounts', formatCurrency(sales.discountsCents));
@@ -659,6 +665,8 @@ const buildReportPayload = async (orgId: string, reports: string[], startDate: D
         summary.grossSalesCents += report.grossSalesCents || 0;
         summary.netSalesCents += report.netSalesCents || 0;
         summary.cashCents += report.cashCents || 0;
+        summary.creditCardCents += report.creditCardCents || 0;
+        summary.takeoutCents += report.takeoutCents || 0;
         summary.tipsCents += report.tipsCents || 0;
         summary.taxCents += report.taxCents || 0;
         summary.discountsCents += report.discountsCents || 0;
@@ -670,6 +678,8 @@ const buildReportPayload = async (orgId: string, reports: string[], startDate: D
         grossSalesCents: 0,
         netSalesCents: 0,
         cashCents: 0,
+        creditCardCents: 0,
+        takeoutCents: 0,
         tipsCents: 0,
         taxCents: 0,
         discountsCents: 0,

@@ -23,6 +23,8 @@ interface MonthlySummary {
   grossSalesCents: number;
   netSalesCents: number;
   cashCents: number;
+  creditCardCents: number;
+  takeoutCents: number;
   tipsCents: number;
   taxCents: number;
   discountsCents: number;
@@ -268,6 +270,18 @@ export default function SalesReportScreen({ onBack, selectedOrgId }: SalesReport
                     <Text style={styles.sectionLabel}>{t('salesReport.cashRevenue')}</Text>
                     <Text style={styles.sectionValue}>
                       {formatDollars(summary.cashCents)}
+                    </Text>
+                  </View>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.creditCard')}</Text>
+                    <Text style={styles.sectionValue}>
+                      {formatDollars(summary.creditCardCents)}
+                    </Text>
+                  </View>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionLabel}>{t('salesReport.takeout')}</Text>
+                    <Text style={styles.sectionValue}>
+                      {formatDollars(summary.takeoutCents)}
                     </Text>
                   </View>
                   <View style={styles.sectionRow}>
