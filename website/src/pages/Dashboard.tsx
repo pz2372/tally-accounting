@@ -9,6 +9,8 @@ import {
   Plus,
   CreditCard,
   Loader2,
+  Menu,
+  X,
 } from 'lucide-react';
 import logo from '../assets/logo.png';
 import type { OrgInfo } from '../utils/dashboardApi';
@@ -42,6 +44,7 @@ export default function Dashboard() {
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [showEditOrg, setShowEditOrg] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingCheckout, setCompletingCheckout] = useState(false);
 
   const logout = useCallback(() => {
@@ -95,6 +98,7 @@ export default function Dashboard() {
   const initials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
+  const sidebarExpanded = !sidebarCollapsed || mobileSidebarOpen;
 
   const handleOrgCreated = (newOrg: OrgInfo) => {
     const updatedOrgs = [...orgs, newOrg];
@@ -156,13 +160,23 @@ export default function Dashboard() {
 
   if (!user) return null;
 
+  const closeMobileSidebar = () => setMobileSidebarOpen(false);
+
   return (
     <div className="dashboard">
+      {mobileSidebarOpen && (
+        <button
+          className="dash-sidebar-backdrop"
+          aria-label="Close navigation"
+          onClick={closeMobileSidebar}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className={`dash-sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
+      <aside className={`dash-sidebar${sidebarCollapsed ? ' collapsed' : ''}${mobileSidebarOpen ? ' mobile-open' : ''}`}>
         <div className="dash-sidebar-top">
           <div className="dash-logo-container">
-            {sidebarCollapsed ? (
+            {!sidebarExpanded ? (
               <img src={FAVICON_URL} alt="Tally" className="dash-favicon" />
             ) : (
               <img src={logo} alt="Tally" className="dash-logo" />
@@ -174,9 +188,16 @@ export default function Dashboard() {
           >
             <ChevronRight size={14} className={sidebarCollapsed ? '' : 'rotate-180'} />
           </button>
+          <button
+            className="dash-mobile-close-btn"
+            onClick={closeMobileSidebar}
+            aria-label="Close navigation"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        {!sidebarCollapsed && (
+        {sidebarExpanded && (
           <div className="dash-sidebar-label">Organizations</div>
         )}
 
@@ -185,8 +206,8 @@ export default function Dashboard() {
             <button
               key={org.id}
               className={`dash-nav-item${selectedOrgId === org.id && !showCreateOrg ? ' active' : ''}`}
-              onClick={() => { setSelectedOrgId(org.id); setShowCreateOrg(false); }}
-              title={sidebarCollapsed ? (org.dba || org.name) : undefined}
+              onClick={() => { setSelectedOrgId(org.id); setShowCreateOrg(false); closeMobileSidebar(); }}
+              title={!sidebarExpanded ? (org.dba || org.name) : undefined}
             >
               <div
                 className="dash-nav-org-dot"
@@ -194,7 +215,7 @@ export default function Dashboard() {
               >
                 {(org.dba || org.name)[0].toUpperCase()}
               </div>
-              {!sidebarCollapsed && (
+              {sidebarExpanded && (
                 <div className="dash-nav-org-text">
                   <span className="dash-nav-org-primary">{org.dba || org.name}</span>
                   {org.dba && <span className="dash-nav-org-secondary">{org.name}</span>}
@@ -204,28 +225,28 @@ export default function Dashboard() {
           ))}
           <button
             className={`dash-nav-item dash-nav-add${showCreateOrg ? ' active' : ''}`}
-            onClick={() => setShowCreateOrg(true)}
+            onClick={() => { setShowCreateOrg(true); closeMobileSidebar(); }}
           >
             <Plus size={18} />
-            {!sidebarCollapsed && <span>Add Organization</span>}
+            {sidebarExpanded && <span>Add Organization</span>}
           </button>
         </nav>
 
         <div className="dash-sidebar-bottom">
-          {!sidebarCollapsed && (
+          {sidebarExpanded && (
             <div className="dash-sidebar-user">
               <div className="dash-user-avatar">{initials}</div>
               {user.name && <span className="dash-user-name">{user.name}</span>}
             </div>
           )}
-          {sidebarCollapsed && (
+          {!sidebarExpanded && (
             <div className="dash-sidebar-user collapsed" title={user.name || undefined}>
               <div className="dash-user-avatar">{initials}</div>
             </div>
           )}
-          <button className="dash-sidebar-user logout" onClick={logout} title={sidebarCollapsed ? 'Log Out' : undefined}>
+          <button className="dash-sidebar-user logout" onClick={logout} title={!sidebarExpanded ? 'Log Out' : undefined}>
             <div className="dash-logout-icon"><LogOut size={14} /></div>
-            {!sidebarCollapsed && <span className="dash-user-name">Log Out</span>}
+            {sidebarExpanded && <span className="dash-user-name">Log Out</span>}
           </button>
         </div>
       </aside>
@@ -233,6 +254,13 @@ export default function Dashboard() {
       {/* Main */}
       <div className="dash-main">
         <header className="dash-topbar">
+          <button
+            className="dash-mobile-menu-btn"
+            onClick={() => setMobileSidebarOpen(true)}
+            aria-label="Open navigation"
+          >
+            <Menu size={20} />
+          </button>
           <div className="dash-topbar-left">
             {showCreateOrg ? (
               <div>
