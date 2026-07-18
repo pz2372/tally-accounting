@@ -385,6 +385,11 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
         return t('statements.unknown');
     }
   };
+
+  const formatSalesCents = (cents?: number) => (
+    `$${((cents ?? 0) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  );
+
   // Filter statements based on selected type
   const filteredStatements = statements.filter(statement => {
     if (selectedFilter === 'all') return true;
@@ -846,8 +851,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
   // Sales report detail view
   if (selectedSalesReport) {
     const formatCents = (cents?: number) => {
-      if (cents === undefined || cents === null) return '-';
-      return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return formatSalesCents(cents);
     };
 
     const salesFields = [
@@ -860,7 +864,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
       { label: t('salesReport.tax'), value: selectedSalesReport.taxCents },
       { label: t('salesReport.discounts'), value: selectedSalesReport.discountsCents },
       { label: t('salesReport.refunds'), value: selectedSalesReport.refundsCents },
-    ].filter(f => f.value !== undefined && f.value !== null);
+    ];
 
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -1311,7 +1315,7 @@ export default function StatementsScreen({ onBack, onNavigate, selectedOrgId, on
                   <View style={styles.statementRight}>
                     {statement.type === 'sales' && statement.netSalesCents !== undefined ? (
                       <Text style={styles.netSalesText}>
-                        ${(statement.netSalesCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatSalesCents(statement.netSalesCents)}
                       </Text>
                     ) : (
                       <View style={[styles.fileTypeBadge, statement.sourceType === 'plaid' && styles.plaidBadge]}>

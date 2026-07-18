@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions, Switch, Image, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ import { useSwipeBack } from '../hooks/useSwipeBack';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CURRENT_USER_CACHE_KEY = '@current_user';
+const WEBSITE_LOGIN_URL = 'https://tally-accounting.netlify.app/login';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -151,6 +152,10 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
     if (onLogout) {
       onLogout();
     }
+  };
+
+  const handleAccessWebsite = () => {
+    Linking.openURL(WEBSITE_LOGIN_URL);
   };
   
   useEffect(() => {
@@ -412,6 +417,16 @@ export default function SettingsScreen({ onBack, onLogout, hasOrganization, curr
                 <Text style={styles.settingLabel}>{t('settings.contactSupport')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.settingItem} onPress={handleAccessWebsite}>
+              <View style={styles.settingLeft}>
+                <View style={[styles.iconContainer, { backgroundColor: '#DCFCE7' }]}>
+                  <Ionicons name="globe-outline" size={22} color="#16A34A" />
+                </View>
+                <Text style={styles.settingLabel}>{t('settings.accessWebsite')}</Text>
+              </View>
+              <Ionicons name="open-outline" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 

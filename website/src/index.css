@@ -75,6 +75,14 @@ input, select {
   .container {
     padding: 0 24px;
   }
+
+  input,
+  select,
+  textarea,
+  .form-input,
+  .dash-org-input {
+    font-size: 16px;
+  }
 }
 
 .btn {
